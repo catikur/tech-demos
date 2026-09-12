@@ -1,14 +1,15 @@
 {
-  "proposed": [
+  "proposed": [],
+  "skipped": [],
+  "built": [
     {
       "id": "2087275734608007415",
       "title": "watermarks-remover (OpenAI + Gemini + Claude support)",
       "url": "https://x.com/guillaumemeyer/status/2087275734608007415",
       "github": "https://github.com/guillaumemeyer/watermarks-remover",
       "date": "2026-09-12",
+      "pr": "https://github.com/catikur/tech-demos/pull/1",
       "source": "trial-scout"
     }
-  ],
-  "skipped": [],
-  "built": []
+  ]
 }
