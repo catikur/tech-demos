@@ -152,7 +152,7 @@ export async function* runAgent(
   // Intent: summarize / overview
   if (/\b(summari\w*|summary|overview|catch me up|what.?s (new|in)|triage)\b/.test(lower)) {
     yield { kind: "thought", text: "The user wants an inbox overview. Calling list_threads." };
-    await sleep(500);
+    await sleep(1100);
     const lines = mailbox.threads.map(threadLine);
     yield {
       kind: "tool",
@@ -160,7 +160,7 @@ export async function* runAgent(
       input: "{ folder: 'inbox' }",
       output: lines.join("\n"),
     };
-    await sleep(650);
+    await sleep(1400);
     const unread = mailbox.threads.filter((t) => t.unread);
     const urgent = unread.filter((t) => t.category === "support" || t.category === "billing");
     yield {
@@ -185,7 +185,7 @@ export async function* runAgent(
   // Intent: unread
   if (/\bunread\b/.test(lower)) {
     yield { kind: "thought", text: "Filtering the mailbox to unread threads." };
-    await sleep(450);
+    await sleep(1000);
     const unread = mailbox.threads.filter((t) => t.unread);
     yield {
       kind: "tool",
@@ -193,7 +193,7 @@ export async function* runAgent(
       input: "{ filter: 'unread' }",
       output: unread.length > 0 ? unread.map(threadLine).join("\n") : "(none)",
     };
-    await sleep(500);
+    await sleep(1100);
     yield {
       kind: "reply",
       text:
@@ -223,7 +223,7 @@ export async function* runAgent(
       kind: "thought",
       text: `Target thread resolved: "${target.subject}". Reading it before drafting.`,
     };
-    await sleep(500);
+    await sleep(1100);
     const last = lastMessage(target);
     yield {
       kind: "tool",
@@ -231,7 +231,7 @@ export async function* runAgent(
       input: `{ threadId: '${target.id}' }`,
       output: `${target.messages.length} message(s). Latest from ${senderName(last.from)}, ${ago(last.at)}:\n"${last.body.slice(0, 180).replace(/\s+/g, " ")}…"`,
     };
-    await sleep(700);
+    await sleep(1500);
     const body = draftFor(target);
     yield {
       kind: "tool",
@@ -239,7 +239,7 @@ export async function* runAgent(
       input: `{ threadId: '${target.id}', tone: 'concise' }`,
       output: `Draft prepared (${body.length} chars).`,
     };
-    await sleep(400);
+    await sleep(900);
     yield {
       kind: "reply",
       text: `Here's a draft for "${target.subject}". Review it below — nothing is sent until you confirm.`,
@@ -252,14 +252,14 @@ export async function* runAgent(
   if (/\b(search|find|look|show|about|any)\b/.test(lower) || tokens(input).length > 0) {
     const results = searchThreads(mailbox, input);
     yield { kind: "thought", text: `Searching seeded mail for: ${tokens(input).join(", ") || input}` };
-    await sleep(500);
+    await sleep(1100);
     yield {
       kind: "tool",
       tool: "search_mail",
       input: `{ query: '${tokens(input).join(" ")}' }`,
       output: results.length > 0 ? results.map(threadLine).join("\n") : "(no matches)",
     };
-    await sleep(500);
+    await sleep(1100);
     yield {
       kind: "reply",
       text:
