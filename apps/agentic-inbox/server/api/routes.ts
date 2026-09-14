@@ -18,11 +18,13 @@ import { syncAccount, syncAll } from "../sync/engine.ts";
 import { sendChat, sendReply } from "../services/messaging.ts";
 import { llmStatus, runAgent } from "../agent/index.ts";
 import { agentStream, broadcast, sseResponse } from "./events.ts";
+import { authRoutes } from "./auth.ts";
 import { badRequest, h, notFound, num, ok, query, readJson, spaceParam } from "./util.ts";
 
 type P<T extends string> = BunRequest<T>;
 
 export const routes = {
+  ...authRoutes,
   "/api/health": h(() => ok({ ok: true })),
 
   "/api/status": h(() => {

@@ -355,6 +355,22 @@ export const threads = {
   markRead(id: string, unread = false): void {
     getDb().query("UPDATE threads SET unread = ? WHERE id = ?").run(unread ? 1 : 0, id);
   },
+  messageExternalId(messageId: string): string | null {
+    const r = getDb().query("SELECT external_id FROM messages WHERE id = ?").get(messageId) as Row | null;
+    return r?.external_id ?? null;
+  },
+  messageIdByExternal(accountId: string, externalId: string): string | null {
+    const r = getDb()
+      .query(
+        "SELECT m.id FROM messages m JOIN threads t ON t.id = m.thread_id WHERE t.account_id = ? AND m.external_id = ?",
+      )
+      .get(accountId, externalId) as Row | null;
+    return r?.id ?? null;
+  },
+  deleteByExternalMessageId(accountId: string, externalId: string): void {
+    const id = threads.messageIdByExternal(accountId, externalId);
+    if (id) getDb().query("DELETE FROM messages WHERE id = ?").run(id);
+  },
   messagesSince(spaceId: string | null, since: number): (EmailMessage & { subject: string; spaceId: string })[] {
     const s = scope(spaceId, "t.space_id");
     return (
@@ -547,6 +563,10 @@ export const chats = {
   },
   markRead(id: string): void {
     getDb().query("UPDATE chats SET unread_count = 0 WHERE id = ?").run(id);
+  },
+  externalId(id: string): string | null {
+    const r = getDb().query("SELECT external_id FROM chats WHERE id = ?").get(id) as Row | null;
+    return r?.external_id ?? null;
   },
   forPerson(spaceId: string | null, email: string, limit = 5): Chat[] {
     return chats
