@@ -16,7 +16,7 @@ describe("tool schemas", () => {
   test("every registered tool produces a valid function spec", () => {
     const specs = toolSpecs();
     expect(specs.map((s) => s.name)).toEqual(
-      expect.arrayContaining(["list_threads", "search_mail", "draft_reply", "list_events", "catch_up", "meeting_followup", "response_radar", "get_person", "push_commitment_to_todo"]),
+      expect.arrayContaining(["list_threads", "search_mail", "draft_reply", "list_events", "catch_up", "meeting_followup", "response_radar", "get_person", "push_commitment_to_todo", "remember", "forget", "list_memories"]),
     );
     for (const s of specs) {
       expect(s.description.length).toBeGreaterThan(10);

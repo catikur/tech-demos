@@ -31,6 +31,34 @@ function migrate(database: Database): void {
     if (!commitmentCols.has("ms_task_id")) database.exec("ALTER TABLE commitments ADD COLUMN ms_task_id TEXT");
     if (!commitmentCols.has("ms_list_id")) database.exec("ALTER TABLE commitments ADD COLUMN ms_list_id TEXT");
   }
+  const peopleCols = columnNames(database, "people");
+  if (peopleCols.size > 0) {
+    if (!peopleCols.has("summary")) database.exec("ALTER TABLE people ADD COLUMN summary TEXT NOT NULL DEFAULT ''");
+    if (!peopleCols.has("summary_at")) database.exec("ALTER TABLE people ADD COLUMN summary_at INTEGER");
+  }
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS chunks (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id),
+      source_kind TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      text TEXT NOT NULL,
+      embedding BLOB,
+      hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(space_id, hash)
+    );
+    CREATE INDEX IF NOT EXISTS idx_chunks_space ON chunks(space_id);
+    CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(space_id, source_kind, source_id);
+    CREATE TABLE IF NOT EXISTS memories (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id),
+      kind TEXT NOT NULL,
+      text TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_memories_space ON memories(space_id, created_at DESC);
+  `);
 }
 
 export function getDb(): Database {

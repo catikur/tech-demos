@@ -14,6 +14,8 @@ import { buildCatchUp } from "./catchup.ts";
 import { searchTopics } from "./topics.ts";
 import { computeRadar, radarSummary } from "./radar.ts";
 import { findPerson, personProfile, profileSummary } from "./people.ts";
+import "./embed.ts";
+import "./memory.ts";
 
 /**
  * Registers the seven feature modules with the agent: tools for the LLM loop
@@ -223,7 +225,7 @@ registerMockIntent({
 registerMockIntent({
   match: (s) => /\b(commitment|commitments|promise|promised|owe|owes|taahhüt|what do i owe|who owes)\b/.test(s),
   async *run(_input: string, ctx: AgentContext) {
-    if (ctx.spaceId) extractForSpace(ctx.spaceId);
+    if (ctx.spaceId) await extractForSpace(ctx.spaceId);
     yield { kind: "thought", text: "Checking the commitment ledger (promises and asks extracted from mail, chats, transcripts)." };
     await mockSleep(MOCK_PACE);
     yield* mockTool("list_commitments", {}, ctx);

@@ -8,6 +8,7 @@ import { startScheduler } from "./sync/scheduler.ts";
 import "./features/index.ts";
 import "./features/commitments.ts";
 import "./features/topics.ts";
+import "./features/summaries.ts";
 
 getDb();
 bootstrap();

@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { commitments, events, meetings, people, threads } from "../server/db/repo.ts";
-import { extractCommitments, extractForSpace } from "../server/features/commitments.ts";
+import { extractCommitments, extractForSpace, parseLlmCommitmentItems } from "../server/features/commitments.ts";
 import { computeRadar } from "../server/features/radar.ts";
 import { rebuildTopics } from "../server/features/topics.ts";
 import { buildCatchUp } from "../server/features/catchup.ts";
@@ -36,22 +36,56 @@ describe("commitment extraction", () => {
     expect(extractCommitments({ ...base, text: "Did you see Priya's mail?", speaker: "Marcus <marcus@lumenlabs.io>", others: [] })).toHaveLength(0);
     expect(extractCommitments({ ...base, text: "Deploy window moved to 16:00.", speaker: "Tomás <tomas@lumenlabs.io>", others: [] })).toHaveLength(0);
   });
+
+  test("Turkish ask from someone else is owed by me with a parsed due date", () => {
+    const [c] = extractCommitments({
+      ...base,
+      text: "Raporu Cuma'ya gönderir misin?",
+      speaker: "Marcus <marcus@lumenlabs.io>",
+      others: [],
+    });
+    expect(c).toMatchObject({ direction: "owed_by_me", counterpart: "marcus@lumenlabs.io" });
+    expect(new Date(c.dueAt!).toISOString().slice(0, 10)).toBe("2026-09-18");
+  });
+
+  test("Turkish promise from me is owed by me; theirs is owed to me", () => {
+    const [mine] = extractCommitments({
+      ...base,
+      text: "Checklist'i pazartesiye kadar paylaşacağım.",
+      speaker: "You <you@lumenlabs.io>",
+      others: ["Dana <dana@lumenlabs.io>"],
+    });
+    expect(mine).toMatchObject({ direction: "owed_by_me", counterpart: "dana@lumenlabs.io" });
+    const [theirs] = extractCommitments({
+      ...base,
+      text: "Bugün Northwind'i haberdar edeceğim.",
+      speaker: "Marcus <marcus@lumenlabs.io>",
+      others: [],
+    });
+    expect(theirs.direction).toBe("owed_to_me");
+  });
+
+  test("Turkish conversational questions are ignored", () => {
+    expect(
+      extractCommitments({ ...base, text: "Priya'nın mailini gördün mü?", speaker: "Marcus <marcus@lumenlabs.io>", others: [] }),
+    ).toHaveLength(0);
+  });
 });
 
 describe("features over the demo mailbox", () => {
   beforeAll(async () => {
     await seededDb();
-    extractForSpace(WORK_SPACE_ID);
+    await extractForSpace(WORK_SPACE_ID);
     rebuildTopics(WORK_SPACE_ID);
   });
 
-  test("ledger contains the postmortem ask in both directions and dedupes near-duplicates", () => {
+  test("ledger contains the postmortem ask in both directions and dedupes near-duplicates", async () => {
     const open = commitments.list(WORK_SPACE_ID, { status: "open" });
     expect(open.length).toBeGreaterThan(5);
     const postmortem = open.filter((c) => /postmortem/i.test(c.text) && c.counterpart === "marcus@lumenlabs.io");
     expect(postmortem.length).toBeGreaterThan(0);
     expect(postmortem.length).toBeLessThanOrEqual(3);
-    const inserted = extractForSpace(WORK_SPACE_ID);
+    const inserted = await extractForSpace(WORK_SPACE_ID);
     expect(inserted).toBe(0);
   });
 
@@ -119,5 +153,50 @@ describe("features over the demo mailbox", () => {
     expect(d.bodyMarkdown).toContain("## Your ledger");
     expect(d.bodyMarkdown).toContain("## Response radar");
     expect(threads.list(WORK_SPACE_ID).length).toBeGreaterThan(0);
+  });
+});
+
+describe("optional LLM commitment extract", () => {
+  test("parseLlmCommitmentItems reads a JSON payload and ignores junk", () => {
+    const items = parseLlmCommitmentItems(
+      'Here you go:\n```json\n{"items":[{"text":"Ship the rollback runbook","direction":"owed_by_me","counterpart":"marcus@lumenlabs.io","due":"2026-09-17","source_kind":"thread","source_id":"t-postmortem"}]}\n```',
+    );
+    expect(items).toEqual([
+      {
+        text: "Ship the rollback runbook",
+        direction: "owed_by_me",
+        counterpart: "marcus@lumenlabs.io",
+        due: "2026-09-17",
+        sourceKind: "thread",
+        sourceId: "t-postmortem",
+      },
+    ]);
+    expect(parseLlmCommitmentItems("not json")).toEqual([]);
+  });
+
+  test("injected completion inserts a novel item; an unchanged corpus is not sent to the model again", async () => {
+    await seededDb();
+    let calls = 0;
+    const fake = async () => {
+      calls++;
+      return JSON.stringify({
+        items: [
+          {
+            text: "Ship the Northwind rollback runbook by Thursday",
+            direction: "owed_by_me",
+            counterpart: "marcus@lumenlabs.io",
+            due: "2026-09-17",
+            source_kind: "thread",
+            source_id: "t-postmortem",
+          },
+        ],
+      });
+    };
+    const first = await extractForSpace(WORK_SPACE_ID, { tryComplete: fake });
+    expect(first).toBeGreaterThan(0);
+    expect(commitments.list(WORK_SPACE_ID, { status: "open" }).some((c) => /rollback runbook/i.test(c.text))).toBe(true);
+    const second = await extractForSpace(WORK_SPACE_ID, { tryComplete: fake });
+    expect(second).toBe(0);
+    expect(calls).toBe(1);
   });
 });

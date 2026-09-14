@@ -1,6 +1,6 @@
 import type { BunRequest } from "bun";
-import type { Commitment } from "../../shared/types.ts";
-import { audit, commitments, events, meetings, notes, people, spaces, topics } from "../db/repo.ts";
+import type { Commitment, MemoryKind } from "../../shared/types.ts";
+import { audit, commitments, events, meetings, memories, notes, people, spaces, topics } from "../db/repo.ts";
 import { extractForSpace } from "../features/commitments.ts";
 import { completeTodoTask, pushCommitmentToTodo } from "../features/ms-tasks.ts";
 import { briefForEvent } from "../features/briefs.ts";
@@ -43,10 +43,11 @@ export const featureRoutes = {
     }),
   },
   "/api/commitments/extract": {
-    POST: h((req) => {
+    POST: h(async (req) => {
       const spaceId = spaceParam(req);
       const targets = spaceId ? [spaceId] : spaces.all().map((s) => s.id);
-      const inserted = targets.reduce((n, id) => n + extractForSpace(id), 0);
+      let inserted = 0;
+      for (const id of targets) inserted += await extractForSpace(id);
       broadcast({ type: "data", entity: "commitments", spaceId });
       return ok({ inserted });
     }),
@@ -175,6 +176,28 @@ export const featureRoutes = {
       people.update(req.params.id, patch);
       broadcast({ type: "data", entity: "people", spaceId: null });
       return ok(people.get(req.params.id));
+    }),
+  },
+
+  /* ---------- agent memories ---------- */
+  "/api/memories": {
+    GET: h((req) => ok(memories.list(spaceParam(req)))),
+    POST: h(async (req) => {
+      const body = await readJson<{ spaceId: string; kind: MemoryKind; text: string }>(req);
+      if (!body.spaceId || !spaces.get(body.spaceId)) badRequest("spaceId required");
+      if (!["preference", "correction", "fact"].includes(body.kind)) badRequest("kind must be preference, correction or fact");
+      if (!body.text?.trim() || body.text.trim().length < 3) badRequest("text required");
+      const row = memories.add({ spaceId: body.spaceId, kind: body.kind, text: body.text.trim() });
+      broadcast({ type: "data", entity: "memories", spaceId: body.spaceId });
+      return ok(row);
+    }),
+  },
+  "/api/memories/:id": {
+    DELETE: h((req: P<"/api/memories/:id">) => {
+      const row = memories.get(req.params.id) ?? notFound("Memory not found");
+      memories.remove(row.id);
+      broadcast({ type: "data", entity: "memories", spaceId: row.spaceId });
+      return ok({ ok: true });
     }),
   },
 };

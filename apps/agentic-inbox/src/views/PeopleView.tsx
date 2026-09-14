@@ -182,6 +182,12 @@ export function PeopleView({
                 </ul>
               </>
             )}
+            {p.summary && (
+              <>
+                <h3>{t("people.agentSummary")}</h3>
+                <p className="muted">{p.summary}</p>
+              </>
+            )}
             <h3>{t("people.notes")}</h3>
             <NotesEditor person={p} onSaved={profile.reload} />
           </div>

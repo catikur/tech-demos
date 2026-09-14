@@ -45,7 +45,7 @@ export function useData<T>(
 }
 
 export function useStatus() {
-  return useData<AppStatus>(() => api.get("/api/status"), [], (ev) => ev.type !== "data" || ev.entity === "accounts");
+  return useData<AppStatus>(() => api.get("/api/status"), [], (ev) => ev.type !== "data" || ev.entity === "accounts" || ev.entity === "llm");
 }
 
 const SPACE_KEY = "agentic-inbox.space";

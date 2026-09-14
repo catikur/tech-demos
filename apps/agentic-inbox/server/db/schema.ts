@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS people (
   name TEXT NOT NULL,
   vip INTEGER NOT NULL DEFAULT 0,
   notes TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  summary_at INTEGER,
   UNIQUE(space_id, email)
 );
 
@@ -226,4 +228,27 @@ CREATE TABLE IF NOT EXISTS graph_subscriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_graph_subscriptions_account ON graph_subscriptions(account_id);
 CREATE INDEX IF NOT EXISTS idx_graph_subscriptions_expires ON graph_subscriptions(expires_at);
+
+CREATE TABLE IF NOT EXISTS chunks (
+  id TEXT PRIMARY KEY,
+  space_id TEXT NOT NULL REFERENCES spaces(id),
+  source_kind TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  embedding BLOB,
+  hash TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(space_id, hash)
+);
+CREATE INDEX IF NOT EXISTS idx_chunks_space ON chunks(space_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(space_id, source_kind, source_id);
+
+CREATE TABLE IF NOT EXISTS memories (
+  id TEXT PRIMARY KEY,
+  space_id TEXT NOT NULL REFERENCES spaces(id),
+  kind TEXT NOT NULL,
+  text TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memories_space ON memories(space_id, created_at DESC);
 `;

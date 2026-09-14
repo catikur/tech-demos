@@ -41,6 +41,16 @@ export type Capability =
   | "transcripts"
   | "recordings";
 
+export type MemoryKind = "preference" | "correction" | "fact";
+
+export interface Memory {
+  id: string;
+  spaceId: string;
+  kind: MemoryKind;
+  text: string;
+  createdAt: number;
+}
+
 export interface Person {
   id: string;
   spaceId: string;
@@ -48,6 +58,20 @@ export interface Person {
   name: string;
   vip: boolean;
   notes: string;
+  /** Agent/heuristic relationship summary — not the user's notes. */
+  summary: string;
+  summaryAt: number | null;
+}
+
+export interface Chunk {
+  id: string;
+  spaceId: string;
+  sourceKind: "thread" | "chat" | "meeting";
+  sourceId: string;
+  text: string;
+  embedding: Float32Array | null;
+  hash: string;
+  createdAt: number;
 }
 
 export interface EmailMessage {

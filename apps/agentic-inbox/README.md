@@ -33,7 +33,7 @@ Requires [Bun](https://bun.sh) ≥ 1.2.
 |---|---|---|
 | Microsoft 365 — Outlook, Calendar, Teams chats/channels, meeting transcripts + recordings | [docs/microsoft-365.md](docs/microsoft-365.md) | `MS_CLIENT_ID`, `MS_TENANT_ID`, `MS_CLIENT_SECRET` (optional) |
 | Gmail + Google Calendar | [docs/gmail.md](docs/gmail.md) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
-| Agent model (OpenRouter) | [openrouter.ai](https://openrouter.ai) | `OPENROUTER_API_KEY`, optional `OPENROUTER_MODEL` / `OPENROUTER_BASE_URL` |
+| Agent model (OpenRouter) | [openrouter.ai](https://openrouter.ai) | `OPENROUTER_API_KEY`, optional `OPENROUTER_MODEL` / `OPENROUTER_EMBED_MODEL` / `OPENROUTER_BASE_URL` — or paste the key and pick chat + embedding models from the live catalog in **Settings → Agent** (stored encrypted, overrides `.env`) |
 
 Copy [`.env.example`](.env.example) to `.env`, fill what you need, restart, then use
 **Settings → hesap bağla** under the space the account belongs to. Accounts can be
@@ -69,9 +69,9 @@ search_chats · read_chat · draft_chat_message · list_commitments · create_co
 push_commitment_to_todo · get_meeting_brief · read_transcript · meeting_followup ·
 catch_up · search_topics · response_radar · get_person`.
 
-- Provider: **OpenRouter** only (`OPENROUTER_API_KEY`, OpenAI-compatible `/chat/completions`).
-  No separate OpenAI or Anthropic keys. With no key the **rule-based fallback** answers the
-  same intents so the UI never dead-ends. Tests set `LLM_PROVIDER=mock`.
+- Provider: **OpenRouter** only (`OPENROUTER_API_KEY`, OpenAI-compatible `/chat/completions` and `/embeddings`).
+  Chat and embedding models can also be picked in **Settings → Agent**. With no key the **rule-based fallback** answers the
+  same intents so the UI never dead-ends. Tests set `LLM_PROVIDER=mock`. Hybrid search falls back to a local hashed embedder.
 - Third-party text is wrapped as `<<external content>>` and the system prompt treats it as
   data (prompt-injection guard).
 - Drafts are proposals: **Confirm & send / Edit in composer / Discard**. Sends and tool

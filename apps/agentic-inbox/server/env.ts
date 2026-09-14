@@ -47,6 +47,7 @@ export const env = {
       model: process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini",
       siteUrl: (process.env.OPENROUTER_SITE_URL ?? baseUrl).replace(/\/$/, ""),
       appName: process.env.OPENROUTER_APP_NAME ?? "Agentic Inbox",
+      embedModel: process.env.OPENROUTER_EMBED_MODEL ?? "openai/text-embedding-3-small",
     };
   },
   sync: {
