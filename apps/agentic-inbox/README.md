@@ -18,10 +18,11 @@ bun install
 bun run dev          # http://localhost:3000
 ```
 
-The app starts empty. Copy [`.env.example`](.env.example) to `.env`, set Microsoft 365 and/or
-Gmail OAuth plus `OPENROUTER_API_KEY`, then **Settings → hesap bağla**. The UI is Turkish by
-default (`?lang=en` switches to English). Without an OpenRouter key the agent uses a
-rule-based fallback so the chrome still works; mail and calendar need real accounts.
+The app starts behind a **Microsoft 365 sign-in screen**. Only `@{ALLOWED_LOGIN_DOMAIN}`
+(default `conforcus.com`) mailboxes are accepted; that account is connected as Work mail.
+Copy [`.env.example`](.env.example) to `.env`, or paste tenant / client id on the first-run
+form. Add Gmail later from Settings. The UI is Turkish by default (`?lang=en` switches to
+English). Without an OpenRouter key the agent uses a rule-based fallback.
 
 Other scripts: `bun run typecheck`, `bun test` (offline), `bun run start` (production).
 
@@ -35,9 +36,9 @@ Requires [Bun](https://bun.sh) ≥ 1.2.
 | Gmail + Google Calendar | [docs/gmail.md](docs/gmail.md) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
 | Agent model (OpenRouter) | [openrouter.ai](https://openrouter.ai) | `OPENROUTER_API_KEY`, optional `OPENROUTER_MODEL` / `OPENROUTER_EMBED_MODEL` / `OPENROUTER_BASE_URL` — or paste the key and pick chat + embedding models from the live catalog in **Settings → Agent** (stored encrypted, overrides `.env`) |
 
-Copy [`.env.example`](.env.example) to `.env`, fill what you need, restart, then use
-**Settings → hesap bağla** under the space the account belongs to. Accounts can be
-moved between spaces later.
+Copy [`.env.example`](.env.example) to `.env` (or paste tenant / client id on the
+first-run login form), restart, then **sign in with Microsoft 365**. Gmail is optional
+and is connected later from **Settings**. Accounts can be moved between spaces later.
 
 Both OAuth flows are auth-code + PKCE implemented with plain `fetch`; tokens are stored
 **AES-256-GCM encrypted** (`TOKEN_ENCRYPTION_KEY` or an auto-generated `data/.token-key`).
@@ -123,6 +124,8 @@ Sync is incremental: Graph delta links (mail, chats, channels), Gmail `historyId
 per-meeting "done" cursors. Recordings stream to `data/recordings/` and are served locally.
 
 ## Security notes
+- Production starts with a **Microsoft 365 login gate**. Only `@{ALLOWED_LOGIN_DOMAIN}`
+  (default `conforcus.com`) can sign in; that mailbox is the Work account. Gmail is optional.
 - Tokens encrypted at rest; the key file is `0600`. Secrets never appear in logs or the audit trail.
 - Outbound actions always require a click in the UI; the agent cannot send on its own.
 - Cross-space access is opt-in per question and audited.

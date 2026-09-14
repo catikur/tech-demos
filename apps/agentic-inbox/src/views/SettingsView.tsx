@@ -5,6 +5,7 @@ import { spaceLabel, t } from "../i18n.ts";
 import { fmtDateTime, useData } from "../state.ts";
 import { SpaceRules } from "../components/SpaceRules.tsx";
 import { LlmSettings } from "../components/LlmSettings.tsx";
+import type { SessionView } from "../components/LoginView.tsx";
 
 function providerLabel(provider: Account["provider"]): string {
   return t(`provider.${provider}`);
@@ -42,6 +43,10 @@ export function SettingsView({ status, onChanged }: { status: AppStatus | null; 
             <SpaceRules key={s.id} space={s} onSaved={onChanged} />
           ))}
         </div>
+
+        <h2>{t("settings.graph")}</h2>
+        <p className="muted">{t("settings.graphHint")}</p>
+        <GraphSettings onChanged={onChanged} />
 
         <h2>{t("settings.accounts")}</h2>
         <p className="muted">{t("settings.accountsHint")}</p>
@@ -88,7 +93,7 @@ export function SettingsView({ status, onChanged }: { status: AppStatus | null; 
                   </button>
                   <button
                     className="btn btn-small btn-ghost"
-                    disabled={busy !== null}
+                    disabled={busy !== null || a.provider === "m365"}
                     onClick={() => confirm(t("settings.removeConfirm", { email: a.email })) && void run(`rm-${a.id}`, () => api.delete(`/api/accounts/${a.id}`))}
                   >
                     {t("settings.remove")}
@@ -106,19 +111,15 @@ export function SettingsView({ status, onChanged }: { status: AppStatus | null; 
               <div className="connect-title" style={{ color: s.color }}>
                 {t("space.named", { name: spaceLabel(s.kind) })}
               </div>
-              <a className={`btn ${status.oauth.microsoft ? "" : "is-disabled"}`} href={status.oauth.microsoft ? `/api/auth/microsoft/start?space=${s.id}` : undefined}>
-                {t("settings.connectM365")}
-              </a>
               <a className={`btn ${status.oauth.google ? "" : "is-disabled"}`} href={status.oauth.google ? `/api/auth/google/start?space=${s.id}` : undefined}>
                 {t("settings.connectGmail")}
               </a>
             </div>
           ))}
         </div>
-        {(!status.oauth.microsoft || !status.oauth.google) && (
+        {!status.oauth.google && (
           <p className="muted small">
-            {!status.oauth.microsoft && t("settings.oauthMs")}
-            {!status.oauth.google && t("settings.oauthGoogle")}
+            {t("settings.oauthGoogle")}
             {t("settings.oauthReadme")}
           </p>
         )}
@@ -138,6 +139,74 @@ export function SettingsView({ status, onChanged }: { status: AppStatus | null; 
 
         <MemoryPanel spaces={status.spaces} />
       </div>
+    </div>
+  );
+}
+
+function GraphSettings({ onChanged }: { onChanged: () => void }) {
+  const session = useData<SessionView>(() => api.get("/api/session"), []);
+  const ms = session.data?.microsoft;
+  const [tenantId, setTenantId] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  if (!ms) return <p className="muted">{t("common.loading")}</p>;
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patch("/api/setup/microsoft", { tenantId, clientId, clientSecret: clientSecret || null });
+      setSaved(true);
+      setClientSecret("");
+      session.reload();
+      onChanged();
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="form-card" style={{ marginBottom: 16 }}>
+      <p className="small" style={{ margin: 0 }}>
+        {ms.configured ? (
+          <span className="pill pill-ok">
+            {t("settings.graphTenant")} <code>{ms.tenantId}</code> · {t("settings.graphClient")} <code>{ms.clientIdMasked}</code>
+            {ms.fromEnv ? ` · ${t("llm.source.env")}` : ` · ${t("llm.source.settings")}`}
+          </span>
+        ) : (
+          <span className="pill pill-warn">{t("settings.oauthMs")}</span>
+        )}
+      </p>
+      {ms.fromEnv ? (
+        <p className="muted small">{t("settings.graphFromEnv")}</p>
+      ) : (
+        <>
+          <label className="form-row">
+            {t("login.tenant")}
+            <input value={tenantId} onChange={(e) => setTenantId(e.target.value)} placeholder={ms.tenantId ?? ""} autoComplete="off" />
+          </label>
+          <label className="form-row">
+            {t("login.clientId")}
+            <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder={ms.clientIdMasked ?? ""} autoComplete="off" />
+          </label>
+          <label className="form-row">
+            {t("login.clientSecret")}
+            <input type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} autoComplete="off" />
+          </label>
+          <button className="btn btn-small btn-primary" disabled={busy || !tenantId.trim() || !clientId.trim()} onClick={() => void save()}>
+            {t("settings.graphSave")}
+          </button>
+          {saved && <span className="sent-note"> ✓ {t("common.saved")}</span>}
+          {error && <div className="error-note">{error}</div>}
+        </>
+      )}
     </div>
   );
 }

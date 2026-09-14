@@ -1,0 +1,48 @@
+# Butler (Agentic Inbox) on a Hostinger VPS.
+# DNS: butler.conforcus.com → this machine. Caddy issues TLS automatically.
+# Hostinger stores only this file — the image is built from the GitHub app subdirectory.
+
+services:
+  butler:
+    build:
+      context: https://github.com/catikur/tech-demos.git#cursor/agentic-inbox-m365-gate-f398:apps/agentic-inbox
+      dockerfile: Dockerfile
+    environment:
+      PORT: "3000"
+      NODE_ENV: production
+      APP_BASE_URL: https://butler.conforcus.com
+      LOGIN_REQUIRED: "1"
+      ALLOWED_LOGIN_DOMAIN: conforcus.com
+      OPENROUTER_SITE_URL: https://butler.conforcus.com
+      OPENROUTER_APP_NAME: Butler
+      # Set on the VPS (hPanel / compose environment). The API cannot inject these.
+      # MS_CLIENT_ID:
+      # MS_TENANT_ID:
+      # MS_CLIENT_SECRET:
+      # OPENROUTER_API_KEY:
+      # TOKEN_ENCRYPTION_KEY:
+      # GOOGLE_CLIENT_ID:
+      # GOOGLE_CLIENT_SECRET:
+    volumes:
+      - butler-data:/app/data
+    restart: unless-stopped
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2
+    command: caddy reverse-proxy --from butler.conforcus.com --to butler:3000
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - butler
+    restart: unless-stopped
+
+volumes:
+  butler-data:
+  caddy-data:
+  caddy-config:

@@ -15,6 +15,7 @@ bootstrap();
 
 const server = Bun.serve({
   port: env.port,
+  hostname: "0.0.0.0",
   // SSE streams stay open; Bun's default idle timeout (10s) would cut them.
   idleTimeout: 120,
   development: env.production ? false : { hmr: true, console: true },
@@ -28,7 +29,7 @@ const server = Bun.serve({
 });
 
 console.log(`📬 Agentic Inbox listening on ${server.url}`);
-console.log("   Connect Microsoft 365 or Gmail from Settings. LLM: OpenRouter (`OPENROUTER_API_KEY`).");
+console.log("   Sign in with Microsoft 365 (@conforcus.com). Add Gmail from Settings. LLM: OpenRouter (`OPENROUTER_API_KEY`).");
 
 syncAll()
   .then((r) => console.log(`   Initial sync: ${Object.keys(r).length} account(s)`))

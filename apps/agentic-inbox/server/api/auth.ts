@@ -11,6 +11,11 @@ import { syncAccount } from "../sync/engine.ts";
 import { broadcast } from "./events.ts";
 import { badRequest, h, query } from "./util.ts";
 import { ensureSubscriptions, graphPushEnabled } from "../webhooks/graph.ts";
+import { WORK_SPACE_ID } from "../bootstrap.ts";
+import { emailAllowed } from "../auth/allowlist.ts";
+import { loginRequired } from "../auth/gate.ts";
+import { readSession } from "../auth/session.ts";
+import { denyLoginRedirect, finishMicrosoftSignIn } from "../auth/signin.ts";
 
 /**
  * OAuth start/callback endpoints. Providers register a small descriptor:
@@ -85,7 +90,13 @@ export const authRoutes = {
   "/api/auth/:provider/start": h((req: BunRequest<"/api/auth/:provider/start">) => {
     const flow = flows[req.params.provider] ?? badRequest("Unknown provider");
     if (!flow.configured()) badRequest(`${req.params.provider} OAuth is not configured (see README)`);
-    const spaceId = query(req).get("space") ?? "";
+    if (req.params.provider === "google" && loginRequired() && !readSession(req)) {
+      return Response.json({ error: "Sign in with Microsoft 365" }, { status: 401 });
+    }
+    if (req.params.provider === "microsoft" && loginRequired() && readSession(req)) {
+      badRequest("Microsoft 365 is already connected via sign-in");
+    }
+    const spaceId = query(req).get("space") || (req.params.provider === "microsoft" ? WORK_SPACE_ID : "");
     if (!spaces.get(spaceId)) badRequest("Choose a space to connect the account to");
     const { verifier, challenge } = pkcePair();
     const state = oauthStates.create(req.params.provider, spaceId, verifier);
@@ -104,17 +115,27 @@ export const authRoutes = {
     try {
       const tokens = await exchangeCode(flow.config(), code, state.codeVerifier);
       const account = await flow.identify(tokens, state.spaceId);
+      if (req.params.provider === "microsoft") {
+        if (!emailAllowed(account.email)) return denyLoginRedirect(account.email);
+        const res = finishMicrosoftSignIn(account, tokens);
+        audit.log({ spaceId: account.spaceId, actor: "user", action: "account.connect", detail: `${account.provider} ${account.email}` });
+        broadcast({ type: "data", entity: "accounts", spaceId: null });
+        syncAccount(account, { full: true }).catch((err) => console.error(`[auth] initial sync failed for ${account.email}:`, err));
+        if (graphPushEnabled()) {
+          ensureSubscriptions(account).catch((err) =>
+            console.warn(`[auth] graph subscriptions failed for ${account.email}:`, err),
+          );
+        }
+        return res;
+      }
+      if (loginRequired() && !readSession(req)) {
+        return Response.json({ error: "Sign in with Microsoft 365" }, { status: 401 });
+      }
       accounts.insert(account, null);
       saveTokens(account.id, tokens);
       audit.log({ spaceId: state.spaceId, actor: "user", action: "account.connect", detail: `${account.provider} ${account.email}` });
       broadcast({ type: "data", entity: "accounts", spaceId: null });
-      // Kick off the first sync in the background so the redirect is instant.
       syncAccount(account, { full: true }).catch((err) => console.error(`[auth] initial sync failed for ${account.email}:`, err));
-      if (req.params.provider === "microsoft" && graphPushEnabled()) {
-        ensureSubscriptions(account).catch((err) =>
-          console.warn(`[auth] graph subscriptions failed for ${account.email}:`, err),
-        );
-      }
       return redirect(`/?connect=ok&account=${encodeURIComponent(account.email)}`);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);

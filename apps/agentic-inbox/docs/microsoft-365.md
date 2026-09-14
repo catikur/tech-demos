@@ -9,7 +9,8 @@ provided a tenant admin has granted consent for the three admin-only scopes belo
 1. [Entra admin center](https://entra.microsoft.com) → **Identity → Applications → App registrations → New registration**.
 2. Name: `Agentic Inbox (local)`. Supported account types: *Accounts in this organizational directory only* (or multitenant if you want personal Microsoft accounts too — Teams data needs a work/school account).
 3. Redirect URI: platform **Web**, value `http://localhost:3000/api/auth/microsoft/callback`
-   (change the host/port if you run on another `APP_BASE_URL`).
+   for local dev, or `https://butler.conforcus.com/api/auth/microsoft/callback` in production
+   (`APP_BASE_URL` must match).
 4. After creation copy the **Application (client) ID** and **Directory (tenant) ID**.
 5. *(Optional but recommended)* **Certificates & secrets → New client secret**. Without a secret the app runs as a public client with PKCE, which Entra allows once you enable
    **Authentication → Advanced settings → Allow public client flows = Yes**.
@@ -51,9 +52,17 @@ MS_CLIENT_SECRET=<secret value>            # optional (PKCE public client works 
 APP_BASE_URL=http://localhost:3000
 ```
 
-Start the app, open **Settings → Connect an account → Connect Microsoft 365** under the
-space you want (Work, typically). After consent you are redirected back and a full sync
-starts in the background.
+Start the app. If `MS_CLIENT_ID` / `MS_TENANT_ID` are not in the environment, the
+**login screen** asks for them once (stored encrypted as `microsoft.oauth`). Then sign in
+with a `@{ALLOWED_LOGIN_DOMAIN}` (default `conforcus.com`) Microsoft 365 account — that
+mailbox becomes the Work account. Other domains are redirected with `login=denied`.
+After you are in, **Settings → Microsoft Graph / Entra** shows the tenant/client (read-only
+when they come from env). Gmail is still connected from Settings.
+
+Redirect URIs to register on the Entra app:
+
+- Local: `http://localhost:3000/api/auth/microsoft/callback`
+- Production: `https://butler.conforcus.com/api/auth/microsoft/callback`
 
 ## What gets synced
 

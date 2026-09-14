@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { AgentContext, Space, SourceRef } from "../shared/types.ts";
 import { api } from "./api/client.ts";
 import { t } from "./i18n.ts";
-import { useActiveSpace, useStatus } from "./state.ts";
+import { useActiveSpace, useData, useStatus } from "./state.ts";
 import { AgentPanel } from "./components/AgentPanel.tsx";
 import { SpaceSwitcher } from "./components/SpaceSwitcher.tsx";
 import { NotificationBell } from "./components/NotificationBell.tsx";
@@ -17,6 +17,7 @@ import { CatchUpView } from "./views/CatchUpView.tsx";
 import { TopicsView } from "./views/TopicsView.tsx";
 import { RadarView } from "./views/RadarView.tsx";
 import { PeopleView } from "./views/PeopleView.tsx";
+import { LoginView, type SessionView } from "./components/LoginView.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
 
 export type ViewId = "inbox" | "calendar" | "chats" | "meetings" | "catchup" | "commitments" | "radar" | "topics" | "people" | "settings";
@@ -42,6 +43,7 @@ export interface Selection {
 }
 
 export function App() {
+  const session = useData<SessionView>(() => api.get("/api/session"), []);
   const status = useStatus();
   const [spaceId, setSpaceId] = useActiveSpace();
   const [view, setView] = useState<ViewId>("inbox");
@@ -113,12 +115,22 @@ export function App() {
 
   const llmModel = status.data?.llm.model ? ` · ${status.data.llm.model}` : "";
 
+  const signOut = async () => {
+    await api.delete("/api/session");
+    window.location.href = "/";
+  };
+
+  if (session.loading && !session.data) return <div className="login-screen muted">{t("common.loading")}</div>;
+  if (session.data?.loginRequired && !session.data.authenticated) {
+    return <LoginView session={session.data} onConfigured={session.reload} />;
+  }
+
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark">📬</span>
-          <span className="brand-name">Agentic Inbox</span>
+          <span className="brand-name">Butler</span>
         </div>
         <SpaceSwitcher spaces={spaces} activeId={spaceId} onChange={setSpaceId} />
         <div className="topbar-right">
@@ -127,6 +139,16 @@ export function App() {
               {t("brand.agent", { provider: status.data.llm.provider })}
               {llmModel}
             </span>
+          )}
+          {session.data?.email && (
+            <span className="topbar-user" title={session.data.email}>
+              {session.data.email}
+            </span>
+          )}
+          {session.data?.loginRequired && (
+            <button className="btn btn-small btn-ghost" onClick={() => void signOut()}>
+              {t("login.signOut")}
+            </button>
           )}
           <NotificationBell spaceId={spaceId} spaces={spaces} onOpenLink={openLink} />
           <button className="icon-btn" title={t("brand.toggleAgent")} onClick={() => setAgentOpen((o) => !o)}>
