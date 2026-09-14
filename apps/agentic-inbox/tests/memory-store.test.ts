@@ -27,7 +27,7 @@ describe("chunks / memories / people.summary store", () => {
     expect(got.summaryAt).toBeGreaterThan(0);
   });
 
-  test("chunks persist embeddings and wipeDerivedData clears chunks and memories", () => {
+  test("chunks persist embeddings; wipeDerivedData clears chunks but keeps user memories", () => {
     openMemoryDb();
     bootstrap();
     const vec = new Float32Array(4);
@@ -54,8 +54,11 @@ describe("chunks / memories / people.summary store", () => {
 
     wipeDerivedData();
     expect(chunks.listForSpace(WORK_SPACE_ID)).toEqual([]);
-    expect(memories.list(WORK_SPACE_ID)).toEqual([]);
     expect(people.list(WORK_SPACE_ID)).toEqual([]);
+    // Memories are authored by the user, not derived from mail: a restart with no accounts must not drop them.
+    expect(memories.list(WORK_SPACE_ID).map((m) => m.text)).toEqual(["Always answer in Turkish."]);
+    bootstrap();
+    expect(memories.list(WORK_SPACE_ID)).toHaveLength(1);
   });
 });
 

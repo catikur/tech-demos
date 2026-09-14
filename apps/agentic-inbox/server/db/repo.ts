@@ -1180,7 +1180,10 @@ export const memories = {
   },
 };
 
-/** Space-level rows that survive account.delete — wipe when the mailbox is empty. */
+/**
+ * Space-level rows derived from mailbox data — wiped when no account remains.
+ * `memories` are user-authored preferences and deliberately survive.
+ */
 export function wipeDerivedData(): void {
   getDb().exec(`
     DELETE FROM topic_links;
@@ -1192,7 +1195,6 @@ export function wipeDerivedData(): void {
     DELETE FROM people;
     DELETE FROM audit_log;
     DELETE FROM chunks;
-    DELETE FROM memories;
   `);
 }
 

@@ -13,7 +13,7 @@
 - Only touch files under `apps/agentic-inbox/`. Do not rewrite the original 8-phase `PLAN.md`.
 - No new npm packages. No sqlite-vec. Vectors are `Float32` BLOBs; cosine similarity in JS.
 - Tests use `LLM_PROVIDER=mock` (`tests/setup.ts`); never hit the network in `bun test`.
-- Production `bootstrap()` still does not seed demo accounts. `wipeDerivedData()` must also clear `chunks` and `memories`.
+- Production `bootstrap()` still does not seed demo accounts. `wipeDerivedData()` must also clear `chunks`; `memories` are user-authored and survive a restart with no accounts.
 - IDs stay TEXT (`newId(...)`) like the rest of the schema, not INTEGER AUTOINCREMENT.
 - `people.notes` remains user-authored; `people.summary` is agent/heuristic only.
 - Default UI locale stays Turkish; add i18n keys in both `en` and `tr`.
@@ -55,9 +55,9 @@
 - `people.summary TEXT NOT NULL DEFAULT ''`, `people.summary_at INTEGER`
 - `chunks.upsert`, `chunks.listForSpace`, `chunks.clearSpace` (optional), `memories.list/add/remove`
 - `people.setSummary(id, text)`
-- `wipeDerivedData()` also `DELETE FROM chunks; DELETE FROM memories;`
+- `wipeDerivedData()` also `DELETE FROM chunks;` (memories are kept)
 
-- [ ] **Step 1: Write the failing test** (`tests/memory-store.test.ts`) that bootstraps an in-memory DB, inserts a chunk + memory, sets a person summary, calls `wipeDerivedData()`, and expects chunks/memories gone while asserting `people.summary` is distinct from `notes`.
+- [ ] **Step 1: Write the failing test** (`tests/memory-store.test.ts`) that bootstraps an in-memory DB, inserts a chunk + memory, sets a person summary, calls `wipeDerivedData()`, and expects chunks gone and memories kept while asserting `people.summary` is distinct from `notes`.
 - [ ] **Step 2: Run** `bun test tests/memory-store.test.ts` — expect FAIL (exports / tables missing).
 - [ ] **Step 3: Implement schema + migrate + repo.**
 - [ ] **Step 4: Run the test — expect PASS.** Also `bun test tests/bootstrap.test.ts`.
