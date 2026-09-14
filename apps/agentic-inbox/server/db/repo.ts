@@ -136,6 +136,7 @@ export const accounts = {
     db.query("DELETE FROM chats WHERE account_id = ?").run(id);
     db.query("DELETE FROM transcripts WHERE meeting_id IN (SELECT id FROM meetings WHERE account_id = ?)").run(id);
     db.query("DELETE FROM meetings WHERE account_id = ?").run(id);
+    db.query("DELETE FROM graph_subscriptions WHERE account_id = ?").run(id);
     db.query("DELETE FROM accounts WHERE id = ?").run(id);
   },
   setSpace(id: string, spaceId: string): void {
@@ -941,6 +942,56 @@ export const audit = {
       detail: r.detail,
       createdAt: r.created_at,
     }));
+  },
+};
+
+/* ---------------- graph change-notification subscriptions ---------------- */
+
+export interface GraphSubscriptionRow {
+  id: string;
+  accountId: string;
+  resource: string;
+  clientState: string;
+  expiresAt: number;
+}
+
+function rowToGraphSub(raw: unknown): GraphSubscriptionRow {
+  const r = raw as Row;
+  return {
+    id: r.id,
+    accountId: r.account_id,
+    resource: r.resource,
+    clientState: r.client_state,
+    expiresAt: r.expires_at,
+  };
+}
+
+export const graphSubscriptions = {
+  upsert(s: GraphSubscriptionRow): void {
+    getDb()
+      .query(
+        `INSERT INTO graph_subscriptions (id, account_id, resource, client_state, expires_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET account_id=excluded.account_id, resource=excluded.resource,
+           client_state=excluded.client_state, expires_at=excluded.expires_at`,
+      )
+      .run(s.id, s.accountId, s.resource, s.clientState, s.expiresAt);
+  },
+  get(id: string): GraphSubscriptionRow | null {
+    const r = getDb().query("SELECT * FROM graph_subscriptions WHERE id = ?").get(id) as Row | null;
+    return r ? rowToGraphSub(r) : null;
+  },
+  byAccount(accountId: string): GraphSubscriptionRow[] {
+    return getDb().query("SELECT * FROM graph_subscriptions WHERE account_id = ?").all(accountId).map(rowToGraphSub);
+  },
+  all(): GraphSubscriptionRow[] {
+    return getDb().query("SELECT * FROM graph_subscriptions").all().map(rowToGraphSub);
+  },
+  expiringBefore(ts: number): GraphSubscriptionRow[] {
+    return getDb().query("SELECT * FROM graph_subscriptions WHERE expires_at < ?").all(ts).map(rowToGraphSub);
+  },
+  remove(id: string): void {
+    getDb().query("DELETE FROM graph_subscriptions WHERE id = ?").run(id);
   },
 };
 

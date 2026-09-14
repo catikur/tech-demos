@@ -74,6 +74,26 @@ Replies use `POST /me/messages/{id}/reply` (keeps the Outlook conversation intac
 back to `sendMail`. Chat and channel messages use the corresponding `/messages` endpoints.
 Every send requires your confirmation in the UI and is written to the audit log.
 
+## Change notifications (webhooks)
+
+When `APP_BASE_URL` is a **public HTTPS** origin (ngrok, Caddy, a reverse-proxied host) the
+app creates Graph subscriptions after a Microsoft 365 account connects, and renews them on
+scheduler ticks (PATCH `expirationDateTime` when less than 12 hours remain; chats use a
+shorter window because Graph caps them at ~60 minutes).
+
+Microsoft POSTs to `{APP_BASE_URL}/api/webhooks/graph`:
+
+- Validation handshake: `?validationToken=...` → **200** `text/plain` with the token as the body.
+- Notifications: JSON `{ value: [...] }` → **202**, `clientState` is checked, then a
+  2-second-debounced `syncAccount` for the matching account.
+
+`http://localhost` and `127.0.0.1` stay **poll-only** — Graph cannot deliver to loopback.
+Optional `GRAPH_WEBHOOK_SECRET` sets the subscription `clientState`; otherwise a secret is
+generated and stored in settings.
+
+Inbox mail, calendar events, and (when the tenant allows it) chats are subscribed.
+Org-wide channel `/teams/getAllMessages` is **not** — that needs application permissions.
+
 ## Troubleshooting
 
 - `AADSTS65001` / consent errors → admin consent has not been granted for the admin-only scopes.

@@ -20,6 +20,7 @@ import { llmStatus, runAgent } from "../agent/index.ts";
 import { agentStream, broadcast, sseResponse } from "./events.ts";
 import { authRoutes } from "./auth.ts";
 import { featureRoutes } from "./features.ts";
+import { handleGraphWebhook } from "../webhooks/graph.ts";
 import { badRequest, h, notFound, num, ok, query, readJson, spaceParam } from "./util.ts";
 
 type P<T extends string> = BunRequest<T>;
@@ -27,6 +28,8 @@ type P<T extends string> = BunRequest<T>;
 export const routes = {
   ...authRoutes,
   ...featureRoutes,
+  // Raw handler: Graph validation handshake must be 200 text/plain, not JSON.
+  "/api/webhooks/graph": { POST: (req: Request) => handleGraphWebhook(req) },
   "/api/health": h(() => ok({ ok: true })),
 
   "/api/status": h(() => {

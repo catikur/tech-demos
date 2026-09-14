@@ -5,11 +5,27 @@ import { SCHEMA } from "./schema.ts";
 
 let db: Database | null = null;
 
+/** Extra CREATE TABLE for databases that already ran an older SCHEMA. */
+function migrate(database: Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS graph_subscriptions (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL,
+      resource TEXT NOT NULL,
+      client_state TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_graph_subscriptions_account ON graph_subscriptions(account_id);
+    CREATE INDEX IF NOT EXISTS idx_graph_subscriptions_expires ON graph_subscriptions(expires_at);
+  `);
+}
+
 export function getDb(): Database {
   if (db) return db;
   const path = process.env.DB_PATH ?? join(env.dataDir, "inbox.sqlite");
   db = new Database(path, { create: true });
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 
@@ -17,6 +33,7 @@ export function getDb(): Database {
 export function openMemoryDb(): Database {
   db = new Database(":memory:");
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 

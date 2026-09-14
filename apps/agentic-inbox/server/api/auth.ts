@@ -10,6 +10,7 @@ import { GmailConnector } from "../connectors/gmail.ts";
 import { syncAccount } from "../sync/engine.ts";
 import { broadcast } from "./events.ts";
 import { badRequest, h, query } from "./util.ts";
+import { ensureSubscriptions, graphPushEnabled } from "../webhooks/graph.ts";
 
 /**
  * OAuth start/callback endpoints. Providers register a small descriptor:
@@ -109,6 +110,11 @@ export const authRoutes = {
       broadcast({ type: "data", entity: "accounts", spaceId: null });
       // Kick off the first sync in the background so the redirect is instant.
       syncAccount(account, { full: true }).catch((err) => console.error(`[auth] initial sync failed for ${account.email}:`, err));
+      if (req.params.provider === "microsoft" && graphPushEnabled()) {
+        ensureSubscriptions(account).catch((err) =>
+          console.warn(`[auth] graph subscriptions failed for ${account.email}:`, err),
+        );
+      }
       return redirect(`/?connect=ok&account=${encodeURIComponent(account.email)}`);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
