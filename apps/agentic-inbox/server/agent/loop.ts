@@ -2,6 +2,7 @@ import type { AgentContext, AgentEvent } from "../../shared/types.ts";
 import { audit, spaces, threads, chats, events } from "../db/repo.ts";
 import { listTools, runTool } from "./tools.ts";
 import { zodToJsonSchema, type LlmMessage, type LlmProvider, type LlmToolSpec } from "./llm.ts";
+import { memoryBlock } from "../features/memory.ts";
 
 const MAX_STEPS = 8;
 
@@ -35,7 +36,10 @@ function systemPrompt(ctx: AgentContext): string {
     "When a task is complete, answer in plain text without calling more tools. Keep answers under ~200 words unless the user asks for detail.",
     `Current time (UTC): ${new Date().toISOString()}.`,
     ...selected,
-  ].join("\n");
+    memoryBlock(ctx.spaceId),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function toolSpecs(): LlmToolSpec[] {
