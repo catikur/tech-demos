@@ -1,5 +1,6 @@
 {
-  "proposed": [
+  "proposed": [],
+  "skipped": [
     {
       "id": "2098941338297458746",
       "title": "HyperFrames (HeyGen HTML → video)",
@@ -7,10 +8,10 @@
       "github": "https://github.com/heygen-com/hyperframes",
       "date": "2026-09-14",
       "source": "daily-x-tech-scout",
-      "slug": "hyperframes"
+      "slug": "hyperframes",
+      "reason": "owner declined HyperFrames; wants options from the full viral list"
     }
   ],
-  "skipped": [],
   "built": [
     {
       "id": "2087275734608007415",
