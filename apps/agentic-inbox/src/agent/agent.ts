@@ -166,18 +166,13 @@ export async function* runAgent(
     yield {
       kind: "reply",
       text:
-        `You have ${mailbox.threads.length} threads, ${unread.length} unread.\n\n` +
-        `Needs action:\n` +
-        `• Priya at Lumen Labs reports CSV export failing on large boards — blocking her Friday reporting. Highest priority.\n` +
-        `• Hostbird invoice #2041 failed (expired card); services pause in 14 days.\n` +
-        `• Marcus needs a yes/no for Thursday's Q3 roadmap sync — quorum depends on it.\n\n` +
-        `Can wait:\n` +
-        `• Sofia (Ferrite recruiting) asked about Tue/Wed for an intro call.\n` +
-        `• Security alert for a Rotterdam sign-in — verify it was you.\n` +
-        `• Protocol Weekly #147 and Jonas's climbing invite are casual reads.\n\n` +
-        (urgent.length > 0
-          ? `Want me to draft a reply to any of these? Try "draft a reply to the support email".`
-          : `Ask me to draft a reply whenever you're ready.`),
+        `${mailbox.threads.length} threads, ${unread.length} unread.\n\n` +
+        `Needs action now:\n` +
+        `• Priya (Lumen Labs) — CSV export failing, blocks her Friday reporting.\n` +
+        `• Hostbird — invoice #2041 failed (expired card).\n` +
+        `• Marcus — wants a yes/no for Thursday's roadmap sync.\n\n` +
+        `The rest (recruiter, security alert, newsletter, climbing) can wait.` +
+        (urgent.length > 0 ? ` Try "draft a reply to the support email".` : ""),
     };
     return;
   }
