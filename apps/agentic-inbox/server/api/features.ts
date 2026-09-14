@@ -1,6 +1,6 @@
 import type { BunRequest } from "bun";
 import type { Commitment } from "../../shared/types.ts";
-import { audit, commitments, events, meetings, people, spaces, topics } from "../db/repo.ts";
+import { audit, commitments, events, meetings, notes, people, spaces, topics } from "../db/repo.ts";
 import { extractForSpace } from "../features/commitments.ts";
 import { briefForEvent } from "../features/briefs.ts";
 import { buildFollowUp, followUpRecipients } from "../features/followup.ts";
@@ -9,6 +9,9 @@ import { rebuildTopics } from "../features/topics.ts";
 import { computeRadar } from "../features/radar.ts";
 import { findPerson, personProfile } from "../features/people.ts";
 import { parseDue } from "../features/text.ts";
+import { produceDigest } from "../features/digests.ts";
+import { schedulerState, tick } from "../sync/scheduler.ts";
+import { digests } from "../db/repo.ts";
 import { sendNewMail } from "../services/messaging.ts";
 import { broadcast } from "./events.ts";
 import { badRequest, h, notFound, num, ok, query, readJson, spaceParam } from "./util.ts";
@@ -61,7 +64,9 @@ export const featureRoutes = {
 
   /* ---------- meeting briefs ---------- */
   "/api/events/:id/brief": h(async (req: P<"/api/events/:id/brief">) => {
-    if (!events.get(req.params.id)) notFound("Event not found");
+    const event = events.get(req.params.id) ?? notFound("Event not found");
+    // `existing=1` only returns a brief the scheduler (or user) already produced; never generates.
+    if (query(req).get("existing") === "1" && notes.list(event.spaceId, { eventId: event.id, kind: "brief" }).length === 0) return ok(null);
     return ok(await briefForEvent(req.params.id, { refresh: query(req).get("refresh") === "1" }));
   }),
 
@@ -109,6 +114,27 @@ export const featureRoutes = {
       const count = targets.reduce((n, id) => n + rebuildTopics(id).length, 0);
       broadcast({ type: "data", entity: "topics", spaceId });
       return ok({ topics: count });
+    }),
+  },
+
+  /* ---------- digests & scheduler ---------- */
+  "/api/digests": h((req) => ok(digests.list(spaceParam(req)))),
+  "/api/digests/run": {
+    POST: h(async (req) => {
+      const q = query(req);
+      const period = q.get("period") === "weekly" ? "weekly" : "daily";
+      const spaceId = spaceParam(req);
+      const targets = spaceId ? [spaces.get(spaceId) ?? badRequest("Unknown space")] : spaces.all();
+      const out = [];
+      for (const s of targets) out.push(await produceDigest(s, period, { mail: q.get("mail") === "1" }));
+      return ok(out);
+    }),
+  },
+  "/api/scheduler": {
+    GET: h(() => ok(schedulerState)),
+    POST: h(async () => {
+      await tick();
+      return ok(schedulerState);
     }),
   },
 

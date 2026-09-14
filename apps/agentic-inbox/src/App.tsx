@@ -4,6 +4,7 @@ import { api } from "./api/client.ts";
 import { useActiveSpace, useStatus } from "./state.ts";
 import { AgentPanel } from "./components/AgentPanel.tsx";
 import { SpaceSwitcher } from "./components/SpaceSwitcher.tsx";
+import { NotificationBell } from "./components/NotificationBell.tsx";
 import { BriefPanel } from "./components/BriefPanel.tsx";
 import { FollowUpPanel } from "./components/FollowUpPanel.tsx";
 import { InboxView } from "./views/InboxView.tsx";
@@ -46,6 +47,7 @@ export function App() {
   const [selection, setSelection] = useState<Selection>({ threadId: null, chatId: null, eventId: null, meetingId: null });
   const [composerPrefill, setComposerPrefill] = useState<{ threadId: string; body: string } | null>(null);
   const [agentOpen, setAgentOpen] = useState(true);
+  const [focusDigestId, setFocusDigestId] = useState<string | null>(null);
 
   const spaces: Space[] = status.data?.spaces ?? [];
   const activeSpace = spaces.find((s) => s.id === spaceId) ?? null;
@@ -91,6 +93,22 @@ export function App() {
 
   const viewProps = { spaceId, spaces, onOpenSource: openSource };
 
+  /** Notification links: `event:<id>`, `digest:<id>`, `commitment:<id>`, `thread:<id>`, `radar`. */
+  const openLink = useCallback(
+    (link: string) => {
+      const [kind, id] = link.split(":");
+      if (kind === "event" && id) openSource({ kind: "event", id, label: "" });
+      else if (kind === "thread" && id) openSource({ kind: "thread", id, label: "" });
+      else if (kind === "meeting" && id) openSource({ kind: "meeting", id, label: "" });
+      else if (kind === "digest") {
+        setFocusDigestId(id ?? null);
+        setView("catchup");
+      } else if (kind === "commitment") setView("commitments");
+      else if (kind === "radar") setView("radar");
+    },
+    [openSource],
+  );
+
   return (
     <div className="app">
       <header className="topbar">
@@ -107,6 +125,7 @@ export function App() {
               {status.data.llm.model ? ` · ${status.data.llm.model}` : ""}
             </span>
           )}
+          <NotificationBell spaceId={spaceId} spaces={spaces} onOpenLink={openLink} />
           <button className="icon-btn" title="Toggle agent panel" onClick={() => setAgentOpen((o) => !o)}>
             {agentOpen ? "⇥" : "⇤"}
           </button>
@@ -155,7 +174,7 @@ export function App() {
               )}
             />
           )}
-          {view === "catchup" && <CatchUpView {...viewProps} />}
+          {view === "catchup" && <CatchUpView key={focusDigestId ?? "catchup"} {...viewProps} focusDigestId={focusDigestId} />}
           {view === "commitments" && <CommitmentsView {...viewProps} />}
           {view === "radar" && <RadarView {...viewProps} />}
           {view === "topics" && <TopicsView {...viewProps} />}

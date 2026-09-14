@@ -4,6 +4,7 @@ import { getDb } from "./db/index.ts";
 import { bootstrap } from "./bootstrap.ts";
 import { routes } from "./api/routes.ts";
 import { syncAll } from "./sync/engine.ts";
+import { startScheduler } from "./sync/scheduler.ts";
 import "./features/index.ts";
 import "./features/commitments.ts";
 import "./features/topics.ts";
@@ -30,4 +31,5 @@ if (seededDemo) console.log("   Demo accounts seeded (Work + Personal). Connect 
 
 syncAll()
   .then((r) => console.log(`   Initial sync: ${Object.keys(r).length} account(s)`))
-  .catch((err) => console.error("Initial sync failed", err));
+  .catch((err) => console.error("Initial sync failed", err))
+  .finally(() => startScheduler());

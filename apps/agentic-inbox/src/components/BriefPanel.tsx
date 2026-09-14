@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CalendarEvent, MeetingBrief } from "../../shared/types.ts";
 import { api } from "../api/client.ts";
 import { Markdown } from "./Markdown.tsx";
@@ -19,6 +19,19 @@ export function BriefPanel({ event }: { event: CalendarEvent }) {
       setState("error");
     }
   };
+
+  // Show a brief the scheduler already prepared without asking the user to click.
+  useEffect(() => {
+    let cancelled = false;
+    setBrief(null);
+    api
+      .get<MeetingBrief | null>(`/api/events/${event.id}/brief?existing=1`)
+      .then((b) => !cancelled && b && setBrief(b))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [event.id]);
 
   if (event.attendees.length < 2) return null;
   return (

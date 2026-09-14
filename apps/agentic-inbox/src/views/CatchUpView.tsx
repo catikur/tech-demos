@@ -4,30 +4,36 @@ import { api, spaceQuery } from "../api/client.ts";
 import { ago, fmtDateTime, useData } from "../state.ts";
 import { Markdown } from "../components/Markdown.tsx";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
+import { DigestsPanel } from "../components/DigestsPanel.tsx";
 
 const PRESETS: { id: string; label: string; hours?: number }[] = [
   { id: "seen", label: "Since I last looked" },
   { id: "8", label: "Last 8 hours", hours: 8 },
   { id: "24", label: "Since yesterday", hours: 24 },
   { id: "168", label: "Last week", hours: 168 },
+  { id: "digests", label: "Digests" },
 ];
 
 export function CatchUpView({
   spaceId,
   spaces,
   onOpenSource,
+  focusDigestId,
 }: {
   spaceId: string | null;
   spaces: Space[];
   onOpenSource: (ref: SourceRef) => void;
+  focusDigestId?: string | null;
 }) {
-  const [preset, setPreset] = useState("24");
+  const [preset, setPreset] = useState(focusDigestId ? "digests" : "24");
   const p = PRESETS.find((x) => x.id === preset)!;
-  const catchup = useData<CatchUp>(
+  const catchup = useData<CatchUp | null>(
     () =>
-      api.get(
-        p.hours ? `/api/catchup?${spaceQuery(spaceId)}&from=${Date.now() - p.hours * 3_600_000}` : `/api/catchup?${spaceQuery(spaceId)}&preset=seen`,
-      ),
+      preset === "digests"
+        ? Promise.resolve(null)
+        : api.get(
+            p.hours ? `/api/catchup?${spaceQuery(spaceId)}&from=${Date.now() - p.hours * 3_600_000}` : `/api/catchup?${spaceQuery(spaceId)}&preset=seen`,
+          ),
     [spaceId, preset],
     () => false,
   );
@@ -56,6 +62,9 @@ export function CatchUpView({
           </span>
         )}
       </div>
+      {preset === "digests" ? (
+        <DigestsPanel spaceId={spaceId} spaces={spaces} focusId={focusDigestId} />
+      ) : (
       <div className="split split-2 split-even">
         <section className="pane pane-list pane-wide">
           <div className="pane-header">
@@ -95,6 +104,7 @@ export function CatchUpView({
           </div>
         </section>
       </div>
+      )}
     </div>
   );
 }

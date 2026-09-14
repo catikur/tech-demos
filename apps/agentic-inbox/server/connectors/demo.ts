@@ -376,6 +376,19 @@ function workEvents(now: number): SeedEvent[] {
       responseStatus: "accepted",
     },
     {
+      // Starts inside the brief lead window so the scheduler produces a brief right after boot.
+      id: "ev-standup",
+      title: "Daily standup",
+      start: now + 12 * MIN,
+      end: now + 27 * MIN,
+      organizer: PEOPLE.dana,
+      attendees: [ME_WORK, PEOPLE.dana, PEOPLE.tomas],
+      location: "Microsoft Teams",
+      joinUrl: "https://teams.microsoft.com/l/meetup-join/demo-standup",
+      description: "Blockers, beta cut, incident follow-ups.",
+      responseStatus: "accepted",
+    },
+    {
       id: "ev-1on1-marcus",
       title: "1:1 Marcus / You",
       start: now + 2 * HOUR,
