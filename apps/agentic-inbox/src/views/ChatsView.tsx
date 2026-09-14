@@ -126,7 +126,11 @@ export function ChatsView({
             </div>
             {replyTarget && (
               <div className="composer-reply" data-reply-to={replyTarget.id}>
-                <span className="composer-reply-body">{replyTarget.body}</span>
+                <span className="composer-reply-body">
+                  {t("chats.replyingTo", { name: replyTarget.isMine ? t("common.you") : senderName(replyTarget.from) })}
+                  {": "}
+                  {replyTarget.body}
+                </span>
                 <button type="button" className="btn btn-ghost" onClick={() => setReplyToId(null)}>
                   ×
                 </button>

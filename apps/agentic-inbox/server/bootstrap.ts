@@ -1,6 +1,5 @@
 import type { Space } from "../shared/types.ts";
 import { accounts, settings, spaces } from "./db/repo.ts";
-import { demoAccounts } from "./connectors/demo.ts";
 
 export const WORK_SPACE_ID = "space_work";
 export const PERSONAL_SPACE_ID = "space_personal";
@@ -29,22 +28,19 @@ const DEFAULT_SPACES: Space[] = [
 ];
 
 /**
- * Idempotent startup: make sure both spaces exist and, when the user has never
- * connected anything, seed the two demo accounts so the app is useful with zero
- * credentials. Demo accounts can be removed from Settings once real ones exist.
+ * Idempotent startup: ensure Work + Personal spaces exist. Demo mailboxes are
+ * never seeded here — connect real Microsoft 365 / Gmail from Settings.
+ * Leftover demo accounts from an older install are removed.
  */
 export function bootstrap(): { seededDemo: boolean } {
   for (const s of DEFAULT_SPACES) {
     if (!spaces.get(s.id)) spaces.upsert(s);
   }
-  let seededDemo = false;
-  if (accounts.all().length === 0 && settings.get("demo_removed") !== "1") {
-    for (const a of demoAccounts({ work: WORK_SPACE_ID, personal: PERSONAL_SPACE_ID })) {
-      accounts.insert(a, null);
-    }
-    seededDemo = true;
+  for (const account of accounts.all().filter((a) => a.provider === "demo")) {
+    accounts.remove(account.id);
   }
-  return { seededDemo };
+  if (accounts.all().every((a) => a.provider !== "demo")) settings.set("demo_removed", "1");
+  return { seededDemo: false };
 }
 
 export function isDemoMode(): boolean {

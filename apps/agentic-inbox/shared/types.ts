@@ -337,7 +337,7 @@ export interface FollowUp {
 }
 
 export interface LlmStatus {
-  provider: "openai" | "anthropic" | "mock";
+  provider: "openrouter" | "mock";
   model: string | null;
   configured: boolean;
 }

@@ -76,7 +76,7 @@ export function CommitmentsView({
               <div className="card-top">
                 <strong>{c.counterpartName ?? senderName(c.counterpart)}</strong>
                 <span className={`pill ${due.cls}`}>{due.text}</span>
-                {c.msTaskId && <span className="pill pill-ok">To Do</span>}
+                {c.msTaskId && <span className="pill pill-ok">{t("commitments.todoBadge")}</span>}
                 {spaceId === null && <SpaceBadge spaces={spaces} spaceId={c.spaceId} />}
               </div>
               <p className="card-text">{c.text}</p>
@@ -102,9 +102,9 @@ export function CommitmentsView({
                         className="btn btn-small"
                         disabled={pushingId === c.id}
                         onClick={() => void sendToTodo(c)}
-                        title="To Do'ya gönder"
+                        title={t("commitments.sendToTodo")}
                       >
-                        {pushingId === c.id ? "Sending…" : "Send to To Do"}
+                        {pushingId === c.id ? t("common.sending") : t("commitments.sendToTodo")}
                       </button>
                     )}
                     {c.direction === "owed_to_me" && c.source.kind === "thread" && (

@@ -25,7 +25,7 @@ describe("tool schemas", () => {
   });
 });
 
-describe("OpenAI-compatible adapter", () => {
+describe("OpenRouter adapter", () => {
   let server: ReturnType<typeof Bun.serve>;
   const seen: any[] = [];
 
@@ -51,12 +51,12 @@ describe("OpenAI-compatible adapter", () => {
   afterAll(() => server.stop(true));
 
   test("parses tool calls, echoes them back and reads the final answer", async () => {
-    process.env.OPENAI_BASE_URL = `http://localhost:${server.port}/v1`;
-    process.env.OPENAI_API_KEY = "test-key";
-    process.env.LLM_PROVIDER = "openai";
+    process.env.OPENROUTER_BASE_URL = `http://localhost:${server.port}/v1`;
+    process.env.OPENROUTER_API_KEY = "test-key";
+    process.env.LLM_PROVIDER = "openrouter";
     resetProviderCache();
     const provider = selectProvider()!;
-    expect(provider.name).toBe("openai");
+    expect(provider.name).toBe("openrouter");
     const first = await provider.chat([{ role: "user", content: "help" }], toolSpecs());
     expect(first.toolCalls).toEqual([{ id: "c1", name: "search_mail", arguments: { query: "export" } }]);
     const second = await provider.chat(

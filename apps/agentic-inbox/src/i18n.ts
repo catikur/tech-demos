@@ -52,7 +52,7 @@ const en: Dict = {
   "space.kind.personal": "personal space",
 
   "brand.agent": "agent: {provider}",
-  "brand.agentTitle": "Agent backend",
+  "brand.agentTitle": "Agent (OpenRouter)",
   "brand.toggleAgent": "Toggle agent panel",
 
   "empty.accounts": "No accounts connected yet. Open Settings to connect Microsoft 365 or Gmail.",
@@ -200,6 +200,7 @@ const en: Dict = {
   "commitments.nudgeBody": "Hi {name},\n\nQuick nudge on this: \"{text}\" — any update? Happy to help if something is blocking.\n\nThanks!",
   "commitments.sendToTodo": "Send to To Do",
   "commitments.todoBadge": "To Do",
+  "chats.replyingTo": "Replying to {name}",
 
   "radar.hint": "Unanswered asks in both directions. Bars fill over 72 hours; VIPs float to the top.",
   "radar.waitingOnYou": "Waiting on you",
@@ -256,11 +257,11 @@ const en: Dict = {
   "settings.oauthMs": "Set MS_CLIENT_ID (and optionally MS_TENANT_ID) to enable Microsoft 365. ",
   "settings.oauthGoogle": "Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET to enable Gmail. ",
   "settings.oauthReadme": "See the README for the app-registration walkthroughs.",
-  "settings.agentBackend": "Agent backend",
+  "settings.agentBackend": "Agent (OpenRouter)",
   "settings.provider": "Provider:",
   "settings.model": "model",
   "settings.llmFallback":
-    " — rule-based fallback. Set OPENAI_API_KEY (or OPENAI_BASE_URL for Azure/Ollama) or ANTHROPIC_API_KEY to enable a real model.",
+    " — rule-based fallback. Set OPENROUTER_API_KEY (and optionally OPENROUTER_MODEL) to enable a real model.",
   "provider.demo": "Demo",
   "provider.m365": "Microsoft 365",
   "provider.gmail": "Gmail",
@@ -497,6 +498,7 @@ const tr: Dict = {
     "Merhaba {name},\n\nBu konuda kısa bir hatırlatma: \"{text}\" — bir güncelleme var mı? Bir şey tıkandıysa yardımcı olurum.\n\nTeşekkürler!",
   "commitments.sendToTodo": "To Do'ya gönder",
   "commitments.todoBadge": "To Do",
+  "chats.replyingTo": "{name} kişisine yanıt",
 
   "radar.hint": "Her iki yönde yanıtlanmamış istekler. Çubuklar 72 saatte dolar; VIP’ler üste çıkar.",
   "radar.waitingOnYou": "Sizden bekleniyor",
@@ -557,7 +559,7 @@ const tr: Dict = {
   "settings.provider": "Sağlayıcı:",
   "settings.model": "model",
   "settings.llmFallback":
-    " — kural tabanlı yedek. Gerçek bir model için OPENAI_API_KEY (veya Azure/Ollama için OPENAI_BASE_URL) ya da ANTHROPIC_API_KEY tanımlayın.",
+    " — kural tabanlı yedek. Gerçek model için OPENROUTER_API_KEY (isteğe bağlı OPENROUTER_MODEL) tanımlayın.",
   "provider.demo": "Demo",
   "provider.m365": "Microsoft 365",
   "provider.gmail": "Gmail",
