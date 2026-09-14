@@ -139,7 +139,9 @@ CREATE TABLE IF NOT EXISTS commitments (
   source_label TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   confidence REAL NOT NULL DEFAULT 0.5,
-  fingerprint TEXT UNIQUE
+  fingerprint TEXT UNIQUE,
+  ms_task_id TEXT,
+  ms_list_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS topics (

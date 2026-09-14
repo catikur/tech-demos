@@ -7,6 +7,7 @@ import { registerMockIntent, mockTool, mockSleep, MOCK_PACE } from "../agent/moc
 import { inScope, outOfScopeMessage } from "../agent/policy.ts";
 import { parseDue } from "./text.ts";
 import { extractForSpace } from "./commitments.ts";
+import { pushCommitmentToTodo } from "./ms-tasks.ts";
 import { briefForEvent } from "./briefs.ts";
 import { buildFollowUp, followUpRecipients } from "./followup.ts";
 import { buildCatchUp } from "./catchup.ts";
@@ -67,6 +68,23 @@ registerTool({
       confidence: 1,
     });
     return { output: inserted ? `Recorded: ${input.direction} · ${counterpart} · ${fmtDue(dueAt)} · "${input.text}"` : "An identical commitment already exists." };
+  },
+});
+
+registerTool({
+  name: "push_commitment_to_todo",
+  description: "Push an open commitment the user owes onto Microsoft To Do (list: Agentic Inbox).",
+  schema: z.object({ id: z.string() }),
+  async run(input, ctx) {
+    const c = commitments.get(input.id);
+    if (!c) return { output: "Commitment not found." };
+    if (!inScope(ctx, c.spaceId)) return { output: outOfScopeMessage(ctx) };
+    try {
+      const { taskId } = await pushCommitmentToTodo(c.id);
+      return { output: `Created Microsoft To Do task ${taskId} for "${c.text}".` };
+    } catch (err) {
+      return { output: err instanceof Error ? err.message : String(err) };
+    }
   },
 });
 

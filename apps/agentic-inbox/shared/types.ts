@@ -173,6 +173,8 @@ export interface Commitment {
   source: SourceRef;
   createdAt: number;
   confidence: number;
+  /** Microsoft To Do task id when this commitment has been pushed. */
+  msTaskId?: string | null;
 }
 
 export type SourceKind = "thread" | "chat" | "meeting" | "event" | "manual";

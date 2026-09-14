@@ -681,6 +681,7 @@ function rowToCommitment(raw: unknown): Commitment {
     source: { kind: r.source_kind, id: r.source_id, label: r.source_label },
     createdAt: r.created_at,
     confidence: r.confidence,
+    msTaskId: r.ms_task_id ?? null,
   };
 }
 
@@ -735,6 +736,14 @@ export const commitments = {
   },
   setStatus(id: string, status: Commitment["status"]): void {
     getDb().query("UPDATE commitments SET status = ? WHERE id = ?").run(status, id);
+  },
+  setMsTask(id: string, listId: string, taskId: string): void {
+    getDb().query("UPDATE commitments SET ms_list_id = ?, ms_task_id = ? WHERE id = ?").run(listId, taskId, id);
+  },
+  msTask(id: string): { listId: string; taskId: string } | null {
+    const r = getDb().query("SELECT ms_list_id, ms_task_id FROM commitments WHERE id = ?").get(id) as Row | null;
+    if (!r?.ms_list_id || !r?.ms_task_id) return null;
+    return { listId: r.ms_list_id, taskId: r.ms_task_id };
   },
   dueSoon(spaceId: string | null, withinMs: number): Commitment[] {
     const now = Date.now();

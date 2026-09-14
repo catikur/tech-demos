@@ -30,6 +30,7 @@ export function CommitmentsView({
     (ev) => ev.type === "sync" || (ev.type === "data" && ev.entity === "commitments"),
   );
   const [busy, setBusy] = useState(false);
+  const [pushingId, setPushingId] = useState<string | null>(null);
   const items = list.data ?? [];
   const mine = items.filter((c) => c.direction === "owed_by_me");
   const theirs = items.filter((c) => c.direction === "owed_to_me");
@@ -37,6 +38,17 @@ export function CommitmentsView({
   const setState = async (c: Commitment, next: Commitment["status"]) => {
     await api.patch(`/api/commitments/${c.id}`, { status: next });
     list.reload();
+  };
+  const sendToTodo = async (c: Commitment) => {
+    setPushingId(c.id);
+    try {
+      await api.post(`/api/commitments/${c.id}/todo`);
+      list.reload();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setPushingId(null);
+    }
   };
   const extract = async () => {
     setBusy(true);
@@ -63,6 +75,7 @@ export function CommitmentsView({
               <div className="card-top">
                 <strong>{c.counterpartName ?? senderName(c.counterpart)}</strong>
                 <span className={`pill ${due.cls}`}>{due.text}</span>
+                {c.msTaskId && <span className="pill pill-ok">To Do</span>}
                 {spaceId === null && <SpaceBadge spaces={spaces} spaceId={c.spaceId} />}
               </div>
               <p className="card-text">{c.text}</p>
@@ -83,6 +96,16 @@ export function CommitmentsView({
                     <button className="btn btn-small btn-ghost" onClick={() => void setState(c, "dropped")}>
                       Drop
                     </button>
+                    {c.direction === "owed_by_me" && !c.msTaskId && (
+                      <button
+                        className="btn btn-small"
+                        disabled={pushingId === c.id}
+                        onClick={() => void sendToTodo(c)}
+                        title="To Do'ya gönder"
+                      >
+                        {pushingId === c.id ? "Sending…" : "Send to To Do"}
+                      </button>
+                    )}
                     {c.direction === "owed_to_me" && c.source.kind === "thread" && (
                       <button
                         className="btn btn-small"
