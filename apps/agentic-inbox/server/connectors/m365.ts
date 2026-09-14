@@ -94,12 +94,17 @@ interface Me {
   displayName: string;
 }
 
+/** Subset of GraphClient the connector needs — tests inject a fixture-backed fake. */
+export type GraphLike = Pick<GraphClient, "request" | "collect">;
+
 export class M365Connector implements Connector {
   provider = "m365" as const;
   capabilities: Connector["capabilities"] = ["mail", "calendar", "chats", "channels", "meetings", "transcripts", "recordings"];
 
+  constructor(private readonly clientFactory: (accountId: string) => GraphLike = (id) => new GraphClient(id)) {}
+
   async sync(account: Account, opts: { full?: boolean } = {}): Promise<SyncStats> {
-    const g = new GraphClient(account.id);
+    const g = this.clientFactory(account.id);
     const stats = emptyStats();
     const meRaw = await g.request<any>("/me?$select=id,mail,userPrincipalName,displayName");
     const me: Me = { id: meRaw.id, mail: (meRaw.mail ?? meRaw.userPrincipalName ?? account.email).toLowerCase(), displayName: meRaw.displayName ?? "" };
@@ -118,7 +123,7 @@ export class M365Connector implements Connector {
 
   /* ---------------- mail ---------------- */
 
-  private async syncMail(g: GraphClient, account: Account, me: Me, stats: SyncStats): Promise<void> {
+  private async syncMail(g: GraphLike, account: Account, me: Me, stats: SyncStats): Promise<void> {
     const select = "$select=id,conversationId,subject,from,toRecipients,ccRecipients,body,receivedDateTime,sentDateTime,isRead";
     for (const folder of ["inbox", "sentitems"]) {
       const cursorKey = `mail.${folder}`;
@@ -183,7 +188,7 @@ export class M365Connector implements Connector {
 
   /* ---------------- calendar ---------------- */
 
-  private async syncCalendar(g: GraphClient, account: Account, me: Me, stats: SyncStats): Promise<void> {
+  private async syncCalendar(g: GraphLike, account: Account, me: Me, stats: SyncStats): Promise<void> {
     const start = new Date(Date.now() - 14 * DAY).toISOString();
     const end = new Date(Date.now() + 30 * DAY).toISOString();
     const url =
@@ -215,7 +220,7 @@ export class M365Connector implements Connector {
 
   /* ---------------- Teams chats ---------------- */
 
-  private async syncChats(g: GraphClient, account: Account, me: Me, stats: SyncStats): Promise<void> {
+  private async syncChats(g: GraphLike, account: Account, me: Me, stats: SyncStats): Promise<void> {
     const { items } = await g.collect<any>("/me/chats?$expand=members&$top=50&$orderby=lastMessagePreview/createdDateTime desc", { maxPages: 2 });
     const recent = items.filter((c) => ts(c.lastUpdatedDateTime) > Date.now() - 30 * DAY).slice(0, 40);
     for (const c of recent) {
@@ -266,7 +271,7 @@ export class M365Connector implements Connector {
     }
   }
 
-  private async syncChannels(g: GraphClient, account: Account, me: Me, stats: SyncStats): Promise<void> {
+  private async syncChannels(g: GraphLike, account: Account, me: Me, stats: SyncStats): Promise<void> {
     const teams = (await g.collect<any>("/me/joinedTeams", { maxPages: 1 })).items.slice(0, 15);
     for (const team of teams) {
       const channels = (await g.collect<any>(`/teams/${team.id}/channels`, { maxPages: 1 })).items.slice(0, 20);
@@ -313,7 +318,7 @@ export class M365Connector implements Connector {
   }
 
   /** Delta when a cursor exists (or delta is supported), otherwise a bounded plain list. */
-  private async chatMessages(g: GraphClient, account: Account, base: string, cursorKey: string): Promise<any[]> {
+  private async chatMessages(g: GraphLike, account: Account, base: string, cursorKey: string): Promise<any[]> {
     const cursors = accounts.cursors(account.id);
     try {
       const first = cursors[cursorKey] ?? `${base}/delta?$top=50`;
@@ -359,7 +364,7 @@ export class M365Connector implements Connector {
 
   /* ---------------- meetings: transcripts & recordings ---------------- */
 
-  private async syncMeetings(g: GraphClient, account: Account, _me: Me, stats: SyncStats): Promise<void> {
+  private async syncMeetings(g: GraphLike, account: Account, _me: Me, stats: SyncStats): Promise<void> {
     const now = Date.now();
     const past = events.list(account.spaceId, now - 30 * DAY, now).filter((e) => e.accountId === account.id && e.joinUrl && e.end < now);
     const cursors = accounts.cursors(account.id);
@@ -429,7 +434,7 @@ export class M365Connector implements Connector {
   /* ---------------- outbound ---------------- */
 
   async sendMail(account: Account, input: SendMailInput): Promise<{ externalId: string | null }> {
-    const g = new GraphClient(account.id);
+    const g = this.clientFactory(account.id);
     const thread = threads.get(input.threadId);
     const lastOther = thread ? [...thread.messages].reverse().find((m) => !m.isMine) : null;
     const replyTo = lastOther ? threads.messageExternalId(lastOther.id) : null;
@@ -460,7 +465,7 @@ export class M365Connector implements Connector {
   }
 
   async sendChatMessage(account: Account, input: SendChatInput): Promise<{ externalId: string | null }> {
-    const g = new GraphClient(account.id);
+    const g = this.clientFactory(account.id);
     const chat = chats.get(input.chatId);
     if (!chat) throw new Error("Chat not found");
     const external = chatExternalId(input.chatId);

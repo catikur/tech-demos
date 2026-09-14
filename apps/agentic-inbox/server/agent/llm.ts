@@ -206,6 +206,10 @@ class AnthropicProvider implements LlmProvider {
 
 let cached: LlmProvider | null | undefined;
 
+export function resetProviderCache(): void {
+  cached = undefined;
+}
+
 export function selectProvider(): LlmProvider | null {
   if (cached !== undefined) return cached;
   const { provider, openaiApiKey, openaiBaseUrl, openaiModel, anthropicApiKey, anthropicModel } = env.llm;

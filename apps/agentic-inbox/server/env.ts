@@ -32,13 +32,16 @@ export const env = {
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? null,
     calendar: bool("GOOGLE_CALENDAR", true),
   },
-  llm: {
-    provider: (process.env.LLM_PROVIDER ?? "auto") as "auto" | "openai" | "anthropic" | "mock",
-    openaiBaseUrl: (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/$/, ""),
-    openaiApiKey: process.env.OPENAI_API_KEY ?? null,
-    openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? null,
-    anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-3-5-haiku-latest",
+  // Read lazily so tests (and future settings UI) can change the model without a restart.
+  get llm() {
+    return {
+      provider: (process.env.LLM_PROVIDER ?? "auto") as "auto" | "openai" | "anthropic" | "mock",
+      openaiBaseUrl: (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/$/, ""),
+      openaiApiKey: process.env.OPENAI_API_KEY ?? null,
+      openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+      anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? null,
+      anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-3-5-haiku-latest",
+    };
   },
   sync: {
     intervalMinutes: num("SYNC_INTERVAL_MINUTES", 5),

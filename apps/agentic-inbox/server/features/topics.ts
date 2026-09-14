@@ -85,6 +85,30 @@ export function rebuildTopics(spaceId: string): Topic[] {
     }
   }
 
+  // Merge pass: greedy assignment is order-sensitive, so fold clusters whose
+  // dominant keywords overlap (e.g. "export/incident/postmortem" halves).
+  const topKw = (c: Cluster, n = 8) => [...c.keywords.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => k);
+  let merged = true;
+  while (merged) {
+    merged = false;
+    outer: for (let i = 0; i < clusters.length; i++) {
+      for (let j = i + 1; j < clusters.length; j++) {
+        const a = topKw(clusters[i]);
+        const b = topKw(clusters[j]);
+        const shared = a.filter((k) => b.includes(k)).length;
+        if (shared >= 2 || jaccard(a, b) >= 0.25) {
+          const [dst, src] = [clusters[i], clusters[j]];
+          dst.items.push(...src.items);
+          for (const [k, v] of src.keywords) dst.keywords.set(k, (dst.keywords.get(k) ?? 0) + v);
+          for (const [k, v] of src.titles) dst.titles.set(k, (dst.titles.get(k) ?? 0) + v);
+          clusters.splice(j, 1);
+          merged = true;
+          break outer;
+        }
+      }
+    }
+  }
+
   const result: Topic[] = clusters
     .filter((c) => c.items.length >= 2)
     .map((c) => {

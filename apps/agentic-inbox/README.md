@@ -1,55 +1,139 @@
-# Agentic Inbox — local demo slice
+# Agentic Inbox — unified Work / Personal communication cockpit
 
-A single-user, fully local slice of the **AI email client** pattern: a three-pane mail app
-(inbox · thread · agent) where a side-panel **Email Agent** works your mailbox through named
-tools — `list_threads`, `search_mail`, `read_thread`, `draft_reply`, `send_reply` — and never
-sends anything without your explicit confirmation.
+One local app that pulls **Outlook mail, calendar and Teams (chats, channels, meeting
+transcripts and recordings)** from Microsoft 365 and **Gmail (+ Google Calendar)** into two
+hard-walled spaces — **Work** and **Personal** — and puts an **Email Agent** with real tools
+next to them. Seven productivity features sit on top: a commitment ledger, pre-meeting
+briefs, post-meeting follow-through, catch-up, a cross-channel topic graph, a response-debt
+radar and people cards.
+
+Everything runs on your machine with Bun + SQLite. Nothing is sent without your confirmation,
+and every send and every agent tool call is written to an audit log.
 
 ## Run it
 
 ```sh
 cd apps/agentic-inbox
 bun install
-bun run dev
+bun run dev          # http://localhost:3000
 ```
 
-Then open the URL Bun prints (default `http://localhost:3000`). No accounts, no API keys,
-no environment variables.
+With no configuration the app boots in **demo mode**: a seeded Work account (M365-shaped:
+mail, calendar, Teams chats, two transcribed meetings) and a seeded Personal account
+(Gmail-shaped). Every feature works against that data, the agent runs a rule-based fallback,
+and the scheduler produces a meeting brief and reminders within seconds of boot.
 
-Requires [Bun](https://bun.sh) ≥ 1.2 (the dev server uses Bun's built-in HTML bundler).
+Other scripts: `bun run typecheck`, `bun test` (48 tests, offline), `bun run start` (production).
 
-## What's in the demo
+Requires [Bun](https://bun.sh) ≥ 1.2.
 
-- **Seeded mock mailbox** — seven threads (support escalation, calendar invite, failed
-  invoice, recruiter back-and-forth, newsletter, personal, security alert) generated at
-  startup with fresh relative timestamps. See `src/data/seed.ts`.
-- **Inbox list** with unread badges, category labels, and snippets.
-- **Thread view + composer** — read a thread, write a reply, send it (demo send = the
-  message is appended to the local thread state).
-- **Email Agent side panel** — a toy tool loop (`src/agent/agent.ts`) that parses your
-  intent with rules (no model, no network), streams its "thoughts" and tool calls into the
-  chat, and proposes drafts. Try:
-  - `summarize my inbox`
-  - `show unread`
-  - `find the invoice email`
-  - `draft a reply to this` (with a thread open) or `draft a reply to Priya`
-- **Confirm-before-send** — agent drafts land as a proposal card with
-  **Confirm & send** / **Edit in composer** / **Discard**. Nothing is "sent" (i.e. appended
-  to the thread) until you confirm.
+## Connect real accounts
+
+| What | Guide | Env vars |
+|---|---|---|
+| Microsoft 365 — Outlook, Calendar, Teams chats/channels, meeting transcripts + recordings | [docs/microsoft-365.md](docs/microsoft-365.md) | `MS_CLIENT_ID`, `MS_TENANT_ID`, `MS_CLIENT_SECRET` (optional) |
+| Gmail + Google Calendar | [docs/gmail.md](docs/gmail.md) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
+| Agent model (OpenAI-compatible incl. Azure OpenAI / Ollama, or Anthropic) | below | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`, or `ANTHROPIC_API_KEY` |
+
+Copy [`.env.example`](.env.example) to `.env`, fill what you need, restart, then use
+**Settings → Connect an account** under the space the account belongs to. Accounts can be
+moved between spaces later. Demo accounts can be removed once real ones exist.
+
+Both OAuth flows are auth-code + PKCE implemented with plain `fetch`; tokens are stored
+**AES-256-GCM encrypted** (`TOKEN_ENCRYPTION_KEY` or an auto-generated `data/.token-key`).
+
+## What's inside
+
+### Views
+- **Inbox** — unified threads across accounts (space-filtered), search, composer, and a
+  **person chip** under every thread showing last contact, open commitments and the next
+  meeting with that person.
+- **Calendar** — day-grouped events, cross-space overlap warnings, join links, and the
+  **Meeting brief** panel.
+- **Chats** — Teams 1:1, group and channel messages with mention highlighting; send after confirm.
+- **Meetings** — transcripts (WebVTT → speaker lines), recordings, and the **Follow-through** panel.
+- **Catch-up**, **Commitments**, **Radar**, **Topics**, **People** — the seven features (below).
+- **Settings** — space rules (quiet hours, digest hour, agent tone, signature), accounts, connectors, agent backend.
+- **Notification bell** — briefs, digests, commitment reminders and radar nudges from the scheduler.
+
+### Spaces: Work vs Personal
+Each account belongs to exactly one space. Lists carry space badges in the **All** view; the
+agent, digests, quiet hours and notifications are scoped to the active space. Reading a
+record from the other space is refused unless the question explicitly says so
+("…across both spaces"), and that widening is audited.
+
+### Email Agent
+A server-side tool-calling loop (`server/agent/loop.ts`) over these tools:
+`list_threads · search_mail · read_thread · draft_reply · list_events · list_chats ·
+search_chats · read_chat · draft_chat_message · list_commitments · create_commitment ·
+get_meeting_brief · read_transcript · meeting_followup · catch_up · search_topics ·
+response_radar · get_person`.
+
+- Providers: OpenAI-compatible (`/chat/completions`; works with Azure OpenAI, Ollama, vLLM
+  via `OPENAI_BASE_URL`) and Anthropic Messages. No SDKs. With no key the **rule-based
+  fallback** answers the same intents so the UI never dead-ends.
+- Third-party text is wrapped as `<<external content>>` and the system prompt treats it as
+  data (prompt-injection guard).
+- Drafts are proposals: **Confirm & send / Edit in composer / Discard**. Sends and tool
+  calls go to `audit_log`.
+
+### The seven features
+1. **Commitment ledger** — "who owes whom what by when" extracted from mail, chats and
+   transcripts in both directions (asks → you owe; promises → owed to you), with due-date
+   parsing, near-duplicate suppression, Done/Drop, and one-click nudges.
+2. **Meeting brief** — attendees with last contact, recent threads/chats with them, open
+   commitments, last occurrence's decisions, suggested agenda. Generated by the scheduler
+   `BRIEF_LEAD_MINUTES` before start and on demand.
+3. **Post-meeting follow-through** — transcript → decisions + action items (into the
+   ledger) → follow-up mail draft to attendees (confirm to send) → a note the next brief reuses.
+4. **Catch-up ("What did I miss?")** — everything in a window across channels, ranked by
+   whether it needs you (direct asks, mentions, VIPs), with sections and deep links. Presets
+   include "since I last looked".
+5. **Topic graph** — mail, chats, meetings and events about the same thing clustered
+   (tf-idf keywords + merge pass), with a per-topic timeline. Ask "what's the status of X".
+6. **Response-debt radar** — waiting-on-me (aging, VIP-first) and waiting-on-them, with
+   suggested replies and nudges.
+7. **People cards** — relationship memory per person per space: last contact, threads,
+   meetings, open loops, upcoming meetings, topics, VIP flag, your notes.
+
+### Scheduler & digests
+An in-process minute tick syncs accounts (`SYNC_INTERVAL_MINUTES`), prepares briefs,
+produces **daily / weekly digests** at each space's digest hour (optionally mailed to
+yourself with `DIGEST_EMAIL_TO_SELF=true`), reminds about commitments due in 24 h and flags
+replies waiting 2+ days. Notifications respect each space's quiet hours.
+
+## Architecture
+
+```
+index.html + src/            React 19 client (views, agent panel, SSE refresh)
+server/index.ts              Bun.serve: HTML bundling/HMR + /api + SSE
+server/db/                   SQLite schema + repo (bun:sqlite)
+server/connectors/           demo · m365 (Graph) · gmail (Gmail + Calendar)
+server/auth/                 PKCE OAuth, Microsoft/Google configs, AES-GCM token store
+server/sync/                 engine (post-sync hooks), scheduler, normalizers
+server/agent/                tools, LLM providers, tool loop, mock fallback, scope policy
+server/features/             commitments · briefs · followup · catchup · topics · radar · people · digests
+shared/types.ts              unified model shared by server and client
+tests/                       bun test — fixtures, no network
+```
+
+Sync is incremental: Graph delta links (mail, chats, channels), Gmail `historyId`, and
+per-meeting "done" cursors. Recordings stream to `data/recordings/` and are served locally.
+
+## Security notes
+- Tokens encrypted at rest; the key file is `0600`. Secrets never appear in logs or the audit trail.
+- Outbound actions always require a click in the UI; the agent cannot send on its own.
+- Cross-space access is opt-in per question and audited.
+- Graph webhooks are not used (no public URL needed); polling with delta queries instead.
 
 ## Honest scope note
-
-This is a **local UX/agent-loop slice, not a full Cloudflare deploy**. The upstream project
-runs on Cloudflare Workers with Email Routing for real inbound/outbound mail, a Durable
-Object per mailbox, R2 for raw messages, Workers AI for the model, and Cloudflare Access for
-auth. None of that is here: mail is seeded in memory, the "agent" is a rule-based imitation
-of the tool loop, and "send" mutates local state only. The point of the slice is the UX
-pattern — mailbox tools + streaming tool calls + human confirmation gate — runnable with
-`bun install && bun run dev` and zero credentials.
+This is a **local, single-user** app: no multi-tenant hosting, no push notifications outside
+the browser, channel *replies* are not fetched yet, and heuristics (commitments, topics,
+radar) are deliberately rule-based — an LLM improves briefs, digests and follow-ups when a key
+is present but is never required. The upstream Cloudflare project runs on Workers + Durable
+Objects + Email Routing; this app takes the UX pattern (mailbox tools, streaming tool calls,
+human confirmation gate) and grows it into a personal cockpit instead of a hosted mail server.
 
 ## Credits
-
-- Upstream inspiration: [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-inbox)
-  (Apache-2.0) — the self-hosted AI email client this slice imitates at toy scale.
-- Source bookmark: [X post by @shanyanggm](https://x.com/shanyanggm/status/2098941338297458746)
-  (viral list, item #6).
+- Upstream inspiration: [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-inbox) (Apache-2.0).
+- Source bookmark: [X post by @shanyanggm](https://x.com/shanyanggm/status/2098941338297458746) (viral list, item #6).
