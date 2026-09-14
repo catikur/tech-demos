@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { Meeting, Space, TranscriptLine } from "../../shared/types.ts";
 import { senderName } from "../../shared/types.ts";
 import { api, spaceQuery } from "../api/client.ts";
@@ -13,13 +12,17 @@ function offset(ms: number): string {
 export function MeetingsView({
   spaceId,
   spaces,
+  selectedId,
+  onSelect,
   renderDetailExtras,
 }: {
   spaceId: string | null;
   spaces: Space[];
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
   renderDetailExtras?: (meeting: Meeting) => React.ReactNode;
 }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const setSelectedId = onSelect;
   const list = useData<Meeting[]>(
     () => api.get(`/api/meetings?${spaceQuery(spaceId)}`),
     [spaceId],

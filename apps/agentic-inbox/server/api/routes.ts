@@ -19,12 +19,14 @@ import { sendChat, sendReply } from "../services/messaging.ts";
 import { llmStatus, runAgent } from "../agent/index.ts";
 import { agentStream, broadcast, sseResponse } from "./events.ts";
 import { authRoutes } from "./auth.ts";
+import { featureRoutes } from "./features.ts";
 import { badRequest, h, notFound, num, ok, query, readJson, spaceParam } from "./util.ts";
 
 type P<T extends string> = BunRequest<T>;
 
 export const routes = {
   ...authRoutes,
+  ...featureRoutes,
   "/api/health": h(() => ok({ ok: true })),
 
   "/api/status": h(() => {
@@ -151,13 +153,6 @@ export const routes = {
 
   /* ---------- people ---------- */
   "/api/people": h((req) => ok(people.list(spaceParam(req)))),
-  "/api/people/:id": {
-    PATCH: h(async (req: P<"/api/people/:id">) => {
-      const patch = await readJson<{ vip?: boolean; notes?: string; name?: string }>(req);
-      people.update(req.params.id, patch);
-      return ok(people.get(req.params.id));
-    }),
-  },
 
   /* ---------- notifications ---------- */
   "/api/notifications": h((req) => ok(notifications.list(spaceParam(req)))),

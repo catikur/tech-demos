@@ -11,7 +11,7 @@ import { inScope, outOfScopeMessage } from "./policy.ts";
  */
 
 export interface ToolDraft {
-  target: { kind: "thread" | "chat"; id: string };
+  target: { kind: "thread" | "chat" | "followup"; id: string };
   subject: string;
   body: string;
 }

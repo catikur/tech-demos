@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentContext, AgentEvent, Space } from "../../shared/types.ts";
 import { askAgent } from "../api/client.ts";
 
-type DraftTarget = { kind: "thread" | "chat"; id: string };
+type DraftTarget = { kind: "thread" | "chat" | "followup"; id: string };
 
 type ChatItem =
   | { id: string; kind: "user"; text: string }
@@ -46,9 +46,9 @@ export function AgentPanel({
   }, [items, running]);
 
   const suggestions = [
-    "Summarize my inbox",
     "What did I miss since yesterday?",
-    context.selectedThreadId ? "Draft a reply to this" : "What's on my calendar this week?",
+    context.selectedThreadId ? "Draft a reply to this" : "What am I waiting on?",
+    context.selectedEventId ? "Brief me for this meeting" : "What do I owe people?",
   ];
 
   const ask = async (text: string) => {
@@ -151,7 +151,9 @@ export function AgentPanel({
                 <div key={item.id} className="chat-row">
                   <div className={`draft-card draft-${item.status}`}>
                     <div className="draft-head">
-                      <span className="draft-label">{item.target.kind === "thread" ? "Proposed reply" : "Proposed chat message"}</span>
+                      <span className="draft-label">
+                        {item.target.kind === "thread" ? "Proposed reply" : item.target.kind === "chat" ? "Proposed chat message" : "Proposed follow-up mail"}
+                      </span>
                       <span className="draft-subject">{item.subject}</span>
                     </div>
                     <pre className="draft-body">{item.body}</pre>
@@ -160,9 +162,9 @@ export function AgentPanel({
                         <button className="btn btn-primary" onClick={() => void confirmSend(item)}>
                           Confirm &amp; send
                         </button>
-                        {item.target.kind === "thread" && (
+                        {item.target.kind !== "chat" && (
                           <button className="btn" onClick={() => onEditInComposer(item.target, item.body)}>
-                            Edit in composer
+                            {item.target.kind === "thread" ? "Edit in composer" : "Open meeting"}
                           </button>
                         )}
                         <button className="btn btn-ghost" onClick={() => setDraftStatus(item.id, "discarded")}>

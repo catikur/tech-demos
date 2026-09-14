@@ -668,11 +668,13 @@ export const meetings = {
 
 function rowToCommitment(raw: unknown): Commitment {
   const r = raw as Row;
+  const person = getDb().query("SELECT name FROM people WHERE space_id = ? AND email = ?").get(r.space_id, r.counterpart) as Row | null;
   return {
     id: r.id,
     spaceId: r.space_id,
     direction: r.direction,
     counterpart: r.counterpart,
+    counterpartName: person?.name && person.name !== r.counterpart ? person.name : undefined,
     text: r.text,
     dueAt: r.due_at,
     status: r.status,

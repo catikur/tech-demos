@@ -4,6 +4,9 @@ import { getDb } from "./db/index.ts";
 import { bootstrap } from "./bootstrap.ts";
 import { routes } from "./api/routes.ts";
 import { syncAll } from "./sync/engine.ts";
+import "./features/index.ts";
+import "./features/commitments.ts";
+import "./features/topics.ts";
 
 getDb();
 const { seededDemo } = bootstrap();

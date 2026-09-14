@@ -1,4 +1,4 @@
-import type { ChatMessage, EmailMessage } from "../../shared/types.ts";
+import type { ChatMessage, EmailMessage, Thread } from "../../shared/types.ts";
 import { formatAddress, senderEmail } from "../../shared/types.ts";
 import { newId } from "../db/index.ts";
 import { accounts, audit, chats, threads } from "../db/repo.ts";
@@ -60,6 +60,38 @@ export async function sendReply(
   });
   broadcast({ type: "data", entity: "threads", spaceId: thread.spaceId });
   return message;
+}
+
+/** Start a new thread (e.g. a meeting follow-up) from the first account in the space. */
+export async function sendNewMail(
+  spaceId: string,
+  to: string[],
+  subject: string,
+  body: string,
+  actor: "user" | "agent",
+  category: Thread["category"] = "project",
+): Promise<Thread> {
+  const account = accounts.bySpace(spaceId)[0];
+  if (!account) throw new Error("No account in this space to send from");
+  const threadId = newId("t");
+  const connector = connectorFor(account);
+  const result = await connector.sendMail(account, { threadId, to, cc: [], subject, body, inReplyToExternalId: null });
+  const me = formatAddress("You", account.email);
+  threads.upsert({
+    id: threadId,
+    spaceId,
+    accountId: account.id,
+    subject,
+    category,
+    labels: ["sent"],
+    unread: false,
+    lastAt: Date.now(),
+    participants: [me, ...to],
+  });
+  threads.upsertMessage({ id: newId("m"), externalId: result.externalId, threadId, from: me, to, cc: [], body, at: Date.now(), isMine: true });
+  audit.log({ spaceId, actor, action: "mail.send_new", detail: `${subject} → ${to.join(", ")} (${account.provider}${result.externalId ? "" : ", local only"})` });
+  broadcast({ type: "data", entity: "threads", spaceId });
+  return threads.get(threadId)!;
 }
 
 export async function sendChat(chatId: string, body: string, actor: "user" | "agent"): Promise<ChatMessage> {

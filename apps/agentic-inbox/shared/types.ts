@@ -165,6 +165,8 @@ export interface Commitment {
   direction: CommitmentDirection;
   /** Person (email) on the other side of the commitment. */
   counterpart: string;
+  /** Display name resolved from the people table when available. */
+  counterpartName?: string;
   text: string;
   dueAt: number | null;
   status: CommitmentStatus;
@@ -243,7 +245,8 @@ export type AgentEvent =
   | { kind: "reply"; text: string }
   | {
       kind: "draft";
-      target: { kind: "thread" | "chat"; id: string };
+      /** `followup` targets a meeting id: a new mail to its attendees. */
+      target: { kind: "thread" | "chat" | "followup"; id: string };
       subject: string;
       body: string;
     }

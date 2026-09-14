@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Thread } from "../../shared/types.ts";
 import { senderEmail, senderName } from "../../shared/types.ts";
 import { fmtDateTime } from "../state.ts";
+import { PersonChip } from "./PersonChip.tsx";
 
 export function ThreadView({
   thread,
@@ -70,6 +71,7 @@ export function ThreadView({
         <h2 className="detail-title">{thread.subject}</h2>
         <span className="badge badge-soft">{thread.participants.length} participants</span>
       </div>
+      {!counterpart.isMine && <PersonChip spaceId={thread.spaceId} email={senderEmail(counterpart.from)} />}
       <div className="messages" ref={scrollRef}>
         {thread.messages.map((m) => (
           <article key={m.id} className={`message ${m.isMine ? "message-mine" : ""}`}>
