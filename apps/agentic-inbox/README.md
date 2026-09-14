@@ -133,14 +133,21 @@ per-meeting "done" cursors. Recordings stream to `data/recordings/` and are serv
 
 ## Production (`butler.conforcus.com`)
 
-The app is a long-running Bun process (SQLite on disk), not a static site. On a Hostinger VPS:
+The app is a long-running Bun process (SQLite on disk), not a static site. On the
+Conforcus Hostinger VPS (`srv1709361`), **do not bind 80/443** — `conforcus-web`
+Caddy already owns them. Deploy as `/opt/butler` and add a site block:
 
-1. Point **`butler.conforcus.com`** A/AAAA at the VPS.
-2. In Entra, add redirect URI `https://butler.conforcus.com/api/auth/microsoft/callback`.
-3. Clone this repo, `cd apps/agentic-inbox`, copy `.env.example` → `.env` (or paste tenant/client on the first-run login form). Set `APP_BASE_URL=https://butler.conforcus.com`.
-4. `docker compose up -d --build` (Caddy terminates TLS). Compose builds from the GitHub subdirectory on this branch.
+```
+butler.conforcus.com {
+	encode gzip
+	reverse_proxy butler:3000
+}
+```
 
-`MS_*` env vars win over the login form. OpenRouter / Gmail keys also go in compose `environment` or `.env` — Hostinger’s shared-hosting API cannot set Node env vars.
+Join `conforcus-web_default` (see `docker-compose.yml`). Entra redirect URI:
+`https://butler.conforcus.com/api/auth/microsoft/callback`.
+
+`MS_*` env vars win over the login form. OpenRouter / Gmail keys go in `/opt/butler/.env`.
 
 ## Honest scope note
 This is a **local, single-user** app: no multi-tenant hosting, no push notifications outside
