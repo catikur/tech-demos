@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { AgentContext, ThreadSummary } from "../../shared/types.ts";
 import { senderName } from "../../shared/types.ts";
 import { accounts, chats, events, spaces, threads } from "../db/repo.ts";
+import { hybridSearch } from "../features/embed.ts";
 import { templateDraft } from "./drafts.ts";
 import { inScope, outOfScopeMessage } from "./policy.ts";
 
@@ -107,10 +108,33 @@ registerTool({
 
 registerTool({
   name: "search_mail",
-  description: "Full-text search across subjects, participants and bodies of mail threads in the active space.",
+  description: "Full-text and semantic search across subjects, participants and bodies of mail threads in the active space.",
   schema: z.object({ query: z.string().min(1) }),
   async run(input, ctx) {
-    const list = threads.list(ctx.spaceId, { query: input.query, limit: 15 });
+    const like = threads.list(ctx.spaceId, { query: input.query, limit: 15 });
+    const hybrid = await hybridSearch(ctx.spaceId, input.query, { sourceKind: "thread", limit: 15 });
+    const byId = new Map(like.map((t) => [t.id, t]));
+    for (const hit of hybrid) {
+      if (byId.has(hit.sourceId)) continue;
+      const t = threads.get(hit.sourceId);
+      if (!t || (ctx.spaceId && t.spaceId !== ctx.spaceId)) continue;
+      const last = t.messages.at(-1);
+      byId.set(t.id, {
+        id: t.id,
+        spaceId: t.spaceId,
+        accountId: t.accountId,
+        subject: t.subject,
+        category: t.category,
+        labels: t.labels,
+        unread: t.unread,
+        lastAt: t.lastAt,
+        participants: t.participants,
+        snippet: (last?.body ?? "").replace(/\s+/g, " ").slice(0, 140),
+        lastFrom: last?.from ?? "",
+        messageCount: t.messages.length,
+      });
+    }
+    const list = [...byId.values()].sort((a, b) => b.lastAt - a.lastAt).slice(0, 15);
     return {
       output: list.length
         ? `${list.length} match(es) for "${input.query}":\n${list.map((t) => threadLine(t, ctx)).join("\n")}`
@@ -200,20 +224,28 @@ registerTool({
 
 registerTool({
   name: "search_chats",
-  description: "Search Teams chat and channel messages in the active space.",
+  description: "Search Teams chat and channel messages in the active space (keyword + semantic).",
   schema: z.object({ query: z.string().min(1) }),
   async run(input, ctx) {
     const list = chats.list(ctx.spaceId, input.query);
-    if (list.length === 0) return { output: `No chats match "${input.query}".` };
+    const hybrid = await hybridSearch(ctx.spaceId, input.query, { sourceKind: "chat", limit: 15 });
+    const byId = new Map(list.map((c) => [c.id, c]));
+    for (const hit of hybrid) {
+      if (byId.has(hit.sourceId)) continue;
+      const c = chats.get(hit.sourceId);
+      if (c && (!ctx.spaceId || c.spaceId === ctx.spaceId)) byId.set(c.id, c);
+    }
+    if (byId.size === 0) return { output: `No chats match "${input.query}".` };
     const q = input.query.toLowerCase();
-    const lines = list.flatMap((c) =>
-      chats
-        .messages(c.id)
-        .filter((m) => m.body.toLowerCase().includes(q))
-        .slice(-3)
-        .map((m) => `[${c.id}] ${c.title} — ${senderName(m.from)} (${ago(m.at)}): ${m.body}`),
-    );
-    return { output: external(lines.join("\n") || list.map((c) => `[${c.id}] ${c.title}`).join("\n")) };
+    const lines = [...byId.values()].flatMap((c) => {
+      const msgs = chats.messages(c.id);
+      const matched = msgs.filter((m) => m.body.toLowerCase().includes(q)).slice(-3);
+      if (matched.length) {
+        return matched.map((m) => `[${c.id}] ${c.title} — ${senderName(m.from)} (${ago(m.at)}): ${m.body}`);
+      }
+      return [`[${c.id}] ${c.title}`];
+    });
+    return { output: external(lines.join("\n")) };
   },
 });
 

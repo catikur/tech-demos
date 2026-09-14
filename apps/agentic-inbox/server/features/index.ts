@@ -14,6 +14,7 @@ import { buildCatchUp } from "./catchup.ts";
 import { searchTopics } from "./topics.ts";
 import { computeRadar, radarSummary } from "./radar.ts";
 import { findPerson, personProfile, profileSummary } from "./people.ts";
+import "./embed.ts";
 
 /**
  * Registers the seven feature modules with the agent: tools for the LLM loop
