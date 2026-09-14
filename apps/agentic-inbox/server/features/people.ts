@@ -64,6 +64,7 @@ export function profileSummary(p: PersonProfile): string {
     p.recentThreads.length ? `Recent threads:\n${p.recentThreads.map((t) => `  • [${t.id}] ${t.subject}`).join("\n")}` : "",
     p.upcomingMeetings.length ? `Upcoming together:\n${p.upcomingMeetings.map((e) => `  • ${e.title} — ${new Date(e.start).toUTCString().slice(0, 22)}`).join("\n")}` : "",
     p.topics.length ? `Topics: ${p.topics.join(", ")}` : "",
+    p.summary ? `Agent summary: ${p.summary}` : "",
     p.notes ? `Your notes: ${p.notes}` : "",
   ]
     .filter(Boolean)

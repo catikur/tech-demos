@@ -822,6 +822,9 @@ export const topics = {
       }
     })();
   },
+  setSummary(id: string, summary: string): void {
+    getDb().query("UPDATE topics SET summary = ? WHERE id = ?").run(summary, id);
+  },
 };
 
 /* ---------------- notes ---------------- */

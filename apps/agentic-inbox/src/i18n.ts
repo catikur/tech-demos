@@ -235,6 +235,7 @@ const en: Dict = {
   "people.notes": "Your notes",
   "people.notesPlaceholder": "Preferences, context, things to remember…",
   "people.saveNotes": "Save notes",
+  "people.agentSummary": "Agent summary",
 
   "settings.spaces": "Spaces",
   "settings.spacesHint":
@@ -533,6 +534,7 @@ const tr: Dict = {
   "people.notes": "Notlarınız",
   "people.notesPlaceholder": "Tercihler, bağlam, hatırlanacaklar…",
   "people.saveNotes": "Notları kaydet",
+  "people.agentSummary": "Ajan özeti",
 
   "settings.spaces": "Alanlar",
   "settings.spacesHint":
