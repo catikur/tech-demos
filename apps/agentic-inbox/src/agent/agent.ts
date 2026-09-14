@@ -150,7 +150,7 @@ export async function* runAgent(
   const lower = input.toLowerCase();
 
   // Intent: summarize / overview
-  if (/\b(summar|overview|catch me up|what.?s (new|in)|triage)\b/.test(lower)) {
+  if (/\b(summari\w*|summary|overview|catch me up|what.?s (new|in)|triage)\b/.test(lower)) {
     yield { kind: "thought", text: "The user wants an inbox overview. Calling list_threads." };
     await sleep(500);
     const lines = mailbox.threads.map(threadLine);
