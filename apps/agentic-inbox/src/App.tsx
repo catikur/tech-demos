@@ -1,77 +1,113 @@
-import { useMemo, useReducer, useState } from "react";
-import type { Mailbox } from "./types.ts";
-import { lastMessage } from "./types.ts";
-import { seedMailbox, ME } from "./data/seed.ts";
-import { InboxList } from "./components/InboxList.tsx";
-import { ThreadView } from "./components/ThreadView.tsx";
+import { useCallback, useEffect, useState } from "react";
+import type { AgentContext, Space, SourceRef } from "../shared/types.ts";
+import { api } from "./api/client.ts";
+import { useActiveSpace, useStatus } from "./state.ts";
 import { AgentPanel } from "./components/AgentPanel.tsx";
+import { SpaceSwitcher } from "./components/SpaceSwitcher.tsx";
+import { NotificationBell } from "./components/NotificationBell.tsx";
+import { BriefPanel } from "./components/BriefPanel.tsx";
+import { FollowUpPanel } from "./components/FollowUpPanel.tsx";
+import { InboxView } from "./views/InboxView.tsx";
+import { CalendarView } from "./views/CalendarView.tsx";
+import { ChatsView } from "./views/ChatsView.tsx";
+import { MeetingsView } from "./views/MeetingsView.tsx";
+import { CommitmentsView } from "./views/CommitmentsView.tsx";
+import { CatchUpView } from "./views/CatchUpView.tsx";
+import { TopicsView } from "./views/TopicsView.tsx";
+import { RadarView } from "./views/RadarView.tsx";
+import { PeopleView } from "./views/PeopleView.tsx";
+import { SettingsView } from "./views/SettingsView.tsx";
 
-interface State {
-  mailbox: Mailbox;
-  selectedThreadId: string | null;
-}
+export type ViewId = "inbox" | "calendar" | "chats" | "meetings" | "catchup" | "commitments" | "radar" | "topics" | "people" | "settings";
 
-type Action =
-  | { type: "select"; threadId: string }
-  | { type: "send"; threadId: string; body: string };
+const NAV: { id: ViewId; label: string; icon: string }[] = [
+  { id: "inbox", label: "Inbox", icon: "✉" },
+  { id: "calendar", label: "Calendar", icon: "▦" },
+  { id: "chats", label: "Chats", icon: "◫" },
+  { id: "meetings", label: "Meetings", icon: "◉" },
+  { id: "catchup", label: "Catch-up", icon: "⟳" },
+  { id: "commitments", label: "Commitments", icon: "✓" },
+  { id: "radar", label: "Radar", icon: "◎" },
+  { id: "topics", label: "Topics", icon: "#" },
+  { id: "people", label: "People", icon: "☺" },
+  { id: "settings", label: "Settings", icon: "⚙" },
+];
 
-function reducer(state: State, action: Action): State {
-  switch (action.type) {
-    case "select":
-      return {
-        selectedThreadId: action.threadId,
-        mailbox: {
-          ...state.mailbox,
-          threads: state.mailbox.threads.map((t) =>
-            t.id === action.threadId ? { ...t, unread: false } : t,
-          ),
-        },
-      };
-    case "send":
-      return {
-        ...state,
-        mailbox: {
-          ...state.mailbox,
-          threads: state.mailbox.threads.map((t) =>
-            t.id === action.threadId
-              ? {
-                  ...t,
-                  unread: false,
-                  messages: [
-                    ...t.messages,
-                    {
-                      id: `m-${action.threadId}-${t.messages.length + 1}-${Date.now()}`,
-                      from: ME,
-                      to: lastMessage(t).from,
-                      body: action.body,
-                      at: Date.now(),
-                    },
-                  ],
-                }
-              : t,
-          ),
-        },
-      };
-  }
+export interface Selection {
+  threadId: string | null;
+  chatId: string | null;
+  eventId: string | null;
+  meetingId: string | null;
 }
 
 export function App() {
-  const [state, dispatch] = useReducer(reducer, {
-    mailbox: seedMailbox,
-    selectedThreadId: null,
-  });
-  const [composerPrefill, setComposerPrefill] = useState<{ threadId: string; body: string } | null>(
-    null,
+  const status = useStatus();
+  const [spaceId, setSpaceId] = useActiveSpace();
+  const [view, setView] = useState<ViewId>("inbox");
+  const [selection, setSelection] = useState<Selection>({ threadId: null, chatId: null, eventId: null, meetingId: null });
+  const [composerPrefill, setComposerPrefill] = useState<{ threadId: string; body: string } | null>(null);
+  const [agentOpen, setAgentOpen] = useState(true);
+  const [focusDigestId, setFocusDigestId] = useState<string | null>(null);
+
+  const spaces: Space[] = status.data?.spaces ?? [];
+  const activeSpace = spaces.find((s) => s.id === spaceId) ?? null;
+
+  useEffect(() => {
+    if (spaceId && spaces.length > 0 && !activeSpace) setSpaceId(null);
+  }, [spaceId, spaces.length, activeSpace, setSpaceId]);
+
+  const agentContext: AgentContext = {
+    spaceId,
+    selectedThreadId: selection.threadId,
+    selectedChatId: selection.chatId,
+    selectedEventId: selection.eventId,
+  };
+
+  const select = useCallback((patch: Partial<Selection>) => setSelection((s) => ({ ...s, ...patch })), []);
+
+  /** Jump to any record from feature views, optionally pre-filling the reply composer. */
+  const openSource = useCallback(
+    (ref: SourceRef, prefill?: string) => {
+      switch (ref.kind) {
+        case "thread":
+          setView("inbox");
+          select({ threadId: ref.id });
+          if (prefill !== undefined) setComposerPrefill({ threadId: ref.id, body: prefill });
+          break;
+        case "chat":
+          setView("chats");
+          select({ chatId: ref.id });
+          break;
+        case "meeting":
+          setView("meetings");
+          select({ meetingId: ref.id });
+          break;
+        case "event":
+          setView("calendar");
+          select({ eventId: ref.id });
+          break;
+      }
+    },
+    [select],
   );
 
-  const sortedThreads = useMemo(
-    () =>
-      [...state.mailbox.threads].sort((a, b) => lastMessage(b).at - lastMessage(a).at),
-    [state.mailbox.threads],
+  const viewProps = { spaceId, spaces, onOpenSource: openSource };
+
+  /** Notification links: `event:<id>`, `digest:<id>`, `commitment:<id>`, `thread:<id>`, `radar`. */
+  const openLink = useCallback(
+    (link: string) => {
+      const [kind, id] = link.split(":");
+      if (kind === "event" && id) openSource({ kind: "event", id, label: "" });
+      else if (kind === "thread" && id) openSource({ kind: "thread", id, label: "" });
+      else if (kind === "meeting" && id) openSource({ kind: "meeting", id, label: "" });
+      else if (kind === "digest") {
+        setFocusDigestId(id ?? null);
+        setView("catchup");
+      } else if (kind === "commitment") setView("commitments");
+      else if (kind === "radar") setView("radar");
+    },
+    [openSource],
   );
-  const selected =
-    state.mailbox.threads.find((t) => t.id === state.selectedThreadId) ?? null;
-  const unreadCount = state.mailbox.threads.filter((t) => t.unread).length;
 
   return (
     <div className="app">
@@ -79,37 +115,90 @@ export function App() {
         <div className="brand">
           <span className="brand-mark">📬</span>
           <span className="brand-name">Agentic Inbox</span>
-          <span className="brand-tag">local slice · seeded mail · no cloud</span>
+          {status.data?.demoMode && <span className="brand-tag">demo data · no cloud</span>}
         </div>
-        <div className="topbar-me">{ME}</div>
+        <SpaceSwitcher spaces={spaces} activeId={spaceId} onChange={setSpaceId} />
+        <div className="topbar-right">
+          {status.data && (
+            <span className="topbar-llm" title="Agent backend">
+              agent: {status.data.llm.provider}
+              {status.data.llm.model ? ` · ${status.data.llm.model}` : ""}
+            </span>
+          )}
+          <NotificationBell spaceId={spaceId} spaces={spaces} onOpenLink={openLink} />
+          <button className="icon-btn" title="Toggle agent panel" onClick={() => setAgentOpen((o) => !o)}>
+            {agentOpen ? "⇥" : "⇤"}
+          </button>
+        </div>
       </header>
-      <main className="panes">
-        <InboxList
-          threads={sortedThreads}
-          selectedId={state.selectedThreadId}
-          unreadCount={unreadCount}
-          onSelect={(id) => dispatch({ type: "select", threadId: id })}
-        />
-        <ThreadView
-          thread={selected}
-          prefill={
-            composerPrefill && composerPrefill.threadId === selected?.id
-              ? composerPrefill.body
-              : null
-          }
-          onPrefillConsumed={() => setComposerPrefill(null)}
-          onSend={(threadId, body) => dispatch({ type: "send", threadId, body })}
-        />
-        <AgentPanel
-          mailbox={state.mailbox}
-          selectedThreadId={state.selectedThreadId}
-          onConfirmSend={(threadId, body) => dispatch({ type: "send", threadId, body })}
-          onEditInComposer={(threadId, body) => {
-            dispatch({ type: "select", threadId });
-            setComposerPrefill({ threadId, body });
-          }}
-        />
-      </main>
+
+      <div className={`body ${agentOpen ? "" : "agent-collapsed"}`}>
+        <nav className="nav">
+          {NAV.map((n) => (
+            <button key={n.id} className={`nav-item ${view === n.id ? "is-active" : ""}`} onClick={() => setView(n.id)} title={n.label}>
+              <span className="nav-icon">{n.icon}</span>
+              <span className="nav-label">{n.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <main className="main" style={{ "--space-color": activeSpace?.color ?? "#94a3b8" } as React.CSSProperties}>
+          {view === "inbox" && (
+            <InboxView
+              spaceId={spaceId}
+              spaces={spaces}
+              selectedId={selection.threadId}
+              onSelect={(id) => select({ threadId: id })}
+              prefill={composerPrefill}
+              onPrefillConsumed={() => setComposerPrefill(null)}
+            />
+          )}
+          {view === "calendar" && (
+            <CalendarView
+              spaceId={spaceId}
+              spaces={spaces}
+              selectedId={selection.eventId}
+              onSelect={(id) => select({ eventId: id })}
+              renderDetailExtras={(event) => <BriefPanel key={event.id} event={event} />}
+            />
+          )}
+          {view === "chats" && <ChatsView spaceId={spaceId} spaces={spaces} selectedId={selection.chatId} onSelect={(id) => select({ chatId: id })} />}
+          {view === "meetings" && (
+            <MeetingsView
+              spaceId={spaceId}
+              spaces={spaces}
+              selectedId={selection.meetingId}
+              onSelect={(id) => select({ meetingId: id })}
+              renderDetailExtras={(meeting) => (
+                <FollowUpPanel key={meeting.id} meeting={meeting} onSent={(threadId) => openSource({ kind: "thread", id: threadId, label: "" })} />
+              )}
+            />
+          )}
+          {view === "catchup" && <CatchUpView key={focusDigestId ?? "catchup"} {...viewProps} focusDigestId={focusDigestId} />}
+          {view === "commitments" && <CommitmentsView {...viewProps} />}
+          {view === "radar" && <RadarView {...viewProps} />}
+          {view === "topics" && <TopicsView {...viewProps} />}
+          {view === "people" && <PeopleView {...viewProps} />}
+          {view === "settings" && <SettingsView status={status.data} onChanged={status.reload} />}
+        </main>
+
+        {agentOpen && (
+          <AgentPanel
+            context={agentContext}
+            activeSpace={activeSpace}
+            onConfirmSend={async (target, body) => {
+              if (target.kind === "thread") await api.post(`/api/threads/${target.id}/reply`, { body, actor: "agent" });
+              else if (target.kind === "chat") await api.post(`/api/chats/${target.id}/send`, { body, actor: "agent" });
+              else await api.post(`/api/meetings/${target.id}/followup/send`, { body, actor: "agent" });
+            }}
+            onEditInComposer={(target, body) => {
+              if (target.kind === "thread") openSource({ kind: "thread", id: target.id, label: "" }, body);
+              else if (target.kind === "chat") openSource({ kind: "chat", id: target.id, label: "" });
+              else openSource({ kind: "meeting", id: target.id, label: "" });
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }

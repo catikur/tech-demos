@@ -1,17 +1,21 @@
 {
-  "name": "agentic-inbox-slice",
+  "name": "agentic-inbox",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "dev": "bun ./index.html",
-    "build": "bun build ./index.html --outdir dist --minify"
+    "dev": "bun --watch server/index.ts",
+    "start": "NODE_ENV=production bun server/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test"
   },
   "dependencies": {
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "zod": "^4"
   },
   "devDependencies": {
+    "@types/bun": "^1.4.2",
     "@types/react": "^19.1.1",
     "@types/react-dom": "^19.1.1",
     "typescript": "^5.9.2"

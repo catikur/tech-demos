@@ -1,48 +1,42 @@
 import { useEffect, useRef, useState } from "react";
-import type { Mailbox } from "../types.ts";
-import { runAgent } from "../agent/agent.ts";
+import type { AgentContext, AgentEvent, Space } from "../../shared/types.ts";
+import { askAgent } from "../api/client.ts";
+
+type DraftTarget = { kind: "thread" | "chat" | "followup"; id: string };
 
 type ChatItem =
   | { id: string; kind: "user"; text: string }
   | { id: string; kind: "thought"; text: string }
   | { id: string; kind: "tool"; tool: string; input: string; output: string }
   | { id: string; kind: "reply"; text: string }
+  | { id: string; kind: "error"; text: string }
   | {
       id: string;
       kind: "draft";
-      threadId: string;
+      target: DraftTarget;
       subject: string;
       body: string;
-      status: "pending" | "sent" | "discarded";
+      status: "pending" | "sending" | "sent" | "discarded" | "failed";
     };
 
 let nextId = 0;
 const uid = () => `c${++nextId}`;
 
-const SUGGESTIONS = [
-  "Summarize my inbox",
-  "Find the invoice email",
-  "Draft a reply to this",
-];
+const GREETING =
+  "Hi — I'm your Email Agent. I read mail, calendar, Teams chats and meeting transcripts in the active space, and I never send anything without your explicit confirmation.";
 
 export function AgentPanel({
-  mailbox,
-  selectedThreadId,
+  context,
+  activeSpace,
   onConfirmSend,
   onEditInComposer,
 }: {
-  mailbox: Mailbox;
-  selectedThreadId: string | null;
-  onConfirmSend: (threadId: string, body: string) => void;
-  onEditInComposer: (threadId: string, body: string) => void;
+  context: AgentContext;
+  activeSpace: Space | null;
+  onConfirmSend: (target: DraftTarget, body: string) => Promise<void>;
+  onEditInComposer: (target: DraftTarget, body: string) => void;
 }) {
-  const [items, setItems] = useState<ChatItem[]>([
-    {
-      id: uid(),
-      kind: "reply",
-      text: "Hi — I'm your Email Agent. I can list, search, and draft replies against the seeded mailbox. I never send anything without your explicit confirmation.",
-    },
-  ]);
+  const [items, setItems] = useState<ChatItem[]>([{ id: uid(), kind: "reply", text: GREETING }]);
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -51,6 +45,12 @@ export function AgentPanel({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [items, running]);
 
+  const suggestions = [
+    "What did I miss since yesterday?",
+    context.selectedThreadId ? "Draft a reply to this" : "What am I waiting on?",
+    context.selectedEventId ? "Brief me for this meeting" : "What do I owe people?",
+  ];
+
   const ask = async (text: string) => {
     const question = text.trim();
     if (!question || running) return;
@@ -58,49 +58,54 @@ export function AgentPanel({
     setItems((prev) => [...prev, { id: uid(), kind: "user", text: question }]);
     setRunning(true);
     try {
-      for await (const ev of runAgent(question, mailbox, selectedThreadId)) {
+      await askAgent(question, context, (ev: AgentEvent) => {
+        if (ev.kind === "done") return;
         setItems((prev) => [
           ...prev,
           ev.kind === "draft" ? { id: uid(), ...ev, status: "pending" } : { id: uid(), ...ev },
         ]);
-      }
+      });
+    } catch (e) {
+      setItems((prev) => [...prev, { id: uid(), kind: "error", text: e instanceof Error ? e.message : String(e) }]);
     } finally {
       setRunning(false);
     }
   };
 
-  const confirmSend = (item: Extract<ChatItem, { kind: "draft" }>) => {
-    onConfirmSend(item.threadId, item.body);
-    setItems((prev) => [
-      ...prev.map((i) => (i.id === item.id ? { ...i, status: "sent" as const } : i)),
-      {
-        id: uid(),
-        kind: "tool",
-        tool: "send_reply",
-        input: `{ threadId: '${item.threadId}' }`,
-        output: "Reply appended to local thread (demo send).",
-      },
-      {
-        id: uid(),
-        kind: "reply",
-        text: `Sent — the reply is now in the thread. (Local demo: nothing left this machine.)`,
-      },
-    ]);
-  };
+  const setDraftStatus = (id: string, status: Extract<ChatItem, { kind: "draft" }>["status"]) =>
+    setItems((prev) => prev.map((i) => (i.id === id && i.kind === "draft" ? { ...i, status } : i)));
 
-  const discard = (item: Extract<ChatItem, { kind: "draft" }>) => {
-    setItems((prev) =>
-      prev.map((i) => (i.id === item.id ? { ...i, status: "discarded" as const } : i)),
-    );
+  const confirmSend = async (item: Extract<ChatItem, { kind: "draft" }>) => {
+    setDraftStatus(item.id, "sending");
+    try {
+      await onConfirmSend(item.target, item.body);
+      setDraftStatus(item.id, "sent");
+      setItems((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          kind: "tool",
+          tool: item.target.kind === "thread" ? "send_reply" : "send_chat_message",
+          input: JSON.stringify({ [item.target.kind === "thread" ? "threadId" : "chatId"]: item.target.id }),
+          output: "Sent after user confirmation. Logged to audit trail.",
+        },
+        { id: uid(), kind: "reply", text: "Sent — it's now in the conversation." },
+      ]);
+    } catch (e) {
+      setDraftStatus(item.id, "failed");
+      setItems((prev) => [...prev, { id: uid(), kind: "error", text: e instanceof Error ? e.message : String(e) }]);
+    }
   };
 
   return (
-    <section className="pane pane-agent">
+    <aside className="pane pane-agent">
       <div className="pane-header">
         <h2>
           <span className="agent-dot" /> Email Agent
         </h2>
-        <span className="badge badge-soft">tools: list · search · draft · send</span>
+        <span className="badge badge-soft" style={activeSpace ? { color: activeSpace.color, borderColor: `${activeSpace.color}66` } : undefined}>
+          {activeSpace ? `scope: ${activeSpace.name}` : "scope: all spaces"}
+        </span>
       </div>
       <div className="chat" ref={scrollRef}>
         {items.map((item) => {
@@ -120,7 +125,7 @@ export function AgentPanel({
             case "tool":
               return (
                 <div key={item.id} className="chat-row">
-                  <details className="tool-call" open={item.tool !== "list_threads"}>
+                  <details className="tool-call">
                     <summary>
                       <span className="tool-chip">⚙ {item.tool}</span>
                       <code className="tool-input">{item.input}</code>
@@ -135,35 +140,41 @@ export function AgentPanel({
                   <div className="bubble bubble-agent">{item.text}</div>
                 </div>
               );
+            case "error":
+              return (
+                <div key={item.id} className="chat-row">
+                  <div className="bubble bubble-error">{item.text}</div>
+                </div>
+              );
             case "draft":
               return (
                 <div key={item.id} className="chat-row">
                   <div className={`draft-card draft-${item.status}`}>
                     <div className="draft-head">
-                      <span className="draft-label">Proposed draft</span>
+                      <span className="draft-label">
+                        {item.target.kind === "thread" ? "Proposed reply" : item.target.kind === "chat" ? "Proposed chat message" : "Proposed follow-up mail"}
+                      </span>
                       <span className="draft-subject">{item.subject}</span>
                     </div>
                     <pre className="draft-body">{item.body}</pre>
-                    {item.status === "pending" && (
+                    {(item.status === "pending" || item.status === "failed") && (
                       <div className="draft-actions">
-                        <button className="btn btn-primary" onClick={() => confirmSend(item)}>
+                        <button className="btn btn-primary" onClick={() => void confirmSend(item)}>
                           Confirm &amp; send
                         </button>
-                        <button
-                          className="btn"
-                          onClick={() => onEditInComposer(item.threadId, item.body)}
-                        >
-                          Edit in composer
-                        </button>
-                        <button className="btn btn-ghost" onClick={() => discard(item)}>
+                        {item.target.kind !== "chat" && (
+                          <button className="btn" onClick={() => onEditInComposer(item.target, item.body)}>
+                            {item.target.kind === "thread" ? "Edit in composer" : "Open meeting"}
+                          </button>
+                        )}
+                        <button className="btn btn-ghost" onClick={() => setDraftStatus(item.id, "discarded")}>
                           Discard
                         </button>
                       </div>
                     )}
+                    {item.status === "sending" && <div className="draft-status muted">Sending…</div>}
                     {item.status === "sent" && <div className="draft-status ok">✓ Sent</div>}
-                    {item.status === "discarded" && (
-                      <div className="draft-status muted">Discarded</div>
-                    )}
+                    {item.status === "discarded" && <div className="draft-status muted">Discarded</div>}
                   </div>
                 </div>
               );
@@ -180,8 +191,8 @@ export function AgentPanel({
         )}
       </div>
       <div className="chat-suggestions">
-        {SUGGESTIONS.map((s) => (
-          <button key={s} className="chip" onClick={() => ask(s)} disabled={running}>
+        {suggestions.map((s) => (
+          <button key={s} className="chip" onClick={() => void ask(s)} disabled={running}>
             {s}
           </button>
         ))}
@@ -190,19 +201,14 @@ export function AgentPanel({
         className="chat-input"
         onSubmit={(e) => {
           e.preventDefault();
-          ask(input);
+          void ask(input);
         }}
       >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask the agent about your mail…"
-          disabled={running}
-        />
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask about your mail, calendar, chats…" disabled={running} />
         <button className="btn btn-primary" type="submit" disabled={running || !input.trim()}>
           Ask
         </button>
       </form>
-    </section>
+    </aside>
   );
 }
