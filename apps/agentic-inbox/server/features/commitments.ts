@@ -28,7 +28,11 @@ export function extractCommitments(input: ExtractionInput): Omit<Commitment, "id
   const out: Omit<Commitment, "id" | "createdAt">[] = [];
   for (const sentence of splitSentences(input.text)) {
     if (sentence.length > 320 || /^>/.test(sentence)) continue;
-    if (/\b(did you (see|get|read|notice)|have you seen|do you know|remember when)\b/i.test(sentence)) continue;
+    if (
+      /\b(did you (see|get|read|notice)|have you seen|do you know|remember when)\b/i.test(sentence) ||
+      /gördün mü|baktın mı|okudun mu|hatırlıyor musun|biliyor musun/iu.test(sentence)
+    )
+      continue;
     const due = parseDue(sentence, input.at);
     const promise = isPromise(sentence);
     const ask = isAsk(sentence);

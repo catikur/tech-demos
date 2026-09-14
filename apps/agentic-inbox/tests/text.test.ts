@@ -27,6 +27,16 @@ describe("parseDue", () => {
   test("nothing → null", () => {
     expect(parseDue("no date in here", REF)).toBeNull();
   });
+  test("Turkish relative words and weekdays", () => {
+    expect(day(parseDue("yarın gönderirim", REF)!)).toBe("2026-09-15");
+    expect(day(parseDue("bugün EOD", REF)!)).toBe("2026-09-14");
+    expect(day(parseDue("Cuma'ya kadar", REF)!)).toBe("2026-09-18");
+    expect(day(parseDue("haftaya bakacağım", REF)!)).toBe("2026-09-25");
+  });
+  test("Turkish explicit month dates", () => {
+    expect(day(parseDue("30 eylül'e yetiştir", REF)!)).toBe("2026-09-30");
+    expect(day(parseDue("imza 15 ekim", REF)!)).toBe("2026-10-15");
+  });
 });
 
 describe("ask / promise detection", () => {
@@ -41,11 +51,24 @@ describe("ask / promise detection", () => {
     expect(isPromise("We will go with the background job.")).toBe(true);
     expect(isPromise("Thanks for the update.")).toBe(false);
   });
+  test("Turkish asks", () => {
+    expect(isAsk("Raporu Cuma'ya gönderir misin?")).toBe(true);
+    expect(isAsk("Lütfen postmortem'e bir bak.")).toBe(true);
+    expect(isAsk("Pencere 16:00'a alındı.")).toBe(false);
+  });
+  test("Turkish promises", () => {
+    expect(isPromise("Checklist'i pazartesiye kadar paylaşacağım.")).toBe(true);
+    expect(isPromise("Yarın döneceğim.")).toBe(true);
+    expect(isPromise("Teşekkürler, güncelleme için.")).toBe(false);
+  });
 });
 
 describe("tokens / titles", () => {
   test("drops stopwords, weekdays and short words", () => {
     expect(tokens("Re: the Export incident on Friday — postmortem draft")).toEqual(["export", "incident", "postmortem", "draft"]);
+  });
+  test("drops Turkish stopwords", () => {
+    expect(tokens("ve için bir rapor taslağı hazırla")).toEqual(["rapor", "taslağı", "hazırla"]);
   });
   test("normalizeTitle strips reply prefixes and trailing dates", () => {
     expect(normalizeTitle("RE: Fwd: Q3 roadmap sync — Thu 14:00 UTC")).toBe("q3 roadmap sync");

@@ -36,6 +36,40 @@ describe("commitment extraction", () => {
     expect(extractCommitments({ ...base, text: "Did you see Priya's mail?", speaker: "Marcus <marcus@lumenlabs.io>", others: [] })).toHaveLength(0);
     expect(extractCommitments({ ...base, text: "Deploy window moved to 16:00.", speaker: "Tomás <tomas@lumenlabs.io>", others: [] })).toHaveLength(0);
   });
+
+  test("Turkish ask from someone else is owed by me with a parsed due date", () => {
+    const [c] = extractCommitments({
+      ...base,
+      text: "Raporu Cuma'ya gönderir misin?",
+      speaker: "Marcus <marcus@lumenlabs.io>",
+      others: [],
+    });
+    expect(c).toMatchObject({ direction: "owed_by_me", counterpart: "marcus@lumenlabs.io" });
+    expect(new Date(c.dueAt!).toISOString().slice(0, 10)).toBe("2026-09-18");
+  });
+
+  test("Turkish promise from me is owed by me; theirs is owed to me", () => {
+    const [mine] = extractCommitments({
+      ...base,
+      text: "Checklist'i pazartesiye kadar paylaşacağım.",
+      speaker: "You <you@lumenlabs.io>",
+      others: ["Dana <dana@lumenlabs.io>"],
+    });
+    expect(mine).toMatchObject({ direction: "owed_by_me", counterpart: "dana@lumenlabs.io" });
+    const [theirs] = extractCommitments({
+      ...base,
+      text: "Bugün Northwind'i haberdar edeceğim.",
+      speaker: "Marcus <marcus@lumenlabs.io>",
+      others: [],
+    });
+    expect(theirs.direction).toBe("owed_to_me");
+  });
+
+  test("Turkish conversational questions are ignored", () => {
+    expect(
+      extractCommitments({ ...base, text: "Priya'nın mailini gördün mü?", speaker: "Marcus <marcus@lumenlabs.io>", others: [] }),
+    ).toHaveLength(0);
+  });
 });
 
 describe("features over the demo mailbox", () => {
