@@ -1142,6 +1142,10 @@ export const chunks = {
     }
     return getDb().query("SELECT * FROM chunks").all().map(rowToChunk);
   },
+  /** Drop every stored vector — call when the embedding model changes so the next sync re-indexes. */
+  clear(): void {
+    getDb().exec("DELETE FROM chunks");
+  },
 };
 
 function rowToMemory(raw: unknown): Memory {

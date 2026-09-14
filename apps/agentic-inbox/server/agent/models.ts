@@ -13,6 +13,8 @@ export interface ModelInfo {
   completionPerMillion: number | null;
   /** Supports function/tool calling — required for the agent loop. */
   tools: boolean;
+  /** OpenRouter embedding model (`architecture.output_modalities` includes embeddings). */
+  embedding: boolean;
   inputModalities: string[];
 }
 
@@ -28,6 +30,14 @@ let memory: ModelCatalog | null = null;
 
 export function resetModelCache(): void {
   memory = null;
+}
+
+function isEmbeddingModel(r: { architecture?: { modality?: unknown; output_modalities?: unknown } }): boolean {
+  const arch = r.architecture ?? {};
+  const outputs = Array.isArray(arch.output_modalities) ? arch.output_modalities : [];
+  if (outputs.some((m) => typeof m === "string" && m.toLowerCase().includes("embed"))) return true;
+  const modality = typeof arch.modality === "string" ? arch.modality.toLowerCase() : "";
+  return modality.includes("embed");
 }
 
 function perMillion(raw: unknown): number | null {
@@ -50,6 +60,7 @@ export function parseOpenRouterModels(payload: unknown): ModelInfo[] {
       promptPerMillion: perMillion(r.pricing?.prompt),
       completionPerMillion: perMillion(r.pricing?.completion),
       tools: params.includes("tools"),
+      embedding: isEmbeddingModel(r),
       inputModalities: Array.isArray(r.architecture?.input_modalities) ? r.architecture.input_modalities.filter((m: unknown) => typeof m === "string") : ["text"],
     });
   }

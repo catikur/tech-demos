@@ -9,6 +9,7 @@ import { env } from "../env.ts";
  */
 
 export const MODEL_SETTING = "openrouter.model";
+export const EMBED_MODEL_SETTING = "openrouter.embedModel";
 export const API_KEY_SETTING = "openrouter.apiKey";
 
 export type ConfigSource = "settings" | "env" | "default";
@@ -23,6 +24,7 @@ export interface LlmConfig {
   siteUrl: string;
   appName: string;
   embedModel: string;
+  embedModelSource: ConfigSource;
 }
 
 export function storedApiKey(): string | null {
@@ -60,6 +62,20 @@ export function setStoredModel(model: string | null): void {
   settings.set(MODEL_SETTING, trimmed);
 }
 
+export function storedEmbedModel(): string | null {
+  const v = settings.get(EMBED_MODEL_SETTING)?.trim();
+  return v ? v : null;
+}
+
+export function setStoredEmbedModel(model: string | null): void {
+  const trimmed = model?.trim() ?? "";
+  if (!trimmed) {
+    settings.remove(EMBED_MODEL_SETTING);
+    return;
+  }
+  settings.set(EMBED_MODEL_SETTING, trimmed);
+}
+
 export function maskKey(key: string): string {
   if (key.length <= 8) return "…";
   const prefix = key.startsWith("sk-or-") ? "sk-or-" : key.slice(0, 3);
@@ -71,6 +87,7 @@ export function llmConfig(): LlmConfig {
   const fromSettings = storedApiKey();
   const apiKey = fromSettings ?? base.apiKey;
   const model = storedModel();
+  const embedModel = storedEmbedModel();
   return {
     provider: base.provider,
     apiKey,
@@ -80,6 +97,7 @@ export function llmConfig(): LlmConfig {
     modelSource: model ? "settings" : process.env.OPENROUTER_MODEL ? "env" : "default",
     siteUrl: base.siteUrl,
     appName: base.appName,
-    embedModel: base.embedModel,
+    embedModel: embedModel ?? base.embedModel,
+    embedModelSource: embedModel ? "settings" : process.env.OPENROUTER_EMBED_MODEL ? "env" : "default",
   };
 }

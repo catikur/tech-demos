@@ -5,7 +5,7 @@ import { api } from "../api/client.ts";
 import { t } from "../i18n.ts";
 import { fmtDateTime, useData } from "../state.ts";
 
-/** Settings → Agent (OpenRouter): API key, model picker fed by the live catalog, connection test. */
+/** Settings → Agent (OpenRouter): API key, chat + embedding pickers from the live catalog, connection tests. */
 export function LlmSettings({ onChanged }: { onChanged: () => void }) {
   const config = useData<LlmConfigView>(() => api.get("/api/llm/config"), [], (ev) => ev.type === "data" && ev.entity === "llm");
   const cfg = config.data;
@@ -24,10 +24,18 @@ export function LlmSettings({ onChanged }: { onChanged: () => void }) {
   const [modelState, setModelState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [modelError, setModelError] = useState<string | null>(null);
 
+  const [embedFilter, setEmbedFilter] = useState("");
+  const [embedPicked, setEmbedPicked] = useState("");
+  const [embedManual, setEmbedManual] = useState("");
+  const [embedState, setEmbedState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [embedError, setEmbedError] = useState<string | null>(null);
+
   const [testState, setTestState] = useState<"idle" | "running" | "ok" | "fail">("idle");
   const [testMessage, setTestMessage] = useState<string | null>(null);
+  const [embedTestState, setEmbedTestState] = useState<"idle" | "running" | "ok" | "fail">("idle");
+  const [embedTestMessage, setEmbedTestMessage] = useState<string | null>(null);
 
-  const patch = async (body: { apiKey?: string | null; model?: string | null }) => {
+  const patch = async (body: { apiKey?: string | null; model?: string | null; embedModel?: string | null }) => {
     const next = await api.patch<LlmConfigView>("/api/llm/config", body);
     config.reload();
     onChanged();
@@ -75,6 +83,20 @@ export function LlmSettings({ onChanged }: { onChanged: () => void }) {
     }
   };
 
+  const saveEmbed = async (value: string | null) => {
+    setEmbedState("saving");
+    setEmbedError(null);
+    try {
+      await patch({ embedModel: value });
+      setEmbedState("saved");
+      setEmbedManual("");
+      setTimeout(() => setEmbedState("idle"), 2000);
+    } catch (e) {
+      setEmbedError(e instanceof Error ? e.message : String(e));
+      setEmbedState("error");
+    }
+  };
+
   const runTest = async () => {
     setTestState("running");
     setTestMessage(null);
@@ -93,16 +115,59 @@ export function LlmSettings({ onChanged }: { onChanged: () => void }) {
     }
   };
 
+  const runEmbedTest = async () => {
+    setEmbedTestState("running");
+    setEmbedTestMessage(null);
+    try {
+      const r = await api.post<{ ok: boolean; model: string; dim?: number; ms?: number; error?: string }>("/api/llm/test-embed");
+      if (r.ok) {
+        setEmbedTestState("ok");
+        setEmbedTestMessage(t("llm.testEmbedOk", { model: r.model, dim: r.dim ?? 0, ms: r.ms ?? 0 }));
+      } else {
+        setEmbedTestState("fail");
+        setEmbedTestMessage(t("llm.testEmbedFail", { error: r.error ?? "?" }));
+      }
+    } catch (e) {
+      setEmbedTestState("fail");
+      setEmbedTestMessage(t("llm.testEmbedFail", { error: e instanceof Error ? e.message : String(e) }));
+    }
+  };
+
   const visible = useMemo<ModelInfo[]>(() => {
     const list = catalog?.models ?? [];
     const q = filter.trim().toLowerCase();
-    return list.filter((m) => (!onlyTools || m.tools) && (!q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)));
+    return list.filter(
+      (m) => !m.embedding && (!onlyTools || m.tools) && (!q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)),
+    );
   }, [catalog, onlyTools, filter]);
 
+  const embedVisible = useMemo<ModelInfo[]>(() => {
+    const list = catalog?.models ?? [];
+    const q = embedFilter.trim().toLowerCase();
+    return list.filter((m) => m.embedding && (!q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)));
+  }, [catalog, embedFilter]);
+
   const pickedInfo = visible.find((m) => m.id === picked) ?? catalog?.models.find((m) => m.id === picked) ?? null;
+  const embedPickedInfo = embedVisible.find((m) => m.id === embedPicked) ?? catalog?.models.find((m) => m.id === embedPicked) ?? null;
   const candidate = manual.trim() || picked;
+  const embedCandidate = embedManual.trim() || embedPicked;
 
   if (!cfg) return <p className="muted">{t("common.loading")}</p>;
+
+  const catalogToolbar = () => (
+    <>
+      <div className="row-actions">
+        <button className="btn btn-small" disabled={loading} onClick={() => void loadModels(!!catalog)}>
+          {loading ? t("llm.loadingModels") : catalog ? t("llm.refreshModels") : t("llm.loadModels")}
+        </button>
+        {catalog && (
+          <span className="muted small">{t("llm.modelsCount", { n: catalog.models.length, when: fmtDateTime(catalog.fetchedAt) })}</span>
+        )}
+      </div>
+      {catalogError && <div className="error-note">{catalogError}</div>}
+      {catalog?.stale && <div className="error-note">{t("llm.modelsStale", { error: catalog.error ?? "?" })}</div>}
+    </>
+  );
 
   return (
     <div className="form-grid">
@@ -156,16 +221,7 @@ export function LlmSettings({ onChanged }: { onChanged: () => void }) {
         <p className="small" style={{ margin: 0 }}>
           <span className="pill pill-agent">{t("llm.modelActive", { model: cfg.model, source: t(`llm.source.${cfg.modelSource}`) })}</span>
         </p>
-        <div className="row-actions">
-          <button className="btn btn-small" disabled={loading} onClick={() => void loadModels(!!catalog)}>
-            {loading ? t("llm.loadingModels") : catalog ? t("llm.refreshModels") : t("llm.loadModels")}
-          </button>
-          {catalog && (
-            <span className="muted small">{t("llm.modelsCount", { n: catalog.models.length, when: fmtDateTime(catalog.fetchedAt) })}</span>
-          )}
-        </div>
-        {catalogError && <div className="error-note">{catalogError}</div>}
-        {catalog?.stale && <div className="error-note">{t("llm.modelsStale", { error: catalog.error ?? "?" })}</div>}
+        {catalogToolbar()}
         {catalog && (
           <>
             <label className="form-row form-row-inline" style={{ margin: 0 }}>
@@ -210,6 +266,61 @@ export function LlmSettings({ onChanged }: { onChanged: () => void }) {
           {modelState === "saved" && <span className="sent-note">✓ {t("llm.saved")}</span>}
         </div>
         {modelError && <div className="error-note">{modelError}</div>}
+      </div>
+
+      <div className="form-card">
+        <div className="connect-title">{t("llm.embedTitle")}</div>
+        <p className="muted small" style={{ margin: 0 }}>
+          {t("llm.embedHint")}
+        </p>
+        <p className="small" style={{ margin: 0 }}>
+          <span className="pill pill-agent">{t("llm.embedActive", { model: cfg.embedModel, source: t(`llm.source.${cfg.embedModelSource}`) })}</span>
+        </p>
+        {catalogToolbar()}
+        {catalog && (
+          <>
+            <span className="muted small">{t("llm.embedCount", { n: embedVisible.length })}</span>
+            <input value={embedFilter} onChange={(e) => setEmbedFilter(e.target.value)} placeholder={t("llm.search")} />
+            <select size={8} value={embedPicked} onChange={(e) => setEmbedPicked(e.target.value)} data-testid="embed-model-list">
+              <option value="" disabled>
+                {t("llm.pickEmbed")}
+              </option>
+              {embedVisible.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.id} — {m.name}
+                </option>
+              ))}
+            </select>
+            {embedPickedInfo && (
+              <div className="muted small">
+                <code>{embedPickedInfo.id}</code> ·{" "}
+                {embedPickedInfo.promptPerMillion === 0
+                  ? t("llm.free")
+                  : t("llm.price", { p: embedPickedInfo.promptPerMillion ?? "?", c: embedPickedInfo.completionPerMillion ?? "?" })}
+              </div>
+            )}
+          </>
+        )}
+        <label className="form-row">
+          {t("llm.manualEmbed")}
+          <input value={embedManual} onChange={(e) => setEmbedManual(e.target.value)} placeholder="openai/text-embedding-3-small" />
+        </label>
+        <div className="row-actions">
+          <button className="btn btn-small btn-primary" disabled={embedState === "saving" || !embedCandidate} onClick={() => void saveEmbed(embedCandidate)}>
+            {t("llm.useEmbed")}
+          </button>
+          {cfg.embedModelSource === "settings" && (
+            <button className="btn btn-small btn-ghost" disabled={embedState === "saving"} onClick={() => void saveEmbed(null)}>
+              {t("llm.resetEmbed")}
+            </button>
+          )}
+          <button className="btn btn-small" disabled={embedTestState === "running" || !cfg.apiKeyConfigured} onClick={() => void runEmbedTest()}>
+            {embedTestState === "running" ? t("llm.testing") : t("llm.testEmbed")}
+          </button>
+          {embedState === "saved" && <span className="sent-note">✓ {t("llm.saved")}</span>}
+        </div>
+        {embedError && <div className="error-note">{embedError}</div>}
+        {embedTestMessage && <div className={embedTestState === "ok" ? "sent-note" : "error-note"}>{embedTestMessage}</div>}
       </div>
     </div>
   );
