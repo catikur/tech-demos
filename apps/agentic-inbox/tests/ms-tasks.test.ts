@@ -191,6 +191,17 @@ describe("commitment API routes", () => {
     expect(res.status).toBe(404);
   });
 
+  test("POST /api/commitments/:id/todo returns 400 when the space has no m365 account", async () => {
+    accounts.remove(m365.id);
+    const req = Object.assign(new Request("http://local/api/commitments/cm_api_1/todo", { method: "POST" }), {
+      params: { id: "cm_api_1" },
+    });
+    const res = await featureRoutes["/api/commitments/:id/todo"].POST(req as any);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/microsoft 365/i);
+  });
+
   test("PATCH /api/commitments/:id to done succeeds when no To Do task is linked", async () => {
     const req = Object.assign(
       new Request("http://local/api/commitments/cm_api_1", {

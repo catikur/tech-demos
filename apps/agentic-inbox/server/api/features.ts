@@ -54,10 +54,16 @@ export const featureRoutes = {
   "/api/commitments/:id/todo": {
     POST: h(async (req: P<"/api/commitments/:id/todo">) => {
       const c = commitments.get(req.params.id) ?? notFound("Commitment not found");
-      const ids = await pushCommitmentToTodo(c.id);
-      audit.log({ spaceId: c.spaceId, actor: "user", action: "commitment.todo", detail: `${c.text} → ${ids.taskId}` });
-      broadcast({ type: "data", entity: "commitments", spaceId: c.spaceId });
-      return ok({ ...commitments.get(c.id), ...ids });
+      try {
+        const ids = await pushCommitmentToTodo(c.id);
+        audit.log({ spaceId: c.spaceId, actor: "user", action: "commitment.todo", detail: `${c.text} → ${ids.taskId}` });
+        broadcast({ type: "data", entity: "commitments", spaceId: c.spaceId });
+        return ok({ ...commitments.get(c.id), ...ids });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/microsoft 365/i.test(msg)) badRequest(msg);
+        throw err;
+      }
     }),
   },
   "/api/commitments/:id": {
