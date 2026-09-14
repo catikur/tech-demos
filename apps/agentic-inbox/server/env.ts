@@ -21,6 +21,8 @@ export const env = {
   production: process.env.NODE_ENV === "production",
 
   tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? null,
+  /** Graph subscription clientState. Generated and persisted in settings when omitted. */
+  graphWebhookSecret: process.env.GRAPH_WEBHOOK_SECRET ?? null,
 
   microsoft: {
     clientId: process.env.MS_CLIENT_ID ?? null,
