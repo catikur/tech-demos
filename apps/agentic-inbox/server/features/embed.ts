@@ -1,13 +1,17 @@
-import { createHash } from "node:crypto";
 import type { Account } from "../../shared/types.ts";
 import { env } from "../env.ts";
 import { chats, chunks, meetings, threads } from "../db/repo.ts";
 import { onPostSync } from "../sync/engine.ts";
-import { tokens, truncate } from "./text.ts";
+import { contentHash, tokens, truncate } from "./text.ts";
 
-export const EMBED_DIM = 64;
+export const EMBED_DIM = 256;
 const LOOKBACK = 21 * 86_400_000;
 const MIN_CHARS = 24;
+/**
+ * Minimum cosine for a semantic-only hit. Real embeddings put unrelated text
+ * around 0.1–0.2; the hashed fallback needs several shared tokens to reach this.
+ */
+const SEMANTIC_MIN = 0.35;
 
 export type Embedder = (texts: string[]) => Promise<number[][]>;
 
@@ -43,13 +47,9 @@ export function cosine(a: ArrayLike<number>, b: ArrayLike<number>): number {
   return dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
-function sha256(s: string): string {
-  return createHash("sha256").update(s).digest("hex");
-}
-
 async function openRouterEmbed(texts: string[]): Promise<number[][] | null> {
-  const { apiKey, baseUrl, siteUrl, appName, embedModel } = env.llm;
-  if (!apiKey || process.env.LLM_PROVIDER === "mock") return null;
+  const { provider, apiKey, baseUrl, siteUrl, appName, embedModel } = env.llm;
+  if (!apiKey || provider === "mock") return null;
   const BATCH = 32;
   const out: number[][] = [];
   try {
@@ -98,7 +98,7 @@ function collectPending(spaceId: string): PendingChunk[] {
   const push = (sourceKind: PendingChunk["sourceKind"], sourceId: string, text: string, key: string) => {
     const cleaned = truncate(text.replace(/\s+/g, " ").trim(), 800);
     if (cleaned.length < MIN_CHARS) return;
-    out.push({ sourceKind, sourceId, text: cleaned, hash: sha256(`${spaceId}|${key}|${cleaned}`) });
+    out.push({ sourceKind, sourceId, text: cleaned, hash: contentHash(`${spaceId}|${key}|${cleaned}`) });
   };
 
   for (const t of threads.list(spaceId, { since, limit: 400 })) {
@@ -166,11 +166,11 @@ export async function hybridSearch(
   for (const c of list) {
     let score = 0;
     if (c.text.toLowerCase().includes(like)) score = 1;
-    if (c.embedding && c.embedding.length) {
+    else if (c.embedding && c.embedding.length) {
       const sim = cosine(qVec, c.embedding);
-      score = Math.max(score, sim);
+      if (sim >= SEMANTIC_MIN) score = sim;
     }
-    if (score < 0.12) continue;
+    if (score === 0) continue;
     const key = `${c.sourceKind}:${c.sourceId}`;
     const prev = scored.get(key);
     if (!prev || score > prev.score) scored.set(key, { sourceKind: c.sourceKind, sourceId: c.sourceId, text: c.text, score });

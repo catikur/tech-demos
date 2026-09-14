@@ -111,11 +111,12 @@ registerTool({
   description: "Full-text and semantic search across subjects, participants and bodies of mail threads in the active space.",
   schema: z.object({ query: z.string().min(1) }),
   async run(input, ctx) {
+    // Exact (LIKE) matches first, newest first; semantic-only hits follow by score.
     const like = threads.list(ctx.spaceId, { query: input.query, limit: 15 });
     const hybrid = await hybridSearch(ctx.spaceId, input.query, { sourceKind: "thread", limit: 15 });
     const byId = new Map(like.map((t) => [t.id, t]));
     for (const hit of hybrid) {
-      if (byId.has(hit.sourceId)) continue;
+      if (byId.has(hit.sourceId) || byId.size >= 15) continue;
       const t = threads.get(hit.sourceId);
       if (!t || (ctx.spaceId && t.spaceId !== ctx.spaceId)) continue;
       const last = t.messages.at(-1);
@@ -134,7 +135,7 @@ registerTool({
         messageCount: t.messages.length,
       });
     }
-    const list = [...byId.values()].sort((a, b) => b.lastAt - a.lastAt).slice(0, 15);
+    const list = [...byId.values()];
     return {
       output: list.length
         ? `${list.length} match(es) for "${input.query}":\n${list.map((t) => threadLine(t, ctx)).join("\n")}`

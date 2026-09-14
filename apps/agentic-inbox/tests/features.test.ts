@@ -174,10 +174,12 @@ describe("optional LLM commitment extract", () => {
     expect(parseLlmCommitmentItems("not json")).toEqual([]);
   });
 
-  test("injected completion inserts a novel item and dedupes the second call", async () => {
+  test("injected completion inserts a novel item; an unchanged corpus is not sent to the model again", async () => {
     await seededDb();
-    const fake = async () =>
-      JSON.stringify({
+    let calls = 0;
+    const fake = async () => {
+      calls++;
+      return JSON.stringify({
         items: [
           {
             text: "Ship the Northwind rollback runbook by Thursday",
@@ -189,10 +191,12 @@ describe("optional LLM commitment extract", () => {
           },
         ],
       });
+    };
     const first = await extractForSpace(WORK_SPACE_ID, { tryComplete: fake });
     expect(first).toBeGreaterThan(0);
     expect(commitments.list(WORK_SPACE_ID, { status: "open" }).some((c) => /rollback runbook/i.test(c.text))).toBe(true);
     const second = await extractForSpace(WORK_SPACE_ID, { tryComplete: fake });
     expect(second).toBe(0);
+    expect(calls).toBe(1);
   });
 });

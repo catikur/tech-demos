@@ -1,6 +1,11 @@
 /** Small, dependency-free text heuristics shared by the feature modules. */
+import { createHash } from "node:crypto";
 
 const DAY = 86_400_000;
+
+export function contentHash(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
 
 export const STOPWORDS = new Set(
   (

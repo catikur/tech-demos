@@ -2,9 +2,9 @@ import { z } from "zod";
 import type { Account, Commitment, SourceRef } from "../../shared/types.ts";
 import { senderEmail, senderName } from "../../shared/types.ts";
 import { tryComplete } from "../agent/llm.ts";
-import { accounts, chats, commitments, meetings, threads } from "../db/repo.ts";
+import { accounts, chats, commitments, meetings, settings, threads } from "../db/repo.ts";
 import { onPostSync } from "../sync/engine.ts";
-import { isAsk, isPromise, jaccard, parseDue, splitSentences, tokens, truncate } from "./text.ts";
+import { contentHash, isAsk, isPromise, jaccard, parseDue, splitSentences, tokens, truncate } from "./text.ts";
 
 /**
  * Feature 1 — Commitment ledger.
@@ -182,16 +182,21 @@ function collectCorpus(spaceId: string, since: number): string {
   return out;
 }
 
+/** One model call per distinct corpus: an unchanged mailbox is not re-sent every sync. */
 async function extractLlmForSpace(spaceId: string, complete: CompleteFn): Promise<number> {
   const since = Date.now() - LOOKBACK;
   const corpus = collectCorpus(spaceId, since);
   if (!corpus.trim()) return 0;
+  const cacheKey = `llmExtract.${spaceId}`;
+  const hash = contentHash(corpus);
+  if (settings.get(cacheKey) === hash) return 0;
   const raw = await complete(
     'Extract real commitments (who owes whom what by when) from mail/chat/meeting lines. Reply ONLY with JSON: {"items":[{"text":string,"direction":"owed_by_me"|"owed_to_me","counterpart":"email or Name <email>","due":"YYYY-MM-DD or null","source_kind":"thread"|"chat"|"meeting","source_id":"id from the [kind:id] tag"}]}. Include Turkish and English. Skip greetings, FYIs and conversational questions. Use source_id exactly as given.',
     corpus,
     1200,
   );
   if (!raw) return 0;
+  settings.set(cacheKey, hash);
   let inserted = 0;
   for (const item of parseLlmCommitmentItems(raw)) {
     const source = resolveSource(item.sourceKind, item.sourceId);
