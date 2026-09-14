@@ -1,6 +1,7 @@
 import type { Account } from "../../shared/types.ts";
 import { DemoConnector, DEMO_PERSONAL_ACCOUNT_ID } from "./demo.ts";
 import { M365Connector } from "./m365.ts";
+import { GmailConnector } from "./gmail.ts";
 import type { Connector } from "./types.ts";
 
 type Factory = (account: Account) => Connector;
@@ -16,6 +17,7 @@ registerConnector("demo", (account) =>
 );
 
 registerConnector("m365", () => new M365Connector());
+registerConnector("gmail", () => new GmailConnector());
 
 export function connectorFor(account: Account): Connector {
   const factory = factories.get(account.provider);

@@ -355,6 +355,10 @@ export const threads = {
   markRead(id: string, unread = false): void {
     getDb().query("UPDATE threads SET unread = ? WHERE id = ?").run(unread ? 1 : 0, id);
   },
+  externalId(threadId: string): string | null {
+    const r = getDb().query("SELECT external_id FROM threads WHERE id = ?").get(threadId) as Row | null;
+    return r?.external_id ?? null;
+  },
   messageExternalId(messageId: string): string | null {
     const r = getDb().query("SELECT external_id FROM messages WHERE id = ?").get(messageId) as Row | null;
     return r?.external_id ?? null;

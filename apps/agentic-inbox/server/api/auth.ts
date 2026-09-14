@@ -4,7 +4,9 @@ import { env } from "../env.ts";
 import { accounts, audit, oauthStates, spaces } from "../db/repo.ts";
 import { authorizeUrl, exchangeCode, pkcePair, saveTokens, type OAuthProviderConfig, type TokenSet } from "../auth/oauth.ts";
 import { microsoftConfigured, microsoftOAuth } from "../auth/microsoft.ts";
+import { googleConfigured, googleOAuth } from "../auth/google.ts";
 import { M365Connector } from "../connectors/m365.ts";
+import { GmailConnector } from "../connectors/gmail.ts";
 import { syncAccount } from "../sync/engine.ts";
 import { broadcast } from "./events.ts";
 import { badRequest, h, query } from "./util.ts";
@@ -42,6 +44,29 @@ const flows: Record<string, ProviderFlow> = {
         lastSyncAt: null,
         lastSyncError: null,
         capabilities: new M365Connector().capabilities,
+      };
+    },
+  },
+  google: {
+    configured: googleConfigured,
+    config: googleOAuth,
+    async identify(tokens, spaceId) {
+      const res = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+        headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      });
+      if (!res.ok) throw new Error(`Google userinfo failed: ${res.status}`);
+      const me = (await res.json()) as { sub: string; email?: string; name?: string };
+      const email = (me.email ?? "").toLowerCase();
+      return {
+        id: `acc_gmail_${me.sub.replace(/[^a-z0-9]/gi, "").slice(0, 24)}`,
+        spaceId,
+        provider: "gmail",
+        email,
+        displayName: me.name ? `${me.name} · Gmail` : email,
+        connectedAt: Date.now(),
+        lastSyncAt: null,
+        lastSyncError: null,
+        capabilities: new GmailConnector().capabilities,
       };
     },
   },

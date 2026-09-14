@@ -32,7 +32,7 @@ export const routes = {
       spaces: spaces.all(),
       accounts: accounts.all(),
       llm: llmStatus(),
-      oauth: { microsoft: !!env.microsoft.clientId, google: !!env.google.clientId },
+      oauth: { microsoft: !!env.microsoft.clientId, google: !!env.google.clientId && !!env.google.clientSecret },
       demoMode: isDemoMode(),
       unreadNotifications: notifications.unreadCount(null),
     };
