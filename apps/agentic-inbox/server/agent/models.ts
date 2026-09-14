@@ -2,7 +2,7 @@ import { json } from "../db/index.ts";
 import { settings } from "../db/repo.ts";
 import { llmConfig } from "./config.ts";
 
-/** OpenRouter model catalog (`GET /models`), normalized for the Settings picker. */
+/** OpenRouter model catalog (`GET /models?output_modalities=text,embeddings`), normalized for the Settings picker. */
 
 export interface ModelInfo {
   id: string;
@@ -69,7 +69,8 @@ export function parseOpenRouterModels(payload: unknown): ModelInfo[] {
 
 async function fetchRemote(): Promise<ModelInfo[]> {
   const { baseUrl, apiKey, siteUrl, appName } = llmConfig();
-  const res = await fetch(`${baseUrl}/models`, {
+  // Default `/models` is text-only; embeddings live behind output_modalities.
+  const res = await fetch(`${baseUrl}/models?output_modalities=text,embeddings`, {
     headers: {
       ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       "HTTP-Referer": siteUrl,
@@ -80,15 +81,21 @@ async function fetchRemote(): Promise<ModelInfo[]> {
   return parseOpenRouterModels(await res.json());
 }
 
+function catalogReady(catalog: ModelCatalog | null, now: number): boolean {
+  if (!catalog || !Array.isArray(catalog.models) || now - catalog.fetchedAt >= TTL_MS) return false;
+  // Pre-embedding caches (chat-only `/models`) have no embedding:true rows — refetch.
+  return catalog.models.some((m) => m.embedding);
+}
+
 /** Fresh list when older than TTL or `force`; otherwise memory → persisted copy. */
 export async function fetchOpenRouterModels(opts: { force?: boolean } = {}): Promise<ModelCatalog> {
   const now = Date.now();
   if (!opts.force) {
-    if (memory && now - memory.fetchedAt < TTL_MS) return memory;
+    if (catalogReady(memory, now)) return memory!;
     const persisted = json.parse<ModelCatalog | null>(settings.get(CACHE_SETTING), null);
-    if (persisted && Array.isArray(persisted.models) && now - persisted.fetchedAt < TTL_MS) {
+    if (catalogReady(persisted, now)) {
       memory = persisted;
-      return persisted;
+      return persisted!;
     }
   }
   const models = await fetchRemote();

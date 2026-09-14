@@ -147,7 +147,7 @@ describe("openrouter model catalog", () => {
 
 describe("llm routes against a fake OpenRouter", () => {
   let server: ReturnType<typeof Bun.serve>;
-  const seen: { path: string; auth: string | null; body?: any }[] = [];
+  const seen: { path: string; auth: string | null; search?: string; body?: any }[] = [];
 
   beforeAll(() => {
     server = Bun.serve({
@@ -156,7 +156,7 @@ describe("llm routes against a fake OpenRouter", () => {
         const url = new URL(req.url);
         const auth = req.headers.get("authorization");
         if (url.pathname === "/v1/models") {
-          seen.push({ path: url.pathname, auth });
+          seen.push({ path: url.pathname, search: url.search, auth });
           return Response.json(SAMPLE);
         }
         if (url.pathname === "/v1/chat/completions") {
@@ -260,6 +260,7 @@ describe("llm routes against a fake OpenRouter", () => {
     expect(first.fetchedAt).toBeGreaterThan(0);
     expect(seen.filter((s) => s.path === "/v1/models")).toHaveLength(1);
     expect(seen[0].auth).toBe("Bearer sk-or-v1-abcdefghijklmnop");
+    expect(seen[0].search).toContain("output_modalities=text,embeddings");
 
     await call(llmRoutes["/api/llm/models"], "GET", undefined, "http://local/api/llm/models");
     expect(seen.filter((s) => s.path === "/v1/models")).toHaveLength(1);
