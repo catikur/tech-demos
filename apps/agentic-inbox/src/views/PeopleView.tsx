@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Person, PersonProfile, Space, SourceRef } from "../../shared/types.ts";
 import { senderName } from "../../shared/types.ts";
 import { api, spaceQuery } from "../api/client.ts";
+import { t } from "../i18n.ts";
 import { ago, fmtDateTime, initials, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
 
@@ -39,11 +40,11 @@ export function PeopleView({
     <div className="split split-2">
       <section className="pane pane-list">
         <div className="pane-header">
-          <h2>People</h2>
+          <h2>{t("people.title")}</h2>
           <span className="badge badge-soft">{people.length}</span>
         </div>
         <div className="pane-search">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search people…" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("people.search")} />
         </div>
         <ul className="thread-list">
           {people.map((person) => (
@@ -73,7 +74,7 @@ export function PeopleView({
         {!p ? (
           <div className="empty-state">
             <div className="empty-icon">👤</div>
-            <p>Select a person to see their relationship card.</p>
+            <p>{t("people.select")}</p>
           </div>
         ) : (
           <div className="detail scroll">
@@ -86,34 +87,37 @@ export function PeopleView({
                 <div className="muted">{p.email}</div>
               </div>
               <button className={`btn btn-small ${p.vip ? "btn-primary" : ""}`} onClick={() => void toggleVip(p)}>
-                {p.vip ? "★ VIP" : "Mark VIP"}
+                {p.vip ? `★ ${t("common.vip")}` : t("common.markVip")}
               </button>
             </div>
             <div className="stat-grid">
               <div className="stat">
                 <span className="stat-value">{p.lastContactAt ? ago(p.lastContactAt) : "—"}</span>
-                <span className="stat-label">last contact</span>
+                <span className="stat-label">{t("people.lastContact")}</span>
               </div>
               <div className="stat">
                 <span className="stat-value">{p.threadCount}</span>
-                <span className="stat-label">threads</span>
+                <span className="stat-label">{t("people.threads")}</span>
               </div>
               <div className="stat">
                 <span className="stat-value">{p.meetingCount}</span>
-                <span className="stat-label">recorded meetings</span>
+                <span className="stat-label">{t("people.meetings")}</span>
               </div>
               <div className="stat">
                 <span className="stat-value">{p.openCommitments.length}</span>
-                <span className="stat-label">open commitments</span>
+                <span className="stat-label">{t("people.openCommitments")}</span>
               </div>
             </div>
             {p.openCommitments.length > 0 && (
               <>
-                <h3>Open loops</h3>
+                <h3>{t("people.openLoops")}</h3>
                 <ul className="plain-list">
                   {p.openCommitments.map((c) => (
                     <li key={c.id}>
-                      <span className={`pill ${c.direction === "owed_by_me" ? "pill-warn" : "pill-ok"}`}>{c.direction === "owed_by_me" ? "you owe" : "owes you"}</span> {c.text}
+                      <span className={`pill ${c.direction === "owed_by_me" ? "pill-warn" : "pill-ok"}`}>
+                        {c.direction === "owed_by_me" ? t("people.youOwe") : t("people.owesYou")}
+                      </span>{" "}
+                      {c.text}
                       {c.dueAt && <span className="muted small"> · {fmtDateTime(c.dueAt)}</span>}
                     </li>
                   ))}
@@ -122,7 +126,7 @@ export function PeopleView({
             )}
             {p.upcomingMeetings.length > 0 && (
               <>
-                <h3>Upcoming together</h3>
+                <h3>{t("people.upcoming")}</h3>
                 <ul className="plain-list">
                   {p.upcomingMeetings.map((e) => (
                     <li key={e.id}>
@@ -137,15 +141,15 @@ export function PeopleView({
             )}
             {p.recentThreads.length > 0 && (
               <>
-                <h3>Recent threads</h3>
+                <h3>{t("people.recentThreads")}</h3>
                 <ul className="plain-list">
-                  {p.recentThreads.map((t) => (
-                    <li key={t.id}>
-                      <button className="link-btn" onClick={() => onOpenSource({ kind: "thread", id: t.id, label: t.subject })}>
-                        {t.subject}
+                  {p.recentThreads.map((thread) => (
+                    <li key={thread.id}>
+                      <button className="link-btn" onClick={() => onOpenSource({ kind: "thread", id: thread.id, label: thread.subject })}>
+                        {thread.subject}
                       </button>{" "}
                       <span className="muted small">
-                        {senderName(t.lastFrom)} · {ago(t.lastAt)}
+                        {senderName(thread.lastFrom)} · {ago(thread.lastAt)}
                       </span>
                     </li>
                   ))}
@@ -154,7 +158,7 @@ export function PeopleView({
             )}
             {p.recentChats.length > 0 && (
               <>
-                <h3>Chats</h3>
+                <h3>{t("people.chats")}</h3>
                 <ul className="plain-list">
                   {p.recentChats.map((c) => (
                     <li key={c.id}>
@@ -168,17 +172,17 @@ export function PeopleView({
             )}
             {p.topics.length > 0 && (
               <>
-                <h3>Topics</h3>
+                <h3>{t("people.topics")}</h3>
                 <ul className="chip-list">
-                  {p.topics.map((t) => (
-                    <li key={t} className="chip-static">
-                      {t}
+                  {p.topics.map((topic) => (
+                    <li key={topic} className="chip-static">
+                      {topic}
                     </li>
                   ))}
                 </ul>
               </>
             )}
-            <h3>Your notes</h3>
+            <h3>{t("people.notes")}</h3>
             <NotesEditor person={p} onSaved={profile.reload} />
           </div>
         )}
@@ -192,9 +196,9 @@ function NotesEditor({ person, onSaved }: { person: Person; onSaved: () => void 
   const [saved, setSaved] = useState(false);
   return (
     <div className="composer" style={{ border: "1px solid var(--border)", borderRadius: 10 }}>
-      <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Preferences, context, things to remember…" />
+      <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("people.notesPlaceholder")} />
       <div className="composer-actions">
-        {saved && <span className="sent-note">✓ Saved</span>}
+        {saved && <span className="sent-note">✓ {t("common.saved")}</span>}
         <button
           className="btn btn-small"
           onClick={async () => {
@@ -204,7 +208,7 @@ function NotesEditor({ person, onSaved }: { person: Person; onSaved: () => void 
             setTimeout(() => setSaved(false), 1500);
           }}
         >
-          Save notes
+          {t("people.saveNotes")}
         </button>
       </div>
     </div>

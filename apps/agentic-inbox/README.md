@@ -18,12 +18,12 @@ bun install
 bun run dev          # http://localhost:3000
 ```
 
-With no configuration the app boots in **demo mode**: a seeded Work account (M365-shaped:
-mail, calendar, Teams chats, two transcribed meetings) and a seeded Personal account
-(Gmail-shaped). Every feature works against that data, the agent runs a rule-based fallback,
-and the scheduler produces a meeting brief and reminders within seconds of boot.
+The app starts empty. Copy [`.env.example`](.env.example) to `.env`, set Microsoft 365 and/or
+Gmail OAuth plus `OPENROUTER_API_KEY`, then **Settings → hesap bağla**. The UI is Turkish by
+default (`?lang=en` switches to English). Without an OpenRouter key the agent uses a
+rule-based fallback so the chrome still works; mail and calendar need real accounts.
 
-Other scripts: `bun run typecheck`, `bun test` (48 tests, offline), `bun run start` (production).
+Other scripts: `bun run typecheck`, `bun test` (offline), `bun run start` (production).
 
 Requires [Bun](https://bun.sh) ≥ 1.2.
 
@@ -33,11 +33,11 @@ Requires [Bun](https://bun.sh) ≥ 1.2.
 |---|---|---|
 | Microsoft 365 — Outlook, Calendar, Teams chats/channels, meeting transcripts + recordings | [docs/microsoft-365.md](docs/microsoft-365.md) | `MS_CLIENT_ID`, `MS_TENANT_ID`, `MS_CLIENT_SECRET` (optional) |
 | Gmail + Google Calendar | [docs/gmail.md](docs/gmail.md) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
-| Agent model (OpenAI-compatible incl. Azure OpenAI / Ollama, or Anthropic) | below | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`, or `ANTHROPIC_API_KEY` |
+| Agent model (OpenRouter) | [openrouter.ai](https://openrouter.ai) | `OPENROUTER_API_KEY`, optional `OPENROUTER_MODEL` / `OPENROUTER_BASE_URL` |
 
 Copy [`.env.example`](.env.example) to `.env`, fill what you need, restart, then use
-**Settings → Connect an account** under the space the account belongs to. Accounts can be
-moved between spaces later. Demo accounts can be removed once real ones exist.
+**Settings → hesap bağla** under the space the account belongs to. Accounts can be
+moved between spaces later.
 
 Both OAuth flows are auth-code + PKCE implemented with plain `fetch`; tokens are stored
 **AES-256-GCM encrypted** (`TOKEN_ENCRYPTION_KEY` or an auto-generated `data/.token-key`).
@@ -50,10 +50,10 @@ Both OAuth flows are auth-code + PKCE implemented with plain `fetch`; tokens are
   meeting with that person.
 - **Calendar** — day-grouped events, cross-space overlap warnings, join links, and the
   **Meeting brief** panel.
-- **Chats** — Teams 1:1, group and channel messages with mention highlighting; send after confirm.
+- **Chats** — Teams 1:1, group and channel messages (including channel thread replies), mention highlighting; send after confirm.
 - **Meetings** — transcripts (WebVTT → speaker lines), recordings, and the **Follow-through** panel.
-- **Catch-up**, **Commitments**, **Radar**, **Topics**, **People** — the seven features (below).
-- **Settings** — space rules (quiet hours, digest hour, agent tone, signature), accounts, connectors, agent backend.
+- **Catch-up**, **Commitments** (push to Microsoft To Do), **Radar**, **Topics**, **People** — the seven features (below).
+- **Settings** — space rules (quiet hours, digest hour, agent tone, signature), accounts, connectors, OpenRouter status.
 - **Notification bell** — briefs, digests, commitment reminders and radar nudges from the scheduler.
 
 ### Spaces: Work vs Personal
@@ -66,12 +66,12 @@ record from the other space is refused unless the question explicitly says so
 A server-side tool-calling loop (`server/agent/loop.ts`) over these tools:
 `list_threads · search_mail · read_thread · draft_reply · list_events · list_chats ·
 search_chats · read_chat · draft_chat_message · list_commitments · create_commitment ·
-get_meeting_brief · read_transcript · meeting_followup · catch_up · search_topics ·
-response_radar · get_person`.
+push_commitment_to_todo · get_meeting_brief · read_transcript · meeting_followup ·
+catch_up · search_topics · response_radar · get_person`.
 
-- Providers: OpenAI-compatible (`/chat/completions`; works with Azure OpenAI, Ollama, vLLM
-  via `OPENAI_BASE_URL`) and Anthropic Messages. No SDKs. With no key the **rule-based
-  fallback** answers the same intents so the UI never dead-ends.
+- Provider: **OpenRouter** only (`OPENROUTER_API_KEY`, OpenAI-compatible `/chat/completions`).
+  No separate OpenAI or Anthropic keys. With no key the **rule-based fallback** answers the
+  same intents so the UI never dead-ends. Tests set `LLM_PROVIDER=mock`.
 - Third-party text is wrapped as `<<external content>>` and the system prompt treats it as
   data (prompt-injection guard).
 - Drafts are proposals: **Confirm & send / Edit in composer / Discard**. Sends and tool
@@ -80,7 +80,8 @@ response_radar · get_person`.
 ### The seven features
 1. **Commitment ledger** — "who owes whom what by when" extracted from mail, chats and
    transcripts in both directions (asks → you owe; promises → owed to you), with due-date
-   parsing, near-duplicate suppression, Done/Drop, and one-click nudges.
+   parsing, near-duplicate suppression, Done/Drop, one-click nudges, and **Send to To Do**
+   (Microsoft To Do list "Agentic Inbox"; completing in-app PATCHes the linked task).
 2. **Meeting brief** — attendees with last contact, recent threads/chats with them, open
    commitments, last occurrence's decisions, suggested agenda. Generated by the scheduler
    `BRIEF_LEAD_MINUTES` before start and on demand.
@@ -112,7 +113,8 @@ server/connectors/           demo · m365 (Graph) · gmail (Gmail + Calendar)
 server/auth/                 PKCE OAuth, Microsoft/Google configs, AES-GCM token store
 server/sync/                 engine (post-sync hooks), scheduler, normalizers
 server/agent/                tools, LLM providers, tool loop, mock fallback, scope policy
-server/features/             commitments · briefs · followup · catchup · topics · radar · people · digests
+server/features/             commitments · briefs · followup · catchup · topics · radar · people · digests · ms-tasks
+server/webhooks/             Graph change notifications (public HTTPS APP_BASE_URL)
 shared/types.ts              unified model shared by server and client
 tests/                       bun test — fixtures, no network
 ```
@@ -124,15 +126,15 @@ per-meeting "done" cursors. Recordings stream to `data/recordings/` and are serv
 - Tokens encrypted at rest; the key file is `0600`. Secrets never appear in logs or the audit trail.
 - Outbound actions always require a click in the UI; the agent cannot send on its own.
 - Cross-space access is opt-in per question and audited.
-- Graph webhooks are not used (no public URL needed); polling with delta queries instead.
+- Graph change notifications: used when `APP_BASE_URL` is public HTTPS; localhost polls with delta queries.
 
 ## Honest scope note
 This is a **local, single-user** app: no multi-tenant hosting, no push notifications outside
-the browser, channel *replies* are not fetched yet, and heuristics (commitments, topics,
-radar) are deliberately rule-based — an LLM improves briefs, digests and follow-ups when a key
-is present but is never required. The upstream Cloudflare project runs on Workers + Durable
-Objects + Email Routing; this app takes the UX pattern (mailbox tools, streaming tool calls,
-human confirmation gate) and grows it into a personal cockpit instead of a hosted mail server.
+the browser. Heuristics (commitments, topics, radar) stay rule-based; OpenRouter improves
+briefs, digests and follow-ups when a key is present. The upstream Cloudflare project runs
+on Workers + Durable Objects + Email Routing; this app takes the UX pattern (mailbox tools,
+streaming tool calls, human confirmation gate) and grows it into a personal cockpit instead
+of a hosted mail server.
 
 ## Credits
 - Upstream inspiration: [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-inbox) (Apache-2.0).

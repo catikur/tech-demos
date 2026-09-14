@@ -3,7 +3,7 @@ import type { Account } from "../shared/types.ts";
 import { openMemoryDb } from "../server/db/index.ts";
 import { bootstrap, WORK_SPACE_ID } from "../server/bootstrap.ts";
 import { accounts, chats, events, meetings, threads } from "../server/db/repo.ts";
-import { M365Connector, type GraphLike } from "../server/connectors/m365.ts";
+import { M365Connector, localId, type GraphLike } from "../server/connectors/m365.ts";
 
 /**
  * Recorded-shape Graph responses (trimmed to the fields the connector reads).
@@ -99,12 +99,26 @@ const fixtures: Record<string, any> = {
       {
         id: "cmsg1",
         messageType: "message",
+        replyToId: null,
         from: { user: { id: "u-dana", displayName: "Dana Kowalski" } },
         body: { contentType: "text", content: "deploy window moved to 16:00 UTC" },
         createdDateTime: "2026-09-14T07:00:00Z",
       },
     ],
     "@odata.deltaLink": "https://graph.microsoft.com/v1.0/teams/team1/channels/chan1/messages/delta?$deltatoken=CHAN-TOKEN",
+  },
+  "/teams/team1/channels/chan1/messages/cmsg1/replies": {
+    value: [
+      {
+        id: "cmsg1-r1",
+        messageType: "message",
+        replyToId: "cmsg1",
+        from: { user: { id: "u-dana", displayName: "Dana Kowalski" } },
+        body: { contentType: "text", content: "holding the pipeline until the window opens" },
+        createdDateTime: "2026-09-14T07:12:00Z",
+      },
+      { id: "cmsg1-sys", messageType: "systemEventMessage", from: null, body: { content: "" }, createdDateTime: "2026-09-14T07:13:00Z" },
+    ],
   },
   "/me/onlineMeetings?$filter": { value: [{ id: "OM1" }] },
   "/me/onlineMeetings/OM1/transcripts/T1/content": `WEBVTT
@@ -206,6 +220,19 @@ describe("M365 connector (fixture-driven sync)", () => {
     expect(msgs[0].body).toBe("can you send the postmortem by Wednesday?");
     const channel = list.find((c) => c.kind === "channel")!;
     expect(channel.title).toBe("Engineering › general");
+  });
+
+  test("channels: thread replies stored with replyToId pointing at parent local id", () => {
+    const channel = chats.list(WORK_SPACE_ID).find((c) => c.kind === "channel")!;
+    const msgs = chats.messages(channel.id);
+    expect(msgs).toHaveLength(2);
+    const parentId = localId("cm", account.id, "cmsg1");
+    const parent = msgs.find((m) => m.id === parentId)!;
+    const reply = msgs.find((m) => m.id !== parentId)!;
+    expect(parent.replyToId).toBeNull();
+    expect(parent.body).toContain("deploy window");
+    expect(reply.body).toContain("holding the pipeline");
+    expect(reply.replyToId).toBe(parentId);
   });
 
   test("meetings: transcript resolved via join url and parsed from VTT", () => {

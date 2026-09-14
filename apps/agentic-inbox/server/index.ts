@@ -10,7 +10,7 @@ import "./features/commitments.ts";
 import "./features/topics.ts";
 
 getDb();
-const { seededDemo } = bootstrap();
+bootstrap();
 
 const server = Bun.serve({
   port: env.port,
@@ -27,7 +27,7 @@ const server = Bun.serve({
 });
 
 console.log(`📬 Agentic Inbox listening on ${server.url}`);
-if (seededDemo) console.log("   Demo accounts seeded (Work + Personal). Connect real accounts from Settings.");
+console.log("   Connect Microsoft 365 or Gmail from Settings. LLM: OpenRouter (`OPENROUTER_API_KEY`).");
 
 syncAll()
   .then((r) => console.log(`   Initial sync: ${Object.keys(r).length} account(s)`))

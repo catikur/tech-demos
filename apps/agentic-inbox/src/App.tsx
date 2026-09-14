@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AgentContext, Space, SourceRef } from "../shared/types.ts";
 import { api } from "./api/client.ts";
+import { t } from "./i18n.ts";
 import { useActiveSpace, useStatus } from "./state.ts";
 import { AgentPanel } from "./components/AgentPanel.tsx";
 import { SpaceSwitcher } from "./components/SpaceSwitcher.tsx";
@@ -20,17 +21,17 @@ import { SettingsView } from "./views/SettingsView.tsx";
 
 export type ViewId = "inbox" | "calendar" | "chats" | "meetings" | "catchup" | "commitments" | "radar" | "topics" | "people" | "settings";
 
-const NAV: { id: ViewId; label: string; icon: string }[] = [
-  { id: "inbox", label: "Inbox", icon: "✉" },
-  { id: "calendar", label: "Calendar", icon: "▦" },
-  { id: "chats", label: "Chats", icon: "◫" },
-  { id: "meetings", label: "Meetings", icon: "◉" },
-  { id: "catchup", label: "Catch-up", icon: "⟳" },
-  { id: "commitments", label: "Commitments", icon: "✓" },
-  { id: "radar", label: "Radar", icon: "◎" },
-  { id: "topics", label: "Topics", icon: "#" },
-  { id: "people", label: "People", icon: "☺" },
-  { id: "settings", label: "Settings", icon: "⚙" },
+const NAV: { id: ViewId; labelKey: string; icon: string }[] = [
+  { id: "inbox", labelKey: "nav.inbox", icon: "✉" },
+  { id: "calendar", labelKey: "nav.calendar", icon: "▦" },
+  { id: "chats", labelKey: "nav.chats", icon: "◫" },
+  { id: "meetings", labelKey: "nav.meetings", icon: "◉" },
+  { id: "catchup", labelKey: "nav.catchup", icon: "⟳" },
+  { id: "commitments", labelKey: "nav.commitments", icon: "✓" },
+  { id: "radar", labelKey: "nav.radar", icon: "◎" },
+  { id: "topics", labelKey: "nav.topics", icon: "#" },
+  { id: "people", labelKey: "nav.people", icon: "☺" },
+  { id: "settings", labelKey: "nav.settings", icon: "⚙" },
 ];
 
 export interface Selection {
@@ -51,6 +52,7 @@ export function App() {
 
   const spaces: Space[] = status.data?.spaces ?? [];
   const activeSpace = spaces.find((s) => s.id === spaceId) ?? null;
+  const noAccounts = (status.data?.accounts.length ?? -1) === 0;
 
   useEffect(() => {
     if (spaceId && spaces.length > 0 && !activeSpace) setSpaceId(null);
@@ -109,24 +111,25 @@ export function App() {
     [openSource],
   );
 
+  const llmModel = status.data?.llm.model ? ` · ${status.data.llm.model}` : "";
+
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark">📬</span>
           <span className="brand-name">Agentic Inbox</span>
-          {status.data?.demoMode && <span className="brand-tag">demo data · no cloud</span>}
         </div>
         <SpaceSwitcher spaces={spaces} activeId={spaceId} onChange={setSpaceId} />
         <div className="topbar-right">
           {status.data && (
-            <span className="topbar-llm" title="Agent backend">
-              agent: {status.data.llm.provider}
-              {status.data.llm.model ? ` · ${status.data.llm.model}` : ""}
+            <span className="topbar-llm" title={t("brand.agentTitle")}>
+              {t("brand.agent", { provider: status.data.llm.provider })}
+              {llmModel}
             </span>
           )}
           <NotificationBell spaceId={spaceId} spaces={spaces} onOpenLink={openLink} />
-          <button className="icon-btn" title="Toggle agent panel" onClick={() => setAgentOpen((o) => !o)}>
+          <button className="icon-btn" title={t("brand.toggleAgent")} onClick={() => setAgentOpen((o) => !o)}>
             {agentOpen ? "⇥" : "⇤"}
           </button>
         </div>
@@ -134,15 +137,26 @@ export function App() {
 
       <div className={`body ${agentOpen ? "" : "agent-collapsed"}`}>
         <nav className="nav">
-          {NAV.map((n) => (
-            <button key={n.id} className={`nav-item ${view === n.id ? "is-active" : ""}`} onClick={() => setView(n.id)} title={n.label}>
-              <span className="nav-icon">{n.icon}</span>
-              <span className="nav-label">{n.label}</span>
-            </button>
-          ))}
+          {NAV.map((n) => {
+            const label = t(n.labelKey);
+            return (
+              <button key={n.id} className={`nav-item ${view === n.id ? "is-active" : ""}`} onClick={() => setView(n.id)} title={label}>
+                <span className="nav-icon">{n.icon}</span>
+                <span className="nav-label">{label}</span>
+              </button>
+            );
+          })}
         </nav>
 
         <main className="main" style={{ "--space-color": activeSpace?.color ?? "#94a3b8" } as React.CSSProperties}>
+          {noAccounts && (
+            <div className="accounts-banner">
+              <span>{t("empty.accounts")}</span>
+              <button className="link-btn" type="button" onClick={() => setView("settings")}>
+                {t("empty.accountsCta")}
+              </button>
+            </div>
+          )}
           {view === "inbox" && (
             <InboxView
               spaceId={spaceId}

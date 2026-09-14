@@ -27,6 +27,7 @@ export const MS_SCOPES = [
   "OnlineMeetingTranscript.Read.All", // (admin)
   "OnlineMeetingRecording.Read.All", // (admin)
   "People.Read",
+  "Tasks.ReadWrite",
 ];
 
 export function microsoftConfigured(): boolean {

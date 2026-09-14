@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppStatus } from "../shared/types.ts";
 import { api, subscribe, type ServerEvent } from "./api/client.ts";
+import { dateLocale, t } from "./i18n.ts";
 
 /**
  * Minimal data hook: fetch on mount / when deps change, and refetch when the
@@ -63,11 +64,11 @@ export function useActiveSpace(): [string | null, (id: string | null) => void] {
 }
 
 export function fmtTime(at: number): string {
-  return new Date(at).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
+  return new Date(at).toLocaleString(dateLocale, { weekday: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 export function fmtDateTime(at: number): string {
-  return new Date(at).toLocaleString(undefined, {
+  return new Date(at).toLocaleString(dateLocale, {
     weekday: "short",
     day: "2-digit",
     month: "short",
@@ -78,20 +79,20 @@ export function fmtDateTime(at: number): string {
 
 export function ago(at: number): string {
   const mins = Math.max(1, Math.round((Date.now() - at) / 60_000));
-  if (mins < 60) return `${mins}m`;
+  if (mins < 60) return t("time.agoMinutes", { n: mins });
   const hours = Math.round(mins / 60);
-  if (hours < 48) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
+  if (hours < 48) return t("time.agoHours", { n: hours });
+  return t("time.agoDays", { n: Math.round(hours / 24) });
 }
 
 export function untilLabel(at: number): string {
   const diff = at - Date.now();
-  if (diff < 0) return "past";
+  if (diff < 0) return t("time.past");
   const mins = Math.round(diff / 60_000);
-  if (mins < 60) return `in ${mins}m`;
+  if (mins < 60) return t("time.inMinutes", { n: mins });
   const hours = Math.round(mins / 60);
-  if (hours < 36) return `in ${hours}h`;
-  return `in ${Math.round(hours / 24)}d`;
+  if (hours < 36) return t("time.inHours", { n: hours });
+  return t("time.inDays", { n: Math.round(hours / 24) });
 }
 
 export function initials(name: string): string {

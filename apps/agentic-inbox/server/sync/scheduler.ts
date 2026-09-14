@@ -6,9 +6,11 @@ import { briefForEvent } from "../features/briefs.ts";
 import { produceDigest } from "../features/digests.ts";
 import { computeRadar } from "../features/radar.ts";
 import { syncAll } from "./engine.ts";
+import { graphPushEnabled, renewExpiringSubscriptions } from "../webhooks/graph.ts";
 
 /**
  * In-process scheduler. One minute tick that:
+ *  - renews Graph change-notification subscriptions when push is enabled,
  *  - syncs every account on the configured interval,
  *  - prepares briefs `briefLeadMinutes` before meetings,
  *  - produces daily/weekly digests at each space's digest hour,
@@ -37,6 +39,10 @@ function notifyUnlessQuiet(spaceId: string, n: Parameters<typeof notifications.p
 export async function tick(now = Date.now()): Promise<void> {
   schedulerState.lastTickAt = now;
   schedulerState.ticks++;
+
+  if (graphPushEnabled()) {
+    await renewExpiringSubscriptions().catch((err) => console.error("[scheduler] graph subscription renew failed", err));
+  }
 
   if (now - lastSyncAt >= env.sync.intervalMinutes * MIN && accounts.all().length > 0) {
     lastSyncAt = now;

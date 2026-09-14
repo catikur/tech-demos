@@ -2,10 +2,8 @@ import { z } from "zod";
 import { env } from "../env.ts";
 
 /**
- * Provider-agnostic chat interface with tool calling. Two adapters:
- *  - OpenAI-compatible (`/chat/completions`): OpenAI, Azure OpenAI (via base URL), Ollama, vLLM, ...
- *  - Anthropic Messages API.
- * Both are plain `fetch`; no SDKs.
+ * OpenRouter adapter (`/chat/completions`, OpenAI-compatible). Plain `fetch`; no SDKs.
+ * Tests point `OPENROUTER_BASE_URL` at a local fake. `LLM_PROVIDER=mock` disables the network.
  */
 
 export interface ToolCall {
@@ -32,7 +30,7 @@ export interface LlmTurn {
 }
 
 export interface LlmProvider {
-  name: "openai" | "anthropic";
+  name: "openrouter";
   model: string;
   chat(messages: LlmMessage[], tools: LlmToolSpec[]): Promise<LlmTurn>;
   /** Single-shot completion for feature summaries (no tools). */
@@ -58,14 +56,14 @@ function parseArgs(raw: unknown): Record<string, unknown> {
   return {};
 }
 
-/* ---------------- OpenAI-compatible ---------------- */
-
-class OpenAICompatibleProvider implements LlmProvider {
-  name = "openai" as const;
+class OpenRouterProvider implements LlmProvider {
+  name = "openrouter" as const;
   constructor(
     private readonly baseUrl: string,
-    private readonly apiKey: string | null,
+    private readonly apiKey: string,
     public readonly model: string,
+    private readonly referer: string,
+    private readonly title: string,
   ) {}
 
   private async post(body: Record<string, unknown>): Promise<any> {
@@ -73,11 +71,13 @@ class OpenAICompatibleProvider implements LlmProvider {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+        Authorization: `Bearer ${this.apiKey}`,
+        "HTTP-Referer": this.referer,
+        "X-Title": this.title,
       },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`LLM (${this.model}) HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    if (!res.ok) throw new Error(`OpenRouter (${this.model}) HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
     return res.json();
   }
 
@@ -139,71 +139,6 @@ class OpenAICompatibleProvider implements LlmProvider {
   }
 }
 
-/* ---------------- Anthropic ---------------- */
-
-class AnthropicProvider implements LlmProvider {
-  name = "anthropic" as const;
-  constructor(
-    private readonly apiKey: string,
-    public readonly model: string,
-  ) {}
-
-  private async post(body: Record<string, unknown>): Promise<any> {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": this.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`Anthropic (${this.model}) HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
-    return res.json();
-  }
-
-  async chat(messages: LlmMessage[], tools: LlmToolSpec[]): Promise<LlmTurn> {
-    const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
-    const converted: any[] = [];
-    for (const m of messages) {
-      if (m.role === "system") continue;
-      if (m.role === "user") converted.push({ role: "user", content: m.content });
-      else if (m.role === "assistant") {
-        const blocks: any[] = [];
-        if (m.content) blocks.push({ type: "text", text: m.content });
-        for (const t of m.toolCalls ?? []) blocks.push({ type: "tool_use", id: t.id, name: t.name, input: t.arguments });
-        converted.push({ role: "assistant", content: blocks.length ? blocks : [{ type: "text", text: "" }] });
-      } else {
-        // Consecutive tool results must live in one user message.
-        const last = converted[converted.length - 1];
-        const block = { type: "tool_result", tool_use_id: m.toolCallId, content: m.content };
-        if (last?.role === "user" && Array.isArray(last.content) && last.content[0]?.type === "tool_result") last.content.push(block);
-        else converted.push({ role: "user", content: [block] });
-      }
-    }
-    const data = await this.post({
-      model: this.model,
-      max_tokens: 1500,
-      temperature: 0.2,
-      system,
-      messages: converted,
-      ...(tools.length ? { tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })) } : {}),
-    });
-    const blocks: any[] = data.content ?? [];
-    return {
-      text: blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim(),
-      toolCalls: blocks.filter((b) => b.type === "tool_use").map((b) => ({ id: b.id, name: b.name, arguments: parseArgs(b.input) })),
-    };
-  }
-
-  async complete(system: string, prompt: string, maxTokens = 800): Promise<string> {
-    const data = await this.post({ model: this.model, max_tokens: maxTokens, system, messages: [{ role: "user", content: prompt }] });
-    return (data.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
-  }
-}
-
-/* ---------------- selection ---------------- */
-
 let cached: LlmProvider | null | undefined;
 
 export function resetProviderCache(): void {
@@ -212,15 +147,12 @@ export function resetProviderCache(): void {
 
 export function selectProvider(): LlmProvider | null {
   if (cached !== undefined) return cached;
-  const { provider, openaiApiKey, openaiBaseUrl, openaiModel, anthropicApiKey, anthropicModel } = env.llm;
-  const customBase = openaiBaseUrl !== "https://api.openai.com/v1";
-  const openaiUsable = !!openaiApiKey || customBase; // Ollama/vLLM need no key
-  if (provider === "mock") cached = null;
-  else if (provider === "anthropic" && anthropicApiKey) cached = new AnthropicProvider(anthropicApiKey, anthropicModel);
-  else if (provider === "openai" && openaiUsable) cached = new OpenAICompatibleProvider(openaiBaseUrl, openaiApiKey, openaiModel);
-  else if (provider === "auto" && openaiUsable) cached = new OpenAICompatibleProvider(openaiBaseUrl, openaiApiKey, openaiModel);
-  else if (provider === "auto" && anthropicApiKey) cached = new AnthropicProvider(anthropicApiKey, anthropicModel);
-  else cached = null;
+  const { provider, apiKey, baseUrl, model, siteUrl, appName } = env.llm;
+  if (provider === "mock" || !apiKey) {
+    cached = null;
+  } else {
+    cached = new OpenRouterProvider(baseUrl, apiKey, model, siteUrl, appName);
+  }
   return cached;
 }
 

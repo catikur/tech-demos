@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentContext, AgentEvent, Space } from "../../shared/types.ts";
 import { askAgent } from "../api/client.ts";
+import { spaceLabel, t } from "../i18n.ts";
 
 type DraftTarget = { kind: "thread" | "chat" | "followup"; id: string };
 
@@ -22,9 +23,6 @@ type ChatItem =
 let nextId = 0;
 const uid = () => `c${++nextId}`;
 
-const GREETING =
-  "Hi — I'm your Email Agent. I read mail, calendar, Teams chats and meeting transcripts in the active space, and I never send anything without your explicit confirmation.";
-
 export function AgentPanel({
   context,
   activeSpace,
@@ -36,7 +34,7 @@ export function AgentPanel({
   onConfirmSend: (target: DraftTarget, body: string) => Promise<void>;
   onEditInComposer: (target: DraftTarget, body: string) => void;
 }) {
-  const [items, setItems] = useState<ChatItem[]>([{ id: uid(), kind: "reply", text: GREETING }]);
+  const [items, setItems] = useState<ChatItem[]>([{ id: uid(), kind: "reply", text: t("agent.greeting") }]);
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -46,9 +44,9 @@ export function AgentPanel({
   }, [items, running]);
 
   const suggestions = [
-    "What did I miss since yesterday?",
-    context.selectedThreadId ? "Draft a reply to this" : "What am I waiting on?",
-    context.selectedEventId ? "Brief me for this meeting" : "What do I owe people?",
+    t("agent.suggestMissed"),
+    context.selectedThreadId ? t("agent.suggestDraft") : t("agent.suggestWaiting"),
+    context.selectedEventId ? t("agent.suggestBrief") : t("agent.suggestOwe"),
   ];
 
   const ask = async (text: string) => {
@@ -87,9 +85,9 @@ export function AgentPanel({
           kind: "tool",
           tool: item.target.kind === "thread" ? "send_reply" : "send_chat_message",
           input: JSON.stringify({ [item.target.kind === "thread" ? "threadId" : "chatId"]: item.target.id }),
-          output: "Sent after user confirmation. Logged to audit trail.",
+          output: t("agent.toolSent"),
         },
-        { id: uid(), kind: "reply", text: "Sent — it's now in the conversation." },
+        { id: uid(), kind: "reply", text: t("agent.sentChat") },
       ]);
     } catch (e) {
       setDraftStatus(item.id, "failed");
@@ -97,14 +95,17 @@ export function AgentPanel({
     }
   };
 
+  const draftLabel = (kind: DraftTarget["kind"]) =>
+    kind === "thread" ? t("agent.proposedReply") : kind === "chat" ? t("agent.proposedChat") : t("agent.proposedFollowup");
+
   return (
     <aside className="pane pane-agent">
       <div className="pane-header">
         <h2>
-          <span className="agent-dot" /> Email Agent
+          <span className="agent-dot" /> {t("agent.title")}
         </h2>
         <span className="badge badge-soft" style={activeSpace ? { color: activeSpace.color, borderColor: `${activeSpace.color}66` } : undefined}>
-          {activeSpace ? `scope: ${activeSpace.name}` : "scope: all spaces"}
+          {activeSpace ? t("agent.scopeSpace", { name: spaceLabel(activeSpace.kind) }) : t("agent.scopeAll")}
         </span>
       </div>
       <div className="chat" ref={scrollRef}>
@@ -119,7 +120,10 @@ export function AgentPanel({
             case "thought":
               return (
                 <div key={item.id} className="chat-row">
-                  <div className="thought">💭 {item.text}</div>
+                  <div className="thought">
+                    <span className="thought-label">{t("agent.thinking")}</span>
+                    {item.text}
+                  </div>
                 </div>
               );
             case "tool":
@@ -151,30 +155,28 @@ export function AgentPanel({
                 <div key={item.id} className="chat-row">
                   <div className={`draft-card draft-${item.status}`}>
                     <div className="draft-head">
-                      <span className="draft-label">
-                        {item.target.kind === "thread" ? "Proposed reply" : item.target.kind === "chat" ? "Proposed chat message" : "Proposed follow-up mail"}
-                      </span>
+                      <span className="draft-label">{draftLabel(item.target.kind)}</span>
                       <span className="draft-subject">{item.subject}</span>
                     </div>
                     <pre className="draft-body">{item.body}</pre>
                     {(item.status === "pending" || item.status === "failed") && (
                       <div className="draft-actions">
                         <button className="btn btn-primary" onClick={() => void confirmSend(item)}>
-                          Confirm &amp; send
+                          {t("agent.confirmSend")}
                         </button>
                         {item.target.kind !== "chat" && (
                           <button className="btn" onClick={() => onEditInComposer(item.target, item.body)}>
-                            {item.target.kind === "thread" ? "Edit in composer" : "Open meeting"}
+                            {item.target.kind === "thread" ? t("agent.editComposer") : t("agent.openMeeting")}
                           </button>
                         )}
                         <button className="btn btn-ghost" onClick={() => setDraftStatus(item.id, "discarded")}>
-                          Discard
+                          {t("agent.discard")}
                         </button>
                       </div>
                     )}
-                    {item.status === "sending" && <div className="draft-status muted">Sending…</div>}
-                    {item.status === "sent" && <div className="draft-status ok">✓ Sent</div>}
-                    {item.status === "discarded" && <div className="draft-status muted">Discarded</div>}
+                    {item.status === "sending" && <div className="draft-status muted">{t("common.sending")}</div>}
+                    {item.status === "sent" && <div className="draft-status ok">✓ {t("agent.sentOk")}</div>}
+                    {item.status === "discarded" && <div className="draft-status muted">{t("agent.discarded")}</div>}
                   </div>
                 </div>
               );
@@ -182,10 +184,11 @@ export function AgentPanel({
         })}
         {running && (
           <div className="chat-row">
-            <div className="bubble bubble-agent typing">
+            <div className="bubble bubble-agent typing" aria-label={t("agent.thinking")}>
               <span />
               <span />
               <span />
+              <small className="typing-label">{t("agent.thinking")}</small>
             </div>
           </div>
         )}
@@ -204,9 +207,9 @@ export function AgentPanel({
           void ask(input);
         }}
       >
-        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask about your mail, calendar, chats…" disabled={running} />
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={t("agent.placeholder")} disabled={running} />
         <button className="btn btn-primary" type="submit" disabled={running || !input.trim()}>
-          Ask
+          {t("agent.ask")}
         </button>
       </form>
     </aside>

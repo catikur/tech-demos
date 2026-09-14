@@ -21,26 +21,32 @@ export const env = {
   production: process.env.NODE_ENV === "production",
 
   tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? null,
+  /** Graph subscription clientState. Generated and persisted in settings when omitted. */
+  graphWebhookSecret: process.env.GRAPH_WEBHOOK_SECRET ?? null,
 
   microsoft: {
     clientId: process.env.MS_CLIENT_ID ?? null,
     clientSecret: process.env.MS_CLIENT_SECRET ?? null,
     tenantId: process.env.MS_TENANT_ID ?? "common",
+    /** Optional Planner plan id — when set, a matching Planner task is created alongside To Do. */
+    plannerPlanId: process.env.MS_PLANNER_PLAN_ID ?? null,
   },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID ?? null,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? null,
     calendar: bool("GOOGLE_CALENDAR", true),
   },
-  // Read lazily so tests (and future settings UI) can change the model without a restart.
+  // Read lazily so tests can change the model without a restart.
   get llm() {
+    const port = num("PORT", 3000);
+    const baseUrl = (process.env.APP_BASE_URL ?? `http://localhost:${port}`).replace(/\/$/, "");
     return {
-      provider: (process.env.LLM_PROVIDER ?? "auto") as "auto" | "openai" | "anthropic" | "mock",
-      openaiBaseUrl: (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/$/, ""),
-      openaiApiKey: process.env.OPENAI_API_KEY ?? null,
-      openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-      anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? null,
-      anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-3-5-haiku-latest",
+      provider: (process.env.LLM_PROVIDER ?? "auto") as "auto" | "openrouter" | "mock",
+      apiKey: process.env.OPENROUTER_API_KEY ?? null,
+      baseUrl: (process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1").replace(/\/$/, ""),
+      model: process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini",
+      siteUrl: (process.env.OPENROUTER_SITE_URL ?? baseUrl).replace(/\/$/, ""),
+      appName: process.env.OPENROUTER_APP_NAME ?? "Agentic Inbox",
     };
   },
   sync: {

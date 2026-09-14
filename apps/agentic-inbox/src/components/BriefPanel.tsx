@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { CalendarEvent, MeetingBrief } from "../../shared/types.ts";
 import { api } from "../api/client.ts";
+import { t } from "../i18n.ts";
 import { Markdown } from "./Markdown.tsx";
 
 /** Feature 2 — on-demand (and scheduler-produced) pre-meeting brief, shown in the event detail. */
@@ -37,22 +38,20 @@ export function BriefPanel({ event }: { event: CalendarEvent }) {
   return (
     <div className="panel">
       <div className="panel-head">
-        <h3 style={{ margin: 0 }}>Meeting brief</h3>
+        <h3 style={{ margin: 0 }}>{t("brief.title")}</h3>
         <div className="row-actions">
           <button className="btn btn-small btn-primary" disabled={state === "loading"} onClick={() => void load(false)}>
-            {state === "loading" ? "Preparing…" : brief ? "Reload" : "Prepare me"}
+            {state === "loading" ? t("brief.preparing") : brief ? t("common.reload") : t("brief.prepare")}
           </button>
           {brief && (
             <button className="btn btn-small btn-ghost" disabled={state === "loading"} onClick={() => void load(true)}>
-              Regenerate
+              {t("common.regenerate")}
             </button>
           )}
         </div>
       </div>
       {state === "error" && <div className="error-note">{error}</div>}
-      {!brief && state !== "loading" && (
-        <p className="muted small">Attendees, what you last discussed with them, open commitments, last time's decisions and a suggested agenda. Generated automatically 15 minutes before start.</p>
-      )}
+      {!brief && state !== "loading" && <p className="muted small">{t("brief.hint")}</p>}
       {brief && <Markdown text={brief.bodyMarkdown} />}
     </div>
   );

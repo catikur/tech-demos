@@ -136,6 +136,7 @@ export const accounts = {
     db.query("DELETE FROM chats WHERE account_id = ?").run(id);
     db.query("DELETE FROM transcripts WHERE meeting_id IN (SELECT id FROM meetings WHERE account_id = ?)").run(id);
     db.query("DELETE FROM meetings WHERE account_id = ?").run(id);
+    db.query("DELETE FROM graph_subscriptions WHERE account_id = ?").run(id);
     db.query("DELETE FROM accounts WHERE id = ?").run(id);
   },
   setSpace(id: string, spaceId: string): void {
@@ -498,6 +499,7 @@ function rowToChatMessage(raw: unknown): ChatMessage {
     at: r.at,
     isMine: !!r.is_mine,
     mentionsMe: !!r.mentions_me,
+    replyToId: r.reply_to_id ?? null,
   };
 }
 
@@ -558,12 +560,26 @@ export const chats = {
   upsertMessage(m: ChatMessage & { externalId?: string | null }): void {
     getDb()
       .query(
-        `INSERT INTO chat_messages (id, chat_id, external_id, from_addr, body, at, is_mine, mentions_me)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET body=excluded.body`,
+        `INSERT INTO chat_messages (id, chat_id, external_id, from_addr, body, at, is_mine, mentions_me, reply_to_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET body=excluded.body, at=excluded.at, reply_to_id=excluded.reply_to_id`,
       )
-      .run(m.id, m.chatId, m.externalId ?? null, m.from, m.body, m.at, m.isMine ? 1 : 0, m.mentionsMe ? 1 : 0);
+      .run(
+        m.id,
+        m.chatId,
+        m.externalId ?? null,
+        m.from,
+        m.body,
+        m.at,
+        m.isMine ? 1 : 0,
+        m.mentionsMe ? 1 : 0,
+        m.replyToId ?? null,
+      );
     getDb().query("UPDATE chats SET last_at = MAX(last_at, ?) WHERE id = ?").run(m.at, m.chatId);
+  },
+  messageExternalId(messageId: string): string | null {
+    const r = getDb().query("SELECT external_id FROM chat_messages WHERE id = ?").get(messageId) as Row | null;
+    return r?.external_id ?? null;
   },
   markRead(id: string): void {
     getDb().query("UPDATE chats SET unread_count = 0 WHERE id = ?").run(id);
@@ -681,6 +697,7 @@ function rowToCommitment(raw: unknown): Commitment {
     source: { kind: r.source_kind, id: r.source_id, label: r.source_label },
     createdAt: r.created_at,
     confidence: r.confidence,
+    msTaskId: r.ms_task_id ?? null,
   };
 }
 
@@ -735,6 +752,14 @@ export const commitments = {
   },
   setStatus(id: string, status: Commitment["status"]): void {
     getDb().query("UPDATE commitments SET status = ? WHERE id = ?").run(status, id);
+  },
+  setMsTask(id: string, listId: string, taskId: string): void {
+    getDb().query("UPDATE commitments SET ms_list_id = ?, ms_task_id = ? WHERE id = ?").run(listId, taskId, id);
+  },
+  msTask(id: string): { listId: string; taskId: string } | null {
+    const r = getDb().query("SELECT ms_list_id, ms_task_id FROM commitments WHERE id = ?").get(id) as Row | null;
+    if (!r?.ms_list_id || !r?.ms_task_id) return null;
+    return { listId: r.ms_list_id, taskId: r.ms_task_id };
   },
   dueSoon(spaceId: string | null, withinMs: number): Commitment[] {
     const now = Date.now();
@@ -944,6 +969,56 @@ export const audit = {
   },
 };
 
+/* ---------------- graph change-notification subscriptions ---------------- */
+
+export interface GraphSubscriptionRow {
+  id: string;
+  accountId: string;
+  resource: string;
+  clientState: string;
+  expiresAt: number;
+}
+
+function rowToGraphSub(raw: unknown): GraphSubscriptionRow {
+  const r = raw as Row;
+  return {
+    id: r.id,
+    accountId: r.account_id,
+    resource: r.resource,
+    clientState: r.client_state,
+    expiresAt: r.expires_at,
+  };
+}
+
+export const graphSubscriptions = {
+  upsert(s: GraphSubscriptionRow): void {
+    getDb()
+      .query(
+        `INSERT INTO graph_subscriptions (id, account_id, resource, client_state, expires_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET account_id=excluded.account_id, resource=excluded.resource,
+           client_state=excluded.client_state, expires_at=excluded.expires_at`,
+      )
+      .run(s.id, s.accountId, s.resource, s.clientState, s.expiresAt);
+  },
+  get(id: string): GraphSubscriptionRow | null {
+    const r = getDb().query("SELECT * FROM graph_subscriptions WHERE id = ?").get(id) as Row | null;
+    return r ? rowToGraphSub(r) : null;
+  },
+  byAccount(accountId: string): GraphSubscriptionRow[] {
+    return getDb().query("SELECT * FROM graph_subscriptions WHERE account_id = ?").all(accountId).map(rowToGraphSub);
+  },
+  all(): GraphSubscriptionRow[] {
+    return getDb().query("SELECT * FROM graph_subscriptions").all().map(rowToGraphSub);
+  },
+  expiringBefore(ts: number): GraphSubscriptionRow[] {
+    return getDb().query("SELECT * FROM graph_subscriptions WHERE expires_at < ?").all(ts).map(rowToGraphSub);
+  },
+  remove(id: string): void {
+    getDb().query("DELETE FROM graph_subscriptions WHERE id = ?").run(id);
+  },
+};
+
 /* ---------------- settings & oauth state ---------------- */
 
 export const settings = {
@@ -973,6 +1048,20 @@ export const oauthStates = {
     return { provider: r.provider, spaceId: r.space_id, codeVerifier: r.code_verifier };
   },
 };
+
+/** Space-level rows that survive account.delete — wipe when the mailbox is empty. */
+export function wipeDerivedData(): void {
+  getDb().exec(`
+    DELETE FROM topic_links;
+    DELETE FROM topics;
+    DELETE FROM commitments;
+    DELETE FROM notes;
+    DELETE FROM notifications;
+    DELETE FROM digests;
+    DELETE FROM people;
+    DELETE FROM audit_log;
+  `);
+}
 
 export function sourceLabel(kind: SourceRef["kind"], id: string): string {
   switch (kind) {

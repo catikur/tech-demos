@@ -102,7 +102,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   body TEXT NOT NULL,
   at INTEGER NOT NULL,
   is_mine INTEGER NOT NULL DEFAULT 0,
-  mentions_me INTEGER NOT NULL DEFAULT 0
+  mentions_me INTEGER NOT NULL DEFAULT 0,
+  reply_to_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_chat_messages_chat ON chat_messages(chat_id, at);
 
@@ -139,7 +140,9 @@ CREATE TABLE IF NOT EXISTS commitments (
   source_label TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   confidence REAL NOT NULL DEFAULT 0.5,
-  fingerprint TEXT UNIQUE
+  fingerprint TEXT UNIQUE,
+  ms_task_id TEXT,
+  ms_list_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS topics (
@@ -213,4 +216,14 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS graph_subscriptions (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  resource TEXT NOT NULL,
+  client_state TEXT NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_graph_subscriptions_account ON graph_subscriptions(account_id);
+CREATE INDEX IF NOT EXISTS idx_graph_subscriptions_expires ON graph_subscriptions(expires_at);
 `;

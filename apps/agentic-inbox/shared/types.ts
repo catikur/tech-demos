@@ -129,6 +129,8 @@ export interface ChatMessage {
   at: number;
   isMine: boolean;
   mentionsMe: boolean;
+  /** Local parent chat_message id when this is a Teams channel thread reply. */
+  replyToId: string | null;
 }
 
 export interface TranscriptLine {
@@ -173,6 +175,8 @@ export interface Commitment {
   source: SourceRef;
   createdAt: number;
   confidence: number;
+  /** Microsoft To Do task id when this commitment has been pushed. */
+  msTaskId?: string | null;
 }
 
 export type SourceKind = "thread" | "chat" | "meeting" | "event" | "manual";
@@ -333,7 +337,7 @@ export interface FollowUp {
 }
 
 export interface LlmStatus {
-  provider: "openai" | "anthropic" | "mock";
+  provider: "openrouter" | "mock";
   model: string | null;
   configured: boolean;
 }

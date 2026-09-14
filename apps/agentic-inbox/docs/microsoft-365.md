@@ -30,6 +30,7 @@ provided a tenant admin has granted consent for the three admin-only scopes belo
 | `OnlineMeetingTranscript.Read.All` | meeting transcripts | **yes** |
 | `OnlineMeetingRecording.Read.All` | meeting recordings | **yes** |
 | `People.Read` | people ranking | no |
+| `Tasks.ReadWrite` | push commitments to Microsoft To Do | no |
 
 Click **Grant admin consent for <tenant>**. That single click is what unlocks transcripts,
 recordings and channel messages for this delegated flow — no application-permission
@@ -62,8 +63,8 @@ starts in the background.
   matched to online meetings.
 - **Chats**: your 40 most recently active 1:1/group chats and their messages (delta where
   supported). Unread counts come from the chat viewpoint.
-- **Channels**: top-level messages in channels of teams you have joined (replies are not
-  fetched yet).
+- **Channels**: top-level messages in channels of teams you have joined, plus thread replies
+  (capped) stored in the same chat with `replyToId` pointing at the parent.
 - **Meetings**: for past events with a join link, the latest transcript (WebVTT → text) and
   the first recording (downloaded to `data/recordings/`, served at `/api/recordings/:id`).
   Transcripts are retried for 24 h after a meeting since Teams produces them asynchronously.
@@ -74,9 +75,47 @@ Replies use `POST /me/messages/{id}/reply` (keeps the Outlook conversation intac
 back to `sendMail`. Chat and channel messages use the corresponding `/messages` endpoints.
 Every send requires your confirmation in the UI and is written to the audit log.
 
+## Change notifications (webhooks)
+
+When `APP_BASE_URL` is a **public HTTPS** origin (ngrok, Caddy, a reverse-proxied host) the
+app creates Graph subscriptions after a Microsoft 365 account connects, and renews them on
+scheduler ticks (PATCH `expirationDateTime` when less than 12 hours remain; chats use a
+shorter window because Graph caps them at ~60 minutes).
+
+Microsoft POSTs to `{APP_BASE_URL}/api/webhooks/graph`:
+
+- Validation handshake: `?validationToken=...` → **200** `text/plain` with the token as the body.
+- Notifications: JSON `{ value: [...] }` → **202**, `clientState` is checked, then a
+  2-second-debounced `syncAccount` for the matching account.
+
+`http://localhost` and `127.0.0.1` stay **poll-only** — Graph cannot deliver to loopback.
+Optional `GRAPH_WEBHOOK_SECRET` sets the subscription `clientState`; otherwise a secret is
+generated and stored in settings.
+
+Inbox mail, calendar events, and (when the tenant allows it) chats are subscribed.
+Org-wide channel `/teams/getAllMessages` is **not** — that needs application permissions.
+
+## Microsoft To Do (commitments)
+
+From the Commitments view, an open item you owe can be pushed to Microsoft To Do. Completing
+it in-app marks the linked To Do task completed. Re-consent after adding `Tasks.ReadWrite`
+if the account was connected before that scope existed.
+
+Graph calls (delegated, `Tasks.ReadWrite`):
+
+- `GET /me/todo/lists` — find a list named **Agentic Inbox**
+- `POST /me/todo/lists` `{ displayName: "Agentic Inbox" }` — create it when missing
+- `POST /me/todo/lists/{listId}/tasks` `{ title, dueDateTime?: { dateTime, timeZone: "UTC" }, body?: { content, contentType: "text" } }`
+- `PATCH /me/todo/lists/{listId}/tasks/{taskId}` `{ status: "completed" }` when the commitment is marked done
+
+Optional Planner: set `MS_PLANNER_PLAN_ID` to also `POST /planner/tasks` `{ planId, title, dueDateTime? }`.
+Planner needs a plan id and typically `Group.ReadWrite.All`; failures are logged and do not
+block the To Do task. Pulling tasks back from To Do is not implemented.
+
 ## Troubleshooting
 
 - `AADSTS65001` / consent errors → admin consent has not been granted for the admin-only scopes.
 - `403` on `/transcripts` or `/recordings` → the transcript/recording scopes are missing consent, or the meeting was not transcribed/recorded.
 - Transcripts empty right after a meeting → normal; the app retries on the next sync.
 - Throttling (`429`) → the client honours `Retry-After`; lower `SYNC_INTERVAL_MINUTES` only if you need it.
+- `403` on `/me/todo/lists` → add `Tasks.ReadWrite` and reconnect the Microsoft 365 account (re-consent).

@@ -20,6 +20,7 @@ import { llmStatus, runAgent } from "../agent/index.ts";
 import { agentStream, broadcast, sseResponse } from "./events.ts";
 import { authRoutes } from "./auth.ts";
 import { featureRoutes } from "./features.ts";
+import { handleGraphWebhook } from "../webhooks/graph.ts";
 import { badRequest, h, notFound, num, ok, query, readJson, spaceParam } from "./util.ts";
 
 type P<T extends string> = BunRequest<T>;
@@ -27,6 +28,8 @@ type P<T extends string> = BunRequest<T>;
 export const routes = {
   ...authRoutes,
   ...featureRoutes,
+  // Raw handler: Graph validation handshake must be 200 text/plain, not JSON.
+  "/api/webhooks/graph": { POST: (req: Request) => handleGraphWebhook(req) },
   "/api/health": h(() => ok({ ok: true })),
 
   "/api/status": h(() => {
@@ -138,9 +141,9 @@ export const routes = {
   },
   "/api/chats/:id/send": {
     POST: h(async (req: P<"/api/chats/:id/send">) => {
-      const body = await readJson<{ body: string; actor?: "user" | "agent" }>(req);
+      const body = await readJson<{ body: string; actor?: "user" | "agent"; replyToId?: string | null }>(req);
       if (!body.body?.trim()) badRequest("Empty message");
-      return ok(await sendChat(req.params.id, body.body.trim(), body.actor === "agent" ? "agent" : "user"));
+      return ok(await sendChat(req.params.id, body.body.trim(), body.actor === "agent" ? "agent" : "user", body.replyToId ?? null));
     }),
   },
 

@@ -1,14 +1,15 @@
 import type { RadarItem, Space, SourceRef } from "../../shared/types.ts";
 import { senderName } from "../../shared/types.ts";
 import { api, spaceQuery } from "../api/client.ts";
+import { sourceLabel, t } from "../i18n.ts";
 import { initials, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
 
 function age(ms: number): string {
   const h = ms / 3_600_000;
-  if (h < 1) return `${Math.round(ms / 60_000)}m`;
-  if (h < 48) return `${Math.round(h)}h`;
-  return `${Math.round(h / 24)}d`;
+  if (h < 1) return t("time.agoMinutes", { n: Math.round(ms / 60_000) });
+  if (h < 48) return t("time.agoHours", { n: Math.round(h) });
+  return t("time.agoDays", { n: Math.round(h / 24) });
 }
 
 function ageClass(ms: number): string {
@@ -49,9 +50,9 @@ export function RadarView({
             <div className="card-top">
               <span className="avatar avatar-small">{initials(senderName(i.counterpart))}</span>
               <strong>{senderName(i.counterpart)}</strong>
-              {i.vip && <span className="pill pill-warn">★ VIP</span>}
+              {i.vip && <span className="pill pill-warn">★ {t("common.vip")}</span>}
               <span className="pill">{age(i.ageMs)}</span>
-              <span className="pill pill-agent">{i.source.kind}</span>
+              <span className="pill pill-agent">{sourceLabel(i.source.kind)}</span>
               {spaceId === null && <SpaceBadge spaces={spaces} spaceId={i.spaceId} />}
             </div>
             <div className="card-subject">{i.source.label}</div>
@@ -64,7 +65,7 @@ export function RadarView({
                 {action}
               </button>
               <button className="btn btn-small btn-ghost" onClick={() => onOpenSource(i.source)}>
-                Open
+                {t("common.open")}
               </button>
             </div>
           </article>
@@ -76,14 +77,14 @@ export function RadarView({
   return (
     <div className="feature">
       <div className="feature-bar">
-        <span className="muted small">Unanswered asks in both directions. Bars fill over 72 hours; VIPs float to the top.</span>
+        <span className="muted small">{t("radar.hint")}</span>
         <button className="btn btn-small" onClick={radar.reload}>
-          Refresh
+          {t("common.refresh")}
         </button>
       </div>
       <div className="split split-2 split-even">
-        {column("Waiting on you", me, "Inbox debt: zero.", "Reply with suggestion")}
-        {column("You're waiting on", them, "You're not blocked on anyone.", "Nudge")}
+        {column(t("radar.waitingOnYou"), me, t("radar.emptyMine"), t("radar.replySuggest"))}
+        {column(t("radar.waitingOnThem"), them, t("radar.emptyTheirs"), t("common.nudge"))}
       </div>
     </div>
   );

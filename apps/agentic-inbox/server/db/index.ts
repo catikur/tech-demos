@@ -5,11 +5,40 @@ import { SCHEMA } from "./schema.ts";
 
 let db: Database | null = null;
 
+function columnNames(database: Database, table: string): Set<string> {
+  return new Set((database.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name));
+}
+
+/** Additive schema for databases that already ran an older SCHEMA. */
+function migrate(database: Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS graph_subscriptions (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL,
+      resource TEXT NOT NULL,
+      client_state TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_graph_subscriptions_account ON graph_subscriptions(account_id);
+    CREATE INDEX IF NOT EXISTS idx_graph_subscriptions_expires ON graph_subscriptions(expires_at);
+  `);
+  const chatCols = columnNames(database, "chat_messages");
+  if (chatCols.size > 0 && !chatCols.has("reply_to_id")) {
+    database.exec("ALTER TABLE chat_messages ADD COLUMN reply_to_id TEXT");
+  }
+  const commitmentCols = columnNames(database, "commitments");
+  if (commitmentCols.size > 0) {
+    if (!commitmentCols.has("ms_task_id")) database.exec("ALTER TABLE commitments ADD COLUMN ms_task_id TEXT");
+    if (!commitmentCols.has("ms_list_id")) database.exec("ALTER TABLE commitments ADD COLUMN ms_list_id TEXT");
+  }
+}
+
 export function getDb(): Database {
   if (db) return db;
   const path = process.env.DB_PATH ?? join(env.dataDir, "inbox.sqlite");
   db = new Database(path, { create: true });
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 
@@ -17,6 +46,7 @@ export function getDb(): Database {
 export function openMemoryDb(): Database {
   db = new Database(":memory:");
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 
@@ -27,12 +57,14 @@ export function newId(prefix = ""): string {
 
 export const json = {
   parse<T>(raw: unknown, fallback: T): T {
-    if (typeof raw !== "string" || raw.length === 0) return fallback;
-    try {
-      return JSON.parse(raw) as T;
-    } catch {
-      return fallback;
+    if (typeof raw === "string" && raw.length > 0) {
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return fallback;
+      }
     }
+    return fallback;
   },
   stringify(value: unknown): string {
     return JSON.stringify(value ?? null);

@@ -94,14 +94,19 @@ export async function sendNewMail(
   return threads.get(threadId)!;
 }
 
-export async function sendChat(chatId: string, body: string, actor: "user" | "agent"): Promise<ChatMessage> {
+export async function sendChat(
+  chatId: string,
+  body: string,
+  actor: "user" | "agent",
+  replyToId?: string | null,
+): Promise<ChatMessage> {
   const chat = chats.get(chatId);
   if (!chat) throw new Error("Chat not found");
   const account = accounts.get(chat.accountId);
   if (!account) throw new Error("Account not found");
   const connector = connectorFor(account);
   if (!connector.sendChatMessage) throw new Error(`${account.provider} cannot send chat messages`);
-  const result = await connector.sendChatMessage(account, { chatId, body });
+  const result = await connector.sendChatMessage(account, { chatId, body, replyToMessageId: replyToId ?? null });
   const message: ChatMessage & { externalId: string | null } = {
     id: newId("cm"),
     externalId: result.externalId,
@@ -111,6 +116,7 @@ export async function sendChat(chatId: string, body: string, actor: "user" | "ag
     at: Date.now(),
     isMine: true,
     mentionsMe: false,
+    replyToId: replyToId ?? null,
   };
   chats.upsertMessage(message);
   chats.markRead(chatId);

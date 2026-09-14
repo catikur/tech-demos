@@ -27,6 +27,8 @@ export interface SendMailInput {
 export interface SendChatInput {
   chatId: string;
   body: string;
+  /** Local chat message id to reply to (Teams channel threads). */
+  replyToMessageId?: string | null;
 }
 
 /**

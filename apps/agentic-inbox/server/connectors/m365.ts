@@ -293,13 +293,30 @@ export class M365Connector implements Connector {
           lastAt: lastAt || Date.now(),
           unreadCount: unread,
         });
-        for (const m of msgs) {
+        const pending: { line: ChatMessage & { externalId: string }; graphReplyToId: string | null }[] = [];
+        const absorb = (m: any, fallbackParentGraphId?: string) => {
           const line = this.toChatMessage(account, me, chatId, m, []);
-          if (!line) continue;
+          if (!line) return null;
           chats.upsertMessage(line);
+          pending.push({ line, graphReplyToId: m.replyToId ?? fallbackParentGraphId ?? null });
           stats.chatMessages++;
           lastAt = Math.max(lastAt, line.at);
           if (!line.isMine) unread++;
+          return line;
+        };
+        const topLevel: any[] = [];
+        for (const m of msgs) {
+          const line = absorb(m);
+          if (line && !m.replyToId) topLevel.push(m);
+        }
+        const recent = [...topLevel].sort((a, b) => ts(b.createdDateTime) - ts(a.createdDateTime)).slice(0, 40);
+        for (const parent of recent) {
+          const replies = await this.channelReplies(g, team.id, ch.id, parent.id);
+          for (const r of replies.slice(0, 50)) absorb(r, parent.id);
+        }
+        for (const { line, graphReplyToId } of pending) {
+          if (!graphReplyToId) continue;
+          chats.upsertMessage({ ...line, replyToId: localId("cm", account.id, graphReplyToId) });
         }
         chats.upsert({
           id: chatId,
@@ -359,7 +376,20 @@ export class M365Connector implements Connector {
       at: ts(m.createdDateTime),
       isMine: user.id === me.id,
       mentionsMe,
+      replyToId: null,
     };
+  }
+
+  /** Channel thread replies live on a nested Graph collection — not on the messages delta. */
+  private async channelReplies(g: GraphLike, teamId: string, channelId: string, messageId: string): Promise<any[]> {
+    try {
+      const { items } = await g.collect<any>(`/teams/${teamId}/channels/${channelId}/messages/${messageId}/replies`, {
+        maxPages: 2,
+      });
+      return items;
+    } catch {
+      return [];
+    }
   }
 
   /* ---------------- meetings: transcripts & recordings ---------------- */
@@ -469,12 +499,16 @@ export class M365Connector implements Connector {
     const chat = chats.get(input.chatId);
     if (!chat) throw new Error("Chat not found");
     const external = chatExternalId(input.chatId);
-    const path = external.startsWith("channel:")
-      ? (() => {
-          const [, teamId, channelId] = external.split(":");
-          return `/teams/${teamId}/channels/${channelId}/messages`;
-        })()
-      : `/chats/${external}/messages`;
+    let path: string;
+    if (external.startsWith("channel:")) {
+      const [, teamId, channelId] = external.split(":");
+      const parentExternal = input.replyToMessageId ? chats.messageExternalId(input.replyToMessageId) : null;
+      path = parentExternal
+        ? `/teams/${teamId}/channels/${channelId}/messages/${parentExternal}/replies`
+        : `/teams/${teamId}/channels/${channelId}/messages`;
+    } else {
+      path = `/chats/${external}/messages`;
+    }
     const res = await g.request<any>(path, { method: "POST", body: JSON.stringify({ body: { contentType: "text", content: input.body } }) });
     return { externalId: res?.id ?? null };
   }
