@@ -359,3 +359,26 @@ export function senderEmail(from: string): string {
 export function formatAddress(name: string, email: string): string {
   return name && name !== email ? `${name} <${email}>` : email;
 }
+
+/** True when `date` falls inside the space's quiet window (handles overnight ranges). */
+export function inQuietHours(space: Pick<Space, "quietHours">, date: Date = new Date()): boolean {
+  if (!space.quietHours) return false;
+  const [from, to] = space.quietHours;
+  const h = date.getHours() + date.getMinutes() / 60;
+  if (from === to) return false;
+  return from < to ? h >= from && h < to : h >= from || h < to;
+}
+
+/** Phrases that count as an explicit request to look across Work and Personal. */
+export const CROSS_SPACE_PATTERNS = [
+  /\b(all|both|every)\s+(my\s+)?spaces?\b/i,
+  /\bacross\s+spaces\b/i,
+  /\bwork\s+and\s+personal\b/i,
+  /\bpersonal\s+and\s+work\b/i,
+  /\b(her\s+iki|tüm)\s+alan/i,
+  /\biş\s+ve\s+kişisel\b/i,
+];
+
+export function requestsCrossSpace(input: string): boolean {
+  return CROSS_SPACE_PATTERNS.some((re) => re.test(input));
+}

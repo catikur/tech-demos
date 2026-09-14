@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Account, AppStatus } from "../../shared/types.ts";
 import { api } from "../api/client.ts";
 import { fmtDateTime } from "../state.ts";
+import { SpaceRules } from "../components/SpaceRules.tsx";
 
 const PROVIDER_LABEL: Record<Account["provider"], string> = {
   demo: "Demo",
@@ -30,6 +31,17 @@ export function SettingsView({ status, onChanged }: { status: AppStatus | null; 
   return (
     <div className="pane pane-single scroll">
       <div className="settings">
+        <h2>Spaces</h2>
+        <p className="muted">
+          Work and Personal are hard boundaries: the agent, digests and notifications are scoped to the active space. Only an explicit request
+          (“across both spaces”) crosses the line, and that is written to the audit log.
+        </p>
+        <div className="form-grid">
+          {status.spaces.map((s) => (
+            <SpaceRules key={s.id} space={s} onSaved={onChanged} />
+          ))}
+        </div>
+
         <h2>Accounts</h2>
         <p className="muted">
           Each account belongs to exactly one space. Move accounts between Work and Personal; the agent never mixes spaces unless you ask it to.

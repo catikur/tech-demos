@@ -1,4 +1,5 @@
 import type { Space } from "../../shared/types.ts";
+import { inQuietHours } from "../../shared/types.ts";
 
 export function SpaceSwitcher({
   spaces,
@@ -30,6 +31,11 @@ export function SpaceSwitcher({
         >
           <span className="space-dot" />
           {s.name}
+          {inQuietHours(s) && (
+            <span className="space-quiet" title="Quiet hours — notifications muted">
+              🌙
+            </span>
+          )}
         </button>
       ))}
     </div>

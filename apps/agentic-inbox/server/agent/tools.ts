@@ -3,6 +3,7 @@ import type { AgentContext, ThreadSummary } from "../../shared/types.ts";
 import { senderName } from "../../shared/types.ts";
 import { accounts, chats, events, spaces, threads } from "../db/repo.ts";
 import { templateDraft } from "./drafts.ts";
+import { inScope, outOfScopeMessage } from "./policy.ts";
 
 /**
  * The agent's tool belt. Every tool is scoped by `ctx.spaceId`; when it is
@@ -66,8 +67,13 @@ export function when(at: number): string {
   });
 }
 
-export function threadLine(t: ThreadSummary): string {
-  return `${t.unread ? "● " : "  "}[${t.id}] (${t.category}) "${t.subject}" — ${senderName(t.lastFrom)}, ${ago(t.lastAt)}`;
+export function threadLine(t: ThreadSummary, ctx?: AgentContext): string {
+  const space = ctx && ctx.spaceId === null ? `{${spaces.get(t.spaceId)?.name ?? t.spaceId}} ` : "";
+  return `${t.unread ? "● " : "  "}${space}[${t.id}] (${t.category}) "${t.subject}" — ${senderName(t.lastFrom)}, ${ago(t.lastAt)}`;
+}
+
+export function spaceTag(ctx: AgentContext, spaceId: string): string {
+  return ctx.spaceId === null ? `{${spaces.get(spaceId)?.name ?? spaceId}} ` : "";
 }
 
 /** Wrap third-party text so the model treats it as data, not instructions. */
@@ -93,7 +99,7 @@ registerTool({
     if (input.unreadOnly) list = list.filter((t) => t.unread);
     return {
       output: list.length
-        ? `${list.length} thread(s) in ${spaceName(ctx)}:\n${list.map(threadLine).join("\n")}`
+        ? `${list.length} thread(s) in ${spaceName(ctx)}:\n${list.map((t) => threadLine(t, ctx)).join("\n")}`
         : `No threads in ${spaceName(ctx)}.`,
     };
   },
@@ -107,7 +113,7 @@ registerTool({
     const list = threads.list(ctx.spaceId, { query: input.query, limit: 15 });
     return {
       output: list.length
-        ? `${list.length} match(es) for "${input.query}":\n${list.map(threadLine).join("\n")}`
+        ? `${list.length} match(es) for "${input.query}":\n${list.map((t) => threadLine(t, ctx)).join("\n")}`
         : `No threads match "${input.query}".`,
     };
   },
@@ -117,9 +123,10 @@ registerTool({
   name: "read_thread",
   description: "Read the full messages of one mail thread by id.",
   schema: z.object({ threadId: z.string() }),
-  async run(input) {
+  async run(input, ctx) {
     const t = threads.get(input.threadId);
     if (!t) return { output: `Thread ${input.threadId} not found.` };
+    if (!inScope(ctx, t.spaceId)) return { output: outOfScopeMessage(ctx) };
     const body = t.messages
       .map((m) => `From: ${m.from}\nAt: ${when(m.at)}\n${m.body}`)
       .join("\n\n---\n\n");
@@ -135,9 +142,10 @@ registerTool({
     threadId: z.string(),
     body: z.string().optional().describe("Reply text. If omitted, a template based on the thread is used."),
   }),
-  async run(input) {
+  async run(input, ctx) {
     const t = threads.get(input.threadId);
     if (!t) return { output: `Thread ${input.threadId} not found.` };
+    if (!inScope(ctx, t.spaceId)) return { output: outOfScopeMessage(ctx) };
     const account = accounts.get(t.accountId);
     const space = spaces.get(t.spaceId);
     const body = input.body?.trim() || templateDraft(t, account?.email ?? "", space);
@@ -166,7 +174,7 @@ registerTool({
         ? list
             .map(
               (e) =>
-                `[${e.id}] ${when(e.start)} — "${e.title}" (${e.attendees.length} attendees${e.meetingId ? ", has meeting record" : ""}${e.responseStatus === "none" ? ", NOT RESPONDED" : ""})`,
+                `${spaceTag(ctx, e.spaceId)}[${e.id}] ${when(e.start)} — "${e.title}" (${e.attendees.length} attendees${e.meetingId ? ", has meeting record" : ""}${e.responseStatus === "none" ? ", NOT RESPONDED" : ""})`,
             )
             .join("\n")
         : `No events in ${spaceName(ctx)} for that window.`,
@@ -183,7 +191,7 @@ registerTool({
     return {
       output: list.length
         ? list
-            .map((c) => `[${c.id}] (${c.kind}) "${c.title}" — ${c.unreadCount} unread, last ${ago(c.lastAt)}`)
+            .map((c) => `${spaceTag(ctx, c.spaceId)}[${c.id}] (${c.kind}) "${c.title}" — ${c.unreadCount} unread, last ${ago(c.lastAt)}`)
             .join("\n")
         : `No chats in ${spaceName(ctx)} (this space has no Teams-capable account).`,
     };
@@ -213,9 +221,10 @@ registerTool({
   name: "read_chat",
   description: "Read the recent messages of one chat or channel by id.",
   schema: z.object({ chatId: z.string(), limit: z.number().int().min(1).max(100).optional() }),
-  async run(input) {
+  async run(input, ctx) {
     const c = chats.get(input.chatId);
     if (!c) return { output: `Chat ${input.chatId} not found.` };
+    if (!inScope(ctx, c.spaceId)) return { output: outOfScopeMessage(ctx) };
     const msgs = chats.messages(c.id).slice(-(input.limit ?? 30));
     return {
       output: `${c.kind} "${c.title}" (${c.members.length} members)\n${external(
@@ -229,9 +238,10 @@ registerTool({
   name: "draft_chat_message",
   description: "Prepare a Teams chat message for a chat id. The user must confirm before it is sent.",
   schema: z.object({ chatId: z.string(), body: z.string().min(1) }),
-  async run(input) {
+  async run(input, ctx) {
     const c = chats.get(input.chatId);
     if (!c) return { output: `Chat ${input.chatId} not found.` };
+    if (!inScope(ctx, c.spaceId)) return { output: outOfScopeMessage(ctx) };
     return {
       output: `Chat message drafted for "${c.title}". Awaiting user confirmation.`,
       draft: { target: { kind: "chat", id: c.id }, subject: c.title, body: input.body },
