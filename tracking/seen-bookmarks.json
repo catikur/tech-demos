@@ -1,15 +1,5 @@
 {
-  "proposed": [
-    {
-      "id": "2098941338297458746",
-      "title": "Agentic Inbox (Cloudflare) — slice from viral OSS list",
-      "url": "https://x.com/shanyanggm/status/2098941338297458746",
-      "github": "https://github.com/cloudflare/agentic-inbox",
-      "date": "2026-09-14",
-      "source": "owner-pick-from-viral-list",
-      "slug": "agentic-inbox"
-    }
-  ],
+  "proposed": [],
   "skipped": [
     {
       "id": "2098941338297458746-hyperframes",
@@ -31,6 +21,16 @@
       "date": "2026-09-12",
       "pr": "https://github.com/catikur/tech-demos/pull/1",
       "source": "trial-scout"
+    },
+    {
+      "id": "2098941338297458746",
+      "title": "Agentic Inbox (Cloudflare) — slice from viral OSS list",
+      "url": "https://x.com/shanyanggm/status/2098941338297458746",
+      "github": "https://github.com/cloudflare/agentic-inbox",
+      "date": "2026-09-14",
+      "pr": "https://github.com/catikur/tech-demos/pull/2",
+      "source": "owner-pick-from-viral-list",
+      "slug": "agentic-inbox"
     }
   ]
 }
