@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { env } from "../env.ts";
+import { llmConfig } from "./config.ts";
 
 /**
  * OpenRouter adapter (`/chat/completions`, OpenAI-compatible). Plain `fetch`; no SDKs.
@@ -147,7 +147,7 @@ export function resetProviderCache(): void {
 
 export function selectProvider(): LlmProvider | null {
   if (cached !== undefined) return cached;
-  const { provider, apiKey, baseUrl, model, siteUrl, appName } = env.llm;
+  const { provider, apiKey, baseUrl, model, siteUrl, appName } = llmConfig();
   if (provider === "mock" || !apiKey) {
     cached = null;
   } else {

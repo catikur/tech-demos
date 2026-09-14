@@ -4,6 +4,7 @@ import { api, spaceQuery } from "../api/client.ts";
 import { spaceLabel, t } from "../i18n.ts";
 import { fmtDateTime, useData } from "../state.ts";
 import { SpaceRules } from "../components/SpaceRules.tsx";
+import { LlmSettings } from "../components/LlmSettings.tsx";
 
 function providerLabel(provider: Account["provider"]): string {
   return t(`provider.${provider}`);
@@ -133,6 +134,7 @@ export function SettingsView({ status, onChanged }: { status: AppStatus | null; 
           )}
           {!status.llm.configured && <span className="muted">{t("settings.llmFallback")}</span>}
         </p>
+        <LlmSettings onChanged={onChanged} />
 
         <MemoryPanel spaces={status.spaces} />
       </div>

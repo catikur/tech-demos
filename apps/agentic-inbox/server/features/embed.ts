@@ -1,5 +1,5 @@
 import type { Account } from "../../shared/types.ts";
-import { env } from "../env.ts";
+import { llmConfig } from "../agent/config.ts";
 import { chats, chunks, meetings, threads } from "../db/repo.ts";
 import { onPostSync } from "../sync/engine.ts";
 import { contentHash, tokens, truncate } from "./text.ts";
@@ -48,7 +48,7 @@ export function cosine(a: ArrayLike<number>, b: ArrayLike<number>): number {
 }
 
 async function openRouterEmbed(texts: string[]): Promise<number[][] | null> {
-  const { provider, apiKey, baseUrl, siteUrl, appName, embedModel } = env.llm;
+  const { provider, apiKey, baseUrl, siteUrl, appName, embedModel } = llmConfig();
   if (!apiKey || provider === "mock") return null;
   const BATCH = 32;
   const out: number[][] = [];

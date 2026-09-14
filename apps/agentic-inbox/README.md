@@ -33,7 +33,7 @@ Requires [Bun](https://bun.sh) ≥ 1.2.
 |---|---|---|
 | Microsoft 365 — Outlook, Calendar, Teams chats/channels, meeting transcripts + recordings | [docs/microsoft-365.md](docs/microsoft-365.md) | `MS_CLIENT_ID`, `MS_TENANT_ID`, `MS_CLIENT_SECRET` (optional) |
 | Gmail + Google Calendar | [docs/gmail.md](docs/gmail.md) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
-| Agent model (OpenRouter) | [openrouter.ai](https://openrouter.ai) | `OPENROUTER_API_KEY`, optional `OPENROUTER_MODEL` / `OPENROUTER_BASE_URL` |
+| Agent model (OpenRouter) | [openrouter.ai](https://openrouter.ai) | `OPENROUTER_API_KEY`, optional `OPENROUTER_MODEL` / `OPENROUTER_BASE_URL` — or paste the key and pick a model from the live catalog in **Settings → Agent** (stored encrypted, overrides `.env`) |
 
 Copy [`.env.example`](.env.example) to `.env`, fill what you need, restart, then use
 **Settings → hesap bağla** under the space the account belongs to. Accounts can be

@@ -1049,6 +1049,9 @@ export const settings = {
       .query("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
       .run(key, value);
   },
+  remove(key: string): void {
+    getDb().query("DELETE FROM settings WHERE key = ?").run(key);
+  },
 };
 
 export const oauthStates = {
