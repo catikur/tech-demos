@@ -2,6 +2,7 @@ import type { BunRequest } from "bun";
 import type { Commitment } from "../../shared/types.ts";
 import { audit, commitments, events, meetings, notes, people, spaces, topics } from "../db/repo.ts";
 import { extractForSpace } from "../features/commitments.ts";
+import { completeTodoTask, pushCommitmentToTodo } from "../features/ms-tasks.ts";
 import { briefForEvent } from "../features/briefs.ts";
 import { buildFollowUp, followUpRecipients } from "../features/followup.ts";
 import { buildCatchUp, lastSeen, markSeen } from "../features/catchup.ts";
@@ -50,12 +51,32 @@ export const featureRoutes = {
       return ok({ inserted });
     }),
   },
+  "/api/commitments/:id/todo": {
+    POST: h(async (req: P<"/api/commitments/:id/todo">) => {
+      const c = commitments.get(req.params.id) ?? notFound("Commitment not found");
+      try {
+        const ids = await pushCommitmentToTodo(c.id);
+        audit.log({ spaceId: c.spaceId, actor: "user", action: "commitment.todo", detail: `${c.text} → ${ids.taskId}` });
+        broadcast({ type: "data", entity: "commitments", spaceId: c.spaceId });
+        return ok({ ...commitments.get(c.id), ...ids });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/microsoft 365/i.test(msg)) badRequest(msg);
+        throw err;
+      }
+    }),
+  },
   "/api/commitments/:id": {
     PATCH: h(async (req: P<"/api/commitments/:id">) => {
       const c = commitments.get(req.params.id) ?? notFound("Commitment not found");
       const body = await readJson<{ status: Commitment["status"] }>(req);
       if (!["open", "done", "dropped"].includes(body.status)) badRequest("Invalid status");
       commitments.setStatus(c.id, body.status);
+      if (body.status === "done") {
+        await completeTodoTask(c.id).catch((err) =>
+          console.error(`[todo] complete ${c.id}:`, err instanceof Error ? err.message : err),
+        );
+      }
       audit.log({ spaceId: c.spaceId, actor: "user", action: `commitment.${body.status}`, detail: c.text });
       broadcast({ type: "data", entity: "commitments", spaceId: c.spaceId });
       return ok(commitments.get(c.id));

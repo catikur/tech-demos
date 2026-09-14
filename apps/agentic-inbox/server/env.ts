@@ -28,6 +28,8 @@ export const env = {
     clientId: process.env.MS_CLIENT_ID ?? null,
     clientSecret: process.env.MS_CLIENT_SECRET ?? null,
     tenantId: process.env.MS_TENANT_ID ?? "common",
+    /** Optional Planner plan id — when set, a matching Planner task is created alongside To Do. */
+    plannerPlanId: process.env.MS_PLANNER_PLAN_ID ?? null,
   },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID ?? null,
