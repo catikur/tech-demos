@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Thread } from "../../shared/types.ts";
 import { senderEmail, senderName } from "../../shared/types.ts";
+import { t } from "../i18n.ts";
 import { fmtDateTime } from "../state.ts";
 import { PersonChip } from "./PersonChip.tsx";
 
@@ -41,8 +42,8 @@ export function ThreadView({
       <section className="pane pane-detail pane-empty">
         <div className="empty-state">
           <div className="empty-icon">✉️</div>
-          <p>Select a thread,</p>
-          <p>or ask the Email Agent to “summarize my inbox”.</p>
+          <p>{t("inbox.select")}</p>
+          <p>{t("inbox.selectHint")}</p>
         </div>
       </section>
     );
@@ -69,14 +70,14 @@ export function ThreadView({
     <section className="pane pane-detail">
       <div className="pane-header">
         <h2 className="detail-title">{thread.subject}</h2>
-        <span className="badge badge-soft">{thread.participants.length} participants</span>
+        <span className="badge badge-soft">{t("inbox.participants", { n: thread.participants.length })}</span>
       </div>
       {!counterpart.isMine && <PersonChip spaceId={thread.spaceId} email={senderEmail(counterpart.from)} />}
       <div className="messages" ref={scrollRef}>
         {thread.messages.map((m) => (
           <article key={m.id} className={`message ${m.isMine ? "message-mine" : ""}`}>
             <header className="message-header">
-              <span className="message-from">{m.isMine ? "You" : senderName(m.from)}</span>
+              <span className="message-from">{m.isMine ? t("common.you") : senderName(m.from)}</span>
               <span className="message-addr">{senderEmail(m.from)}</span>
               <span className="message-time">{fmtDateTime(m.at)}</span>
             </header>
@@ -88,17 +89,17 @@ export function ThreadView({
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={`Reply to ${senderName(counterpart.from)}… (or ask the agent to draft one)`}
+          placeholder={t("inbox.replyPlaceholder", { name: senderName(counterpart.from) })}
           rows={4}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void send();
           }}
         />
         <div className="composer-actions">
-          {state === "sent" && <span className="sent-note">✓ Sent</span>}
+          {state === "sent" && <span className="sent-note">✓ {t("common.sent")}</span>}
           {state === "error" && <span className="error-note">{error}</span>}
           <button className="btn btn-primary" onClick={() => void send()} disabled={!draft.trim() || state === "sending"}>
-            {state === "sending" ? "Sending…" : "Send reply"}
+            {state === "sending" ? t("common.sending") : t("inbox.sendReply")}
           </button>
         </div>
       </div>

@@ -2,16 +2,17 @@ import { useState } from "react";
 import type { Commitment, Space, SourceRef } from "../../shared/types.ts";
 import { senderName } from "../../shared/types.ts";
 import { api, spaceQuery } from "../api/client.ts";
+import { sourceLabel, t } from "../i18n.ts";
 import { fmtDateTime, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
 
 function dueLabel(dueAt: number | null): { text: string; cls: string } {
-  if (!dueAt) return { text: "no due date", cls: "" };
+  if (!dueAt) return { text: t("commitments.noDue"), cls: "" };
   const diff = dueAt - Date.now();
   const days = Math.round(diff / 86_400_000);
-  if (diff < 0) return { text: `overdue ${Math.abs(days) || 1}d`, cls: "pill-danger" };
-  if (days <= 1) return { text: "due today/tomorrow", cls: "pill-warn" };
-  return { text: `due in ${days}d`, cls: "pill-ok" };
+  if (diff < 0) return { text: t("commitments.overdue", { n: Math.abs(days) || 1 }), cls: "pill-danger" };
+  if (days <= 1) return { text: t("commitments.dueSoon"), cls: "pill-warn" };
+  return { text: t("commitments.dueIn", { n: days }), cls: "pill-ok" };
 }
 
 export function CommitmentsView({
@@ -81,20 +82,20 @@ export function CommitmentsView({
               <p className="card-text">{c.text}</p>
               <div className="card-meta">
                 <button className="link-btn" onClick={() => onOpenSource(c.source)}>
-                  from {c.source.kind}: {c.source.label}
+                  {t("commitments.from", { kind: sourceLabel(c.source.kind), label: c.source.label })}
                 </button>
                 <span className="muted small">
-                  {c.dueAt ? fmtDateTime(c.dueAt) : ""} · confidence {Math.round(c.confidence * 100)}%
+                  {c.dueAt ? fmtDateTime(c.dueAt) : ""} · {t("commitments.confidence", { n: Math.round(c.confidence * 100) })}
                 </span>
               </div>
               <div className="card-actions">
                 {c.status === "open" ? (
                   <>
                     <button className="btn btn-small" onClick={() => void setState(c, "done")}>
-                      Done
+                      {t("commitments.markDone")}
                     </button>
                     <button className="btn btn-small btn-ghost" onClick={() => void setState(c, "dropped")}>
-                      Drop
+                      {t("commitments.drop")}
                     </button>
                     {c.direction === "owed_by_me" && !c.msTaskId && (
                       <button
@@ -112,17 +113,20 @@ export function CommitmentsView({
                         onClick={() =>
                           onOpenSource(
                             c.source,
-                            `Hi ${(c.counterpartName ?? senderName(c.counterpart)).split(" ")[0]},\n\nQuick nudge on this: "${c.text}" — any update? Happy to help if something is blocking.\n\nThanks!`,
+                            t("commitments.nudgeBody", {
+                              name: (c.counterpartName ?? senderName(c.counterpart)).split(" ")[0],
+                              text: c.text,
+                            }),
                           )
                         }
                       >
-                        Nudge
+                        {t("common.nudge")}
                       </button>
                     )}
                   </>
                 ) : (
                   <button className="btn btn-small btn-ghost" onClick={() => void setState(c, "open")}>
-                    Reopen
+                    {t("commitments.reopen")}
                   </button>
                 )}
               </div>
@@ -139,18 +143,18 @@ export function CommitmentsView({
         <div className="seg">
           {(["open", "done", "dropped"] as const).map((s) => (
             <button key={s} className={`seg-btn ${status === s ? "is-active" : ""}`} onClick={() => setStatus(s)}>
-              {s}
+              {t(`commitments.${s}`)}
             </button>
           ))}
         </div>
-        <span className="muted small">Promises and asks extracted from mail, chats and transcripts — both directions.</span>
+        <span className="muted small">{t("commitments.hint")}</span>
         <button className="btn btn-small" disabled={busy} onClick={() => void extract()}>
-          {busy ? "Scanning…" : "Re-scan now"}
+          {busy ? t("commitments.scanning") : t("commitments.rescan")}
         </button>
       </div>
       <div className="split split-2 split-even">
-        {column("I owe", mine, "Nothing you owe anyone. Nice.")}
-        {column("Owed to me", theirs, "Nobody owes you anything right now.")}
+        {column(t("commitments.iOwe"), mine, t("commitments.emptyMine"))}
+        {column(t("commitments.owedToMe"), theirs, t("commitments.emptyTheirs"))}
       </div>
     </div>
   );

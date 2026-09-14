@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Notification, Space } from "../../shared/types.ts";
 import { api, spaceQuery } from "../api/client.ts";
+import { t } from "../i18n.ts";
 import { ago, useData } from "../state.ts";
 import { SpaceBadge } from "./SpaceSwitcher.tsx";
 
@@ -35,13 +36,13 @@ export function NotificationBell({ spaceId, spaces, onOpenLink }: { spaceId: str
 
   return (
     <div className="bell-wrap">
-      <button className={`icon-btn ${unread ? "has-unread" : ""}`} title="Notifications" onClick={() => setOpen((o) => !o)}>
+      <button className={`icon-btn ${unread ? "has-unread" : ""}`} title={t("notif.title")} onClick={() => setOpen((o) => !o)}>
         🔔{unread > 0 && <span className="bell-count">{unread}</span>}
       </button>
       {open && (
         <div className="drawer">
           <div className="drawer-head">
-            <strong>Notifications</strong>
+            <strong>{t("notif.title")}</strong>
             <button
               className="link-btn"
               onClick={async () => {
@@ -49,11 +50,11 @@ export function NotificationBell({ spaceId, spaces, onOpenLink }: { spaceId: str
                 list.reload();
               }}
             >
-              mark all read
+              {t("notif.markAll")}
             </button>
           </div>
           <div className="drawer-body">
-            {items.length === 0 && <div className="list-empty">Nothing yet. Briefs, digests and reminders land here.</div>}
+            {items.length === 0 && <div className="list-empty">{t("notif.empty")}</div>}
             {items.map((n) => (
               <button key={n.id} className={`notif ${n.read ? "" : "is-unread"}`} onClick={() => void openItem(n)}>
                 <span className="notif-icon">{KIND_ICON[n.kind]}</span>
@@ -61,7 +62,7 @@ export function NotificationBell({ spaceId, spaces, onOpenLink }: { spaceId: str
                   <span className="notif-title">{n.title}</span>
                   <span className="notif-body">{n.body}</span>
                   <span className="notif-meta">
-                    {ago(n.createdAt)} ago
+                    {t("time.agoSuffix", { rel: ago(n.createdAt) })}
                     {n.spaceId && spaceId === null && <SpaceBadge spaces={spaces} spaceId={n.spaceId} />}
                   </span>
                 </span>
