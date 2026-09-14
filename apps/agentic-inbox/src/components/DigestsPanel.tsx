@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Digest, Space } from "../../shared/types.ts";
 import { api, spaceQuery } from "../api/client.ts";
+import { t } from "../i18n.ts";
 import { fmtDateTime, useData } from "../state.ts";
 import { Markdown } from "./Markdown.tsx";
 import { SpaceBadge } from "./SpaceSwitcher.tsx";
@@ -32,25 +33,25 @@ export function DigestsPanel({ spaceId, spaces, focusId }: { spaceId: string | n
     <div className="split split-2">
       <section className="pane pane-list">
         <div className="pane-header">
-          <h2>Digests</h2>
+          <h2>{t("digests.title")}</h2>
           <div className="row-actions">
             <button className="btn btn-small" disabled={busy} onClick={() => void run("daily")}>
-              Run daily now
+              {t("digests.runDaily")}
             </button>
             <button className="btn btn-small btn-ghost" disabled={busy} onClick={() => void run("weekly")}>
-              Weekly
+              {t("digests.weekly")}
             </button>
           </div>
         </div>
         <ul className="thread-list">
-          {digests.length === 0 && <li className="list-empty">No digests yet. They are produced at each space's digest hour, or run one now.</li>}
+          {digests.length === 0 && <li className="list-empty">{t("digests.empty")}</li>}
           {digests.map((d) => (
             <li key={d.id}>
               <button className={`thread-item ${selected?.id === d.id ? "is-selected" : ""}`} onClick={() => setSelectedId(d.id)}>
                 <span className="avatar avatar-agent">▤</span>
                 <span className="thread-main">
                   <span className="thread-top">
-                    <span className="thread-sender">{d.period === "weekly" ? "Weekly" : "Daily"} digest</span>
+                    <span className="thread-sender">{d.period === "weekly" ? t("digests.weeklyItem") : t("digests.dailyItem")}</span>
                     <span className="thread-time">{fmtDateTime(d.createdAt)}</span>
                   </span>
                   <span className="thread-snippet">
@@ -71,7 +72,7 @@ export function DigestsPanel({ spaceId, spaces, focusId }: { spaceId: string | n
         {!selected ? (
           <div className="empty-state">
             <div className="empty-icon">▤</div>
-            <p>Select a digest.</p>
+            <p>{t("digests.select")}</p>
           </div>
         ) : (
           <div className="detail scroll">

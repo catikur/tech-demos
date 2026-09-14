@@ -1,19 +1,22 @@
 import { useState } from "react";
 import type { Account, AppStatus } from "../../shared/types.ts";
 import { api } from "../api/client.ts";
+import { spaceLabel, t } from "../i18n.ts";
 import { fmtDateTime } from "../state.ts";
 import { SpaceRules } from "../components/SpaceRules.tsx";
 
-const PROVIDER_LABEL: Record<Account["provider"], string> = {
-  demo: "Demo",
-  m365: "Microsoft 365",
-  gmail: "Gmail",
-};
+function providerLabel(provider: Account["provider"]): string {
+  return t(`provider.${provider}`);
+}
+
+function capabilityLabel(cap: string): string {
+  return t(`capability.${cap}`);
+}
 
 export function SettingsView({ status, onChanged }: { status: AppStatus | null; onChanged: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  if (!status) return <div className="pane pane-single">Loading…</div>;
+  if (!status) return <div className="pane pane-single">{t("common.loading")}</div>;
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
@@ -31,37 +34,32 @@ export function SettingsView({ status, onChanged }: { status: AppStatus | null; 
   return (
     <div className="pane pane-single scroll">
       <div className="settings">
-        <h2>Spaces</h2>
-        <p className="muted">
-          Work and Personal are hard boundaries: the agent, digests and notifications are scoped to the active space. Only an explicit request
-          (“across both spaces”) crosses the line, and that is written to the audit log.
-        </p>
+        <h2>{t("settings.spaces")}</h2>
+        <p className="muted">{t("settings.spacesHint")}</p>
         <div className="form-grid">
           {status.spaces.map((s) => (
             <SpaceRules key={s.id} space={s} onSaved={onChanged} />
           ))}
         </div>
 
-        <h2>Accounts</h2>
-        <p className="muted">
-          Each account belongs to exactly one space. Move accounts between Work and Personal; the agent never mixes spaces unless you ask it to.
-        </p>
+        <h2>{t("settings.accounts")}</h2>
+        <p className="muted">{t("settings.accountsHint")}</p>
         {error && <div className="error-note">{error}</div>}
         <table className="table">
           <thead>
             <tr>
-              <th>Provider</th>
-              <th>Account</th>
-              <th>Space</th>
-              <th>Capabilities</th>
-              <th>Last sync</th>
+              <th>{t("settings.colProvider")}</th>
+              <th>{t("settings.colAccount")}</th>
+              <th>{t("settings.colSpace")}</th>
+              <th>{t("settings.colCaps")}</th>
+              <th>{t("settings.colSync")}</th>
               <th />
             </tr>
           </thead>
           <tbody>
             {status.accounts.map((a) => (
               <tr key={a.id}>
-                <td>{PROVIDER_LABEL[a.provider]}</td>
+                <td>{providerLabel(a.provider)}</td>
                 <td>
                   <div>{a.displayName}</div>
                   <div className="muted small">{a.email}</div>
@@ -73,26 +71,26 @@ export function SettingsView({ status, onChanged }: { status: AppStatus | null; 
                   >
                     {status.spaces.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.name}
+                        {spaceLabel(s.kind)}
                       </option>
                     ))}
                   </select>
                 </td>
-                <td className="small">{a.capabilities.join(", ")}</td>
+                <td className="small">{a.capabilities.map(capabilityLabel).join(", ")}</td>
                 <td className="small">
-                  {a.lastSyncAt ? fmtDateTime(a.lastSyncAt) : "never"}
+                  {a.lastSyncAt ? fmtDateTime(a.lastSyncAt) : t("common.never")}
                   {a.lastSyncError && <div className="error-note">{a.lastSyncError}</div>}
                 </td>
                 <td className="row-actions">
                   <button className="btn btn-small" disabled={busy !== null} onClick={() => void run(`sync-${a.id}`, () => api.post(`/api/accounts/${a.id}/sync`))}>
-                    {busy === `sync-${a.id}` ? "Syncing…" : "Sync"}
+                    {busy === `sync-${a.id}` ? t("settings.syncing") : t("settings.sync")}
                   </button>
                   <button
                     className="btn btn-small btn-ghost"
                     disabled={busy !== null}
-                    onClick={() => confirm(`Remove ${a.email} and its local data?`) && void run(`rm-${a.id}`, () => api.delete(`/api/accounts/${a.id}`))}
+                    onClick={() => confirm(t("settings.removeConfirm", { email: a.email })) && void run(`rm-${a.id}`, () => api.delete(`/api/accounts/${a.id}`))}
                   >
-                    Remove
+                    {t("settings.remove")}
                   </button>
                 </td>
               </tr>
@@ -100,37 +98,40 @@ export function SettingsView({ status, onChanged }: { status: AppStatus | null; 
           </tbody>
         </table>
 
-        <h2>Connect an account</h2>
+        <h2>{t("settings.connect")}</h2>
         <div className="connect-grid">
           {status.spaces.map((s) => (
             <div key={s.id} className="connect-card" style={{ borderColor: `${s.color}55` }}>
               <div className="connect-title" style={{ color: s.color }}>
-                {s.name} space
+                {t("space.named", { name: spaceLabel(s.kind) })}
               </div>
               <a className={`btn ${status.oauth.microsoft ? "" : "is-disabled"}`} href={status.oauth.microsoft ? `/api/auth/microsoft/start?space=${s.id}` : undefined}>
-                Connect Microsoft 365
+                {t("settings.connectM365")}
               </a>
               <a className={`btn ${status.oauth.google ? "" : "is-disabled"}`} href={status.oauth.google ? `/api/auth/google/start?space=${s.id}` : undefined}>
-                Connect Gmail
+                {t("settings.connectGmail")}
               </a>
             </div>
           ))}
         </div>
         {(!status.oauth.microsoft || !status.oauth.google) && (
           <p className="muted small">
-            {!status.oauth.microsoft && <>Set <code>MS_CLIENT_ID</code> (and optionally <code>MS_TENANT_ID</code>) to enable Microsoft 365. </>}
-            {!status.oauth.google && <>Set <code>GOOGLE_CLIENT_ID</code> / <code>GOOGLE_CLIENT_SECRET</code> to enable Gmail. </>}
-            See the README for the app-registration walkthroughs.
+            {!status.oauth.microsoft && t("settings.oauthMs")}
+            {!status.oauth.google && t("settings.oauthGoogle")}
+            {t("settings.oauthReadme")}
           </p>
         )}
 
-        <h2>Agent backend</h2>
+        <h2>{t("settings.agentBackend")}</h2>
         <p>
-          Provider: <strong>{status.llm.provider}</strong>
-          {status.llm.model && <> · model <code>{status.llm.model}</code></>}
-          {!status.llm.configured && (
-            <span className="muted"> — rule-based fallback. Set <code>OPENAI_API_KEY</code> (or <code>OPENAI_BASE_URL</code> for Azure/Ollama) or <code>ANTHROPIC_API_KEY</code> to enable a real model.</span>
+          {t("settings.provider")} <strong>{status.llm.provider}</strong>
+          {status.llm.model && (
+            <>
+              {" "}
+              · {t("settings.model")} <code>{status.llm.model}</code>
+            </>
           )}
+          {!status.llm.configured && <span className="muted">{t("settings.llmFallback")}</span>}
         </p>
       </div>
     </div>

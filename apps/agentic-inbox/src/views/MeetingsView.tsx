@@ -1,6 +1,7 @@
 import type { Meeting, Space, TranscriptLine } from "../../shared/types.ts";
 import { senderName } from "../../shared/types.ts";
 import { api, spaceQuery } from "../api/client.ts";
+import { t } from "../i18n.ts";
 import { fmtDateTime, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
 
@@ -40,11 +41,11 @@ export function MeetingsView({
     <div className="split split-2">
       <section className="pane pane-list">
         <div className="pane-header">
-          <h2>Meetings</h2>
-          <span className="badge badge-soft">{meetings.filter((m) => m.hasTranscript).length} with transcript</span>
+          <h2>{t("meetings.title")}</h2>
+          <span className="badge badge-soft">{t("meetings.withTranscript", { n: meetings.filter((m) => m.hasTranscript).length })}</span>
         </div>
         <ul className="thread-list">
-          {meetings.length === 0 && <li className="list-empty">No recorded meetings yet.</li>}
+          {meetings.length === 0 && <li className="list-empty">{t("meetings.empty")}</li>}
           {meetings.map((m) => (
             <li key={m.id}>
               <button className={`thread-item ${m.id === selectedId ? "is-selected" : ""}`} onClick={() => setSelectedId(m.id)}>
@@ -53,10 +54,10 @@ export function MeetingsView({
                   <span className="thread-top">
                     <span className="thread-sender">{m.title}</span>
                   </span>
-                  <span className="thread-snippet">{fmtDateTime(m.start)} · {m.attendees.length} attendees</span>
+                  <span className="thread-snippet">{t("meetings.snippet", { when: fmtDateTime(m.start), n: m.attendees.length })}</span>
                   <span className="thread-labels">
-                    {m.hasTranscript && <span className="pill pill-agent">transcript</span>}
-                    {m.hasRecording && <span className="pill">recording</span>}
+                    {m.hasTranscript && <span className="pill pill-agent">{t("calendar.transcript")}</span>}
+                    {m.hasRecording && <span className="pill">{t("meetings.recording")}</span>}
                     {spaceId === null && <SpaceBadge spaces={spaces} spaceId={m.spaceId} />}
                   </span>
                 </span>
@@ -69,7 +70,7 @@ export function MeetingsView({
         {!meeting ? (
           <div className="empty-state">
             <div className="empty-icon">🎙️</div>
-            <p>Select a meeting to read its transcript.</p>
+            <p>{t("meetings.select")}</p>
           </div>
         ) : (
           <div className="detail scroll">
@@ -80,14 +81,14 @@ export function MeetingsView({
               {meeting.recordingUrl && (
                 <div>
                   <a href={meeting.recordingUrl} target="_blank" rel="noreferrer">
-                    Recording
+                    {t("meetings.recordingLink")}
                   </a>
                 </div>
               )}
             </div>
             {renderDetailExtras?.(meeting)}
-            <h3>Transcript</h3>
-            {!meeting.transcript && <p className="muted">No transcript available.</p>}
+            <h3>{t("meetings.transcript")}</h3>
+            {!meeting.transcript && <p className="muted">{t("meetings.noTranscript")}</p>}
             {meeting.transcript && (
               <ol className="transcript">
                 {meeting.transcript.map((l, i) => (

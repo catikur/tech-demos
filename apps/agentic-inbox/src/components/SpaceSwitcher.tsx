@@ -1,5 +1,6 @@
 import type { Space } from "../../shared/types.ts";
 import { inQuietHours } from "../../shared/types.ts";
+import { spaceLabel, t } from "../i18n.ts";
 
 export function SpaceSwitcher({
   spaces,
@@ -11,14 +12,14 @@ export function SpaceSwitcher({
   onChange: (id: string | null) => void;
 }) {
   return (
-    <div className="space-switcher" role="tablist" aria-label="Space">
+    <div className="space-switcher" role="tablist" aria-label={t("space.aria")}>
       <button
         role="tab"
         aria-selected={activeId === null}
         className={`space-tab ${activeId === null ? "is-active" : ""}`}
         onClick={() => onChange(null)}
       >
-        All
+        {t("space.all")}
       </button>
       {spaces.map((s) => (
         <button
@@ -30,9 +31,9 @@ export function SpaceSwitcher({
           onClick={() => onChange(s.id)}
         >
           <span className="space-dot" />
-          {s.name}
+          {spaceLabel(s.kind)}
           {inQuietHours(s) && (
-            <span className="space-quiet" title="Quiet hours — notifications muted">
+            <span className="space-quiet" title={t("space.quietTitle")}>
               🌙
             </span>
           )}
@@ -47,7 +48,7 @@ export function SpaceBadge({ spaces, spaceId }: { spaces: Space[]; spaceId: stri
   if (!s) return null;
   return (
     <span className="space-badge" style={{ color: s.color, borderColor: `${s.color}66` }}>
-      {s.name}
+      {spaceLabel(s.kind)}
     </span>
   );
 }

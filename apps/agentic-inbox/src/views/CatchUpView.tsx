@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
 import type { CatchUp, Space, SourceRef } from "../../shared/types.ts";
 import { api, spaceQuery } from "../api/client.ts";
+import { sourceLabel, t } from "../i18n.ts";
 import { ago, fmtDateTime, useData } from "../state.ts";
 import { Markdown } from "../components/Markdown.tsx";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
 import { DigestsPanel } from "../components/DigestsPanel.tsx";
 
-const PRESETS: { id: string; label: string; hours?: number }[] = [
-  { id: "seen", label: "Since I last looked" },
-  { id: "8", label: "Last 8 hours", hours: 8 },
-  { id: "24", label: "Since yesterday", hours: 24 },
-  { id: "168", label: "Last week", hours: 168 },
-  { id: "digests", label: "Digests" },
+const PRESETS: { id: string; labelKey: string; hours?: number }[] = [
+  { id: "seen", labelKey: "catchup.sinceSeen" },
+  { id: "8", labelKey: "catchup.last8h", hours: 8 },
+  { id: "24", labelKey: "catchup.yesterday", hours: 24 },
+  { id: "168", labelKey: "catchup.lastWeek", hours: 168 },
+  { id: "digests", labelKey: "catchup.digests" },
 ];
 
 export function CatchUpView({
@@ -52,7 +53,7 @@ export function CatchUpView({
         <div className="seg">
           {PRESETS.map((x) => (
             <button key={x.id} className={`seg-btn ${preset === x.id ? "is-active" : ""}`} onClick={() => setPreset(x.id)}>
-              {x.label}
+              {t(x.labelKey)}
             </button>
           ))}
         </div>
@@ -65,45 +66,45 @@ export function CatchUpView({
       {preset === "digests" ? (
         <DigestsPanel spaceId={spaceId} spaces={spaces} focusId={focusDigestId} />
       ) : (
-      <div className="split split-2 split-even">
-        <section className="pane pane-list pane-wide">
-          <div className="pane-header">
-            <h2>Summary</h2>
-          </div>
-          <div className="scroll detail">
-            {catchup.loading && <p className="muted">Collecting…</p>}
-            {data && <Markdown text={data.summaryMarkdown} />}
-            {data && data.sections.length === 0 && <p className="muted">Nothing happened in this window. Enjoy the quiet.</p>}
-          </div>
-        </section>
-        <section className="pane pane-list pane-wide">
-          <div className="pane-header">
-            <h2>Everything, ranked</h2>
-            {data && <span className="badge badge-soft">{data.sections.reduce((n, s) => n + s.items.length, 0)} items</span>}
-          </div>
-          <div className="scroll">
-            {data?.sections.map((s) => (
-              <div key={s.title} className="day-group">
-                <div className="day-label">{s.title}</div>
-                {s.items.map((i, idx) => (
-                  <button key={`${i.source.kind}-${i.source.id}-${idx}`} className="event-row" onClick={() => onOpenSource(i.source)}>
-                    <span className="event-time">{ago(i.at)}</span>
-                    <span className="event-main">
-                      <span className="event-title">{i.title}</span>
-                      <span className="event-meta">{i.excerpt}</span>
-                      <span className="event-meta">
-                        <span className="pill">{i.reason}</span>
-                        <span className="pill pill-agent">{i.source.kind}</span>
-                        {spaceId === null && <SpaceBadge spaces={spaces} spaceId={i.spaceId} />}
+        <div className="split split-2 split-even">
+          <section className="pane pane-list pane-wide">
+            <div className="pane-header">
+              <h2>{t("catchup.summary")}</h2>
+            </div>
+            <div className="scroll detail">
+              {catchup.loading && <p className="muted">{t("catchup.collecting")}</p>}
+              {data && <Markdown text={data.summaryMarkdown} />}
+              {data && data.sections.length === 0 && <p className="muted">{t("catchup.quiet")}</p>}
+            </div>
+          </section>
+          <section className="pane pane-list pane-wide">
+            <div className="pane-header">
+              <h2>{t("catchup.ranked")}</h2>
+              {data && <span className="badge badge-soft">{t("catchup.items", { n: data.sections.reduce((n, s) => n + s.items.length, 0) })}</span>}
+            </div>
+            <div className="scroll">
+              {data?.sections.map((s) => (
+                <div key={s.title} className="day-group">
+                  <div className="day-label">{s.title}</div>
+                  {s.items.map((i, idx) => (
+                    <button key={`${i.source.kind}-${i.source.id}-${idx}`} className="event-row" onClick={() => onOpenSource(i.source)}>
+                      <span className="event-time">{ago(i.at)}</span>
+                      <span className="event-main">
+                        <span className="event-title">{i.title}</span>
+                        <span className="event-meta">{i.excerpt}</span>
+                        <span className="event-meta">
+                          <span className="pill">{i.reason}</span>
+                          <span className="pill pill-agent">{sourceLabel(i.source.kind)}</span>
+                          {spaceId === null && <SpaceBadge spaces={spaces} spaceId={i.spaceId} />}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { FollowUp, Meeting } from "../../shared/types.ts";
 import { senderName } from "../../shared/types.ts";
 import { api } from "../api/client.ts";
+import { t } from "../i18n.ts";
 import { fmtDateTime } from "../state.ts";
 
 type Result = FollowUp & { recipients: string[] };
@@ -43,14 +44,14 @@ export function FollowUpPanel({ meeting, onSent }: { meeting: Meeting; onSent: (
   return (
     <div className="panel">
       <div className="panel-head">
-        <h3 style={{ margin: 0 }}>Follow-through</h3>
+        <h3 style={{ margin: 0 }}>{t("followup.title")}</h3>
         <div className="row-actions">
           <button className="btn btn-small btn-primary" disabled={state === "loading"} onClick={() => void generate(false)}>
-            {state === "loading" ? "Extracting…" : result ? "Reload" : "Extract decisions & actions"}
+            {state === "loading" ? t("followup.extracting") : result ? t("common.reload") : t("followup.extract")}
           </button>
           {result && (
             <button className="btn btn-small btn-ghost" onClick={() => void generate(true)}>
-              Regenerate
+              {t("common.regenerate")}
             </button>
           )}
         </div>
@@ -60,39 +61,40 @@ export function FollowUpPanel({ meeting, onSent }: { meeting: Meeting; onSent: (
         <>
           <div className="split-cols">
             <div>
-              <h4>Decisions ({result.decisions.length})</h4>
+              <h4>{t("followup.decisions", { n: result.decisions.length })}</h4>
               <ul className="plain-list">
                 {result.decisions.map((d, i) => (
                   <li key={i}>{d}</li>
                 ))}
-                {result.decisions.length === 0 && <li className="muted">None detected.</li>}
+                {result.decisions.length === 0 && <li className="muted">{t("common.noneDetected")}</li>}
               </ul>
             </div>
             <div>
               <h4>
-                Action items ({result.actions.length}) <span className="pill pill-ok">{result.createdCommitments} added to ledger</span>
+                {t("followup.actions", { n: result.actions.length })}{" "}
+                <span className="pill pill-ok">{t("followup.added", { n: result.createdCommitments })}</span>
               </h4>
               <ul className="plain-list">
                 {result.actions.map((a, i) => (
                   <li key={i}>
                     <strong>{senderName(a.owner)}</strong>: {a.text}
-                    {a.dueAt && <span className="muted small"> · by {fmtDateTime(a.dueAt)}</span>}
+                    {a.dueAt && <span className="muted small"> · {t("common.byDate", { date: fmtDateTime(a.dueAt) })}</span>}
                   </li>
                 ))}
-                {result.actions.length === 0 && <li className="muted">None detected.</li>}
+                {result.actions.length === 0 && <li className="muted">{t("common.noneDetected")}</li>}
               </ul>
             </div>
           </div>
-          <h4>Follow-up mail → {result.recipients.map(senderName).join(", ")}</h4>
+          <h4>{t("followup.mail", { names: result.recipients.map(senderName).join(", ") })}</h4>
           <div className="composer" style={{ border: "1px solid var(--border)", borderRadius: 10 }}>
             <div className="muted small" style={{ marginBottom: 6 }}>
-              Subject: {result.draftSubject}
+              {t("common.subject", { subject: result.draftSubject })}
             </div>
             <textarea rows={10} value={body} onChange={(e) => setBody(e.target.value)} disabled={state === "sent"} />
             <div className="composer-actions">
-              {state === "sent" && <span className="sent-note">✓ Sent — saved as a new thread</span>}
+              {state === "sent" && <span className="sent-note">✓ {t("followup.sent")}</span>}
               <button className="btn btn-primary" disabled={state === "sending" || state === "sent" || !body.trim()} onClick={() => void send()}>
-                {state === "sending" ? "Sending…" : "Confirm & send follow-up"}
+                {state === "sending" ? t("common.sending") : t("followup.confirm")}
               </button>
             </div>
           </div>

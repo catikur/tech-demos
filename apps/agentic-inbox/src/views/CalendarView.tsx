@@ -1,11 +1,16 @@
 import type { CalendarEvent, Space } from "../../shared/types.ts";
 import { senderName } from "../../shared/types.ts";
 import { api, spaceQuery } from "../api/client.ts";
+import { dateLocale, t } from "../i18n.ts";
 import { fmtDateTime, untilLabel, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
 
 function dayKey(at: number): string {
-  return new Date(at).toLocaleDateString(undefined, { weekday: "long", day: "2-digit", month: "long" });
+  return new Date(at).toLocaleDateString(dateLocale, { weekday: "long", day: "2-digit", month: "long" });
+}
+
+function clock(at: number): string {
+  return new Date(at).toLocaleTimeString(dateLocale, { hour: "2-digit", minute: "2-digit" });
 }
 
 export function CalendarView({
@@ -54,11 +59,11 @@ export function CalendarView({
     <div className="split split-2">
       <section className="pane pane-list pane-wide">
         <div className="pane-header">
-          <h2>Calendar</h2>
-          <span className="badge badge-soft">{events.filter((e) => e.start > now).length} upcoming</span>
+          <h2>{t("calendar.title")}</h2>
+          <span className="badge badge-soft">{t("calendar.upcoming", { n: events.filter((e) => e.start > now).length })}</span>
         </div>
         <div className="scroll">
-          {events.length === 0 && <div className="list-empty">No events in this window.</div>}
+          {events.length === 0 && <div className="list-empty">{t("calendar.empty")}</div>}
           {[...groups.entries()].map(([day, evs]) => (
             <div key={day} className="day-group">
               <div className="day-label">{day}</div>
@@ -70,16 +75,14 @@ export function CalendarView({
                     className={`event-row ${e.id === selectedId ? "is-selected" : ""} ${past ? "is-past" : ""}`}
                     onClick={() => onSelect(e.id)}
                   >
-                    <span className="event-time">
-                      {new Date(e.start).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-                    </span>
+                    <span className="event-time">{clock(e.start)}</span>
                     <span className="event-main">
                       <span className="event-title">{e.title}</span>
                       <span className="event-meta">
-                        {e.attendees.length} attendees · {untilLabel(e.start)}
-                        {e.meetingId && <span className="pill pill-agent">transcript</span>}
-                        {e.responseStatus === "none" && !past && <span className="pill pill-warn">not responded</span>}
-                        {overlaps.has(e.id) && <span className="pill pill-danger">overlaps other space</span>}
+                        {t("calendar.attendeesMeta", { n: e.attendees.length, when: untilLabel(e.start) })}
+                        {e.meetingId && <span className="pill pill-agent">{t("calendar.transcript")}</span>}
+                        {e.responseStatus === "none" && !past && <span className="pill pill-warn">{t("calendar.notResponded")}</span>}
+                        {overlaps.has(e.id) && <span className="pill pill-danger">{t("calendar.overlap")}</span>}
                       </span>
                     </span>
                     {spaceId === null && <SpaceBadge spaces={spaces} spaceId={e.spaceId} />}
@@ -94,25 +97,27 @@ export function CalendarView({
         {!selected ? (
           <div className="empty-state">
             <div className="empty-icon">📅</div>
-            <p>Select an event to see details and prepare for it.</p>
+            <p>{t("calendar.select")}</p>
           </div>
         ) : (
           <div className="detail scroll">
             <h2 className="detail-title">{selected.title}</h2>
             <div className="detail-meta">
-              <div>{fmtDateTime(selected.start)} → {new Date(selected.end).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</div>
-              <div>{selected.location || "No location"}</div>
-              <div>Organizer: {senderName(selected.organizer)}</div>
+              <div>
+                {fmtDateTime(selected.start)} → {clock(selected.end)}
+              </div>
+              <div>{selected.location || t("calendar.noLocation")}</div>
+              <div>{t("calendar.organizer", { name: senderName(selected.organizer) })}</div>
               {selected.joinUrl && (
                 <div>
                   <a href={selected.joinUrl} target="_blank" rel="noreferrer">
-                    Join link
+                    {t("calendar.join")}
                   </a>
                 </div>
               )}
             </div>
             {selected.description && <p className="detail-desc">{selected.description}</p>}
-            <h3>Attendees</h3>
+            <h3>{t("calendar.attendees")}</h3>
             <ul className="chip-list">
               {selected.attendees.map((a) => (
                 <li key={a} className="chip-static">

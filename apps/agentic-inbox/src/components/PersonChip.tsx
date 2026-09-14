@@ -1,5 +1,6 @@
 import type { PersonProfile } from "../../shared/types.ts";
 import { api, spaceQuery } from "../api/client.ts";
+import { t } from "../i18n.ts";
 import { ago, initials, useData } from "../state.ts";
 
 /** Feature 7 — compact relationship card shown while you read/write to someone. */
@@ -22,10 +23,14 @@ export function PersonChip({ spaceId, email }: { spaceId: string; email: string 
           {p.name}
         </span>
         <span className="person-chip-meta">
-          last contact {p.lastContactAt ? ago(p.lastContactAt) : "—"} · {p.threadCount} threads · {p.meetingCount} meetings
-          {owe > 0 && <span className="pill pill-warn">you owe {owe}</span>}
-          {owed > 0 && <span className="pill pill-ok">owes you {owed}</span>}
-          {p.upcomingMeetings[0] && <span className="pill pill-agent">next: {p.upcomingMeetings[0].title}</span>}
+          {t("person.lastContact", {
+            rel: p.lastContactAt ? ago(p.lastContactAt) : "—",
+            threads: p.threadCount,
+            meetings: p.meetingCount,
+          })}
+          {owe > 0 && <span className="pill pill-warn">{t("person.youOwe", { n: owe })}</span>}
+          {owed > 0 && <span className="pill pill-ok">{t("person.owesYou", { n: owed })}</span>}
+          {p.upcomingMeetings[0] && <span className="pill pill-agent">{t("person.next", { title: p.upcomingMeetings[0].title })}</span>}
         </span>
       </span>
     </div>
