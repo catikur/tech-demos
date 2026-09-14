@@ -1049,6 +1049,20 @@ export const oauthStates = {
   },
 };
 
+/** Space-level rows that survive account.delete — wipe when the mailbox is empty. */
+export function wipeDerivedData(): void {
+  getDb().exec(`
+    DELETE FROM topic_links;
+    DELETE FROM topics;
+    DELETE FROM commitments;
+    DELETE FROM notes;
+    DELETE FROM notifications;
+    DELETE FROM digests;
+    DELETE FROM people;
+    DELETE FROM audit_log;
+  `);
+}
+
 export function sourceLabel(kind: SourceRef["kind"], id: string): string {
   switch (kind) {
     case "thread":

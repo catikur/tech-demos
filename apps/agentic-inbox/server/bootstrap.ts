@@ -1,5 +1,5 @@
 import type { Space } from "../shared/types.ts";
-import { accounts, settings, spaces } from "./db/repo.ts";
+import { accounts, settings, spaces, wipeDerivedData } from "./db/repo.ts";
 
 export const WORK_SPACE_ID = "space_work";
 export const PERSONAL_SPACE_ID = "space_personal";
@@ -39,6 +39,7 @@ export function bootstrap(): { seededDemo: boolean } {
   for (const account of accounts.all().filter((a) => a.provider === "demo")) {
     accounts.remove(account.id);
   }
+  if (accounts.all().length === 0) wipeDerivedData();
   if (accounts.all().every((a) => a.provider !== "demo")) settings.set("demo_removed", "1");
   return { seededDemo: false };
 }
