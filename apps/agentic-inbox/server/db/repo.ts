@@ -5,10 +5,13 @@ import type {
   Capability,
   Chat,
   ChatMessage,
+  Chunk,
   Commitment,
   Digest,
   EmailMessage,
   Meeting,
+  Memory,
+  MemoryKind,
   Note,
   Notification,
   Person,
@@ -175,7 +178,16 @@ export const accounts = {
 
 function rowToPerson(raw: unknown): Person {
   const r = raw as Row;
-  return { id: r.id, spaceId: r.space_id, email: r.email, name: r.name, vip: !!r.vip, notes: r.notes };
+  return {
+    id: r.id,
+    spaceId: r.space_id,
+    email: r.email,
+    name: r.name,
+    vip: !!r.vip,
+    notes: r.notes ?? "",
+    summary: r.summary ?? "",
+    summaryAt: r.summary_at ?? null,
+  };
 }
 
 export const people = {
@@ -191,7 +203,7 @@ export const people = {
       }
       return rowToPerson(existing);
     }
-    const p: Person = { id: newId("p"), spaceId, email: e, name: name || e, vip: false, notes: "" };
+    const p: Person = { id: newId("p"), spaceId, email: e, name: name || e, vip: false, notes: "", summary: "", summaryAt: null };
     getDb()
       .query("INSERT INTO people (id, space_id, email, name, vip, notes) VALUES (?, ?, ?, ?, 0, '')")
       .run(p.id, p.spaceId, p.email, p.name);
@@ -224,6 +236,9 @@ export const people = {
     getDb()
       .query("UPDATE people SET vip = ?, notes = ?, name = ? WHERE id = ?")
       .run((patch.vip ?? p.vip) ? 1 : 0, patch.notes ?? p.notes, patch.name ?? p.name, id);
+  },
+  setSummary(id: string, summary: string): void {
+    getDb().query("UPDATE people SET summary = ?, summary_at = ? WHERE id = ?").run(summary, Date.now(), id);
   },
   vipEmails(spaceId: string | null): Set<string> {
     const s = scope(spaceId);
@@ -1049,6 +1064,119 @@ export const oauthStates = {
   },
 };
 
+function packing(vec: ArrayLike<number>): Uint8Array {
+  const f = vec instanceof Float32Array ? vec : Float32Array.from(vec);
+  return new Uint8Array(f.buffer, f.byteOffset, f.byteLength);
+}
+
+function unpacking(blob: unknown): Float32Array | null {
+  if (!blob) return null;
+  const bytes = blob instanceof Uint8Array ? blob : blob instanceof ArrayBuffer ? new Uint8Array(blob) : null;
+  if (!bytes || bytes.byteLength < 4 || bytes.byteLength % 4 !== 0) return null;
+  return new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
+}
+
+function rowToChunk(raw: unknown): Chunk {
+  const r = raw as Row;
+  return {
+    id: r.id,
+    spaceId: r.space_id,
+    sourceKind: r.source_kind,
+    sourceId: r.source_id,
+    text: r.text,
+    embedding: unpacking(r.embedding),
+    hash: r.hash,
+    createdAt: r.created_at,
+  };
+}
+
+export const chunks = {
+  upsert(input: {
+    spaceId: string;
+    sourceKind: Chunk["sourceKind"];
+    sourceId: string;
+    text: string;
+    embedding: ArrayLike<number> | null;
+    hash: string;
+  }): boolean {
+    const existing = getDb()
+      .query("SELECT id FROM chunks WHERE space_id = ? AND hash = ?")
+      .get(input.spaceId, input.hash) as Row | null;
+    if (existing) return false;
+    getDb()
+      .query(
+        `INSERT INTO chunks (id, space_id, source_kind, source_id, text, embedding, hash, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        newId("ck"),
+        input.spaceId,
+        input.sourceKind,
+        input.sourceId,
+        input.text,
+        input.embedding ? packing(input.embedding) : null,
+        input.hash,
+        Date.now(),
+      );
+    return true;
+  },
+  listForSpace(spaceId: string, sourceKind?: Chunk["sourceKind"]): Chunk[] {
+    if (sourceKind) {
+      return getDb()
+        .query("SELECT * FROM chunks WHERE space_id = ? AND source_kind = ?")
+        .all(spaceId, sourceKind)
+        .map(rowToChunk);
+    }
+    return getDb().query("SELECT * FROM chunks WHERE space_id = ?").all(spaceId).map(rowToChunk);
+  },
+  list(spaceId: string | null, sourceKind?: Chunk["sourceKind"]): Chunk[] {
+    if (spaceId) return chunks.listForSpace(spaceId, sourceKind);
+    if (sourceKind) {
+      return getDb().query("SELECT * FROM chunks WHERE source_kind = ?").all(sourceKind).map(rowToChunk);
+    }
+    return getDb().query("SELECT * FROM chunks").all().map(rowToChunk);
+  },
+};
+
+function rowToMemory(raw: unknown): Memory {
+  const r = raw as Row;
+  return { id: r.id, spaceId: r.space_id, kind: r.kind, text: r.text, createdAt: r.created_at };
+}
+
+export const memories = {
+  list(spaceId: string | null, limit = 50): Memory[] {
+    const cap = Math.max(1, Math.min(limit, 200));
+    if (spaceId) {
+      return getDb()
+        .query("SELECT * FROM memories WHERE space_id = ? ORDER BY created_at DESC LIMIT ?")
+        .all(spaceId, cap)
+        .map(rowToMemory);
+    }
+    return getDb().query("SELECT * FROM memories ORDER BY created_at DESC LIMIT ?").all(cap).map(rowToMemory);
+  },
+  get(id: string): Memory | null {
+    const r = getDb().query("SELECT * FROM memories WHERE id = ?").get(id) as Row | null;
+    return r ? rowToMemory(r) : null;
+  },
+  add(input: { spaceId: string; kind: MemoryKind; text: string }): Memory {
+    const row: Memory = {
+      id: newId("mem"),
+      spaceId: input.spaceId,
+      kind: input.kind,
+      text: input.text.trim(),
+      createdAt: Date.now(),
+    };
+    getDb()
+      .query("INSERT INTO memories (id, space_id, kind, text, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(row.id, row.spaceId, row.kind, row.text, row.createdAt);
+    return row;
+  },
+  remove(id: string): boolean {
+    const res = getDb().query("DELETE FROM memories WHERE id = ?").run(id);
+    return res.changes > 0;
+  },
+};
+
 /** Space-level rows that survive account.delete — wipe when the mailbox is empty. */
 export function wipeDerivedData(): void {
   getDb().exec(`
@@ -1060,6 +1188,8 @@ export function wipeDerivedData(): void {
     DELETE FROM digests;
     DELETE FROM people;
     DELETE FROM audit_log;
+    DELETE FROM chunks;
+    DELETE FROM memories;
   `);
 }
 
