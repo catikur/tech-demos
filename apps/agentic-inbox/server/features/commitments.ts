@@ -1,14 +1,15 @@
+import { z } from "zod";
 import type { Account, Commitment, SourceRef } from "../../shared/types.ts";
 import { senderEmail, senderName } from "../../shared/types.ts";
+import { tryComplete } from "../agent/llm.ts";
 import { accounts, chats, commitments, meetings, threads } from "../db/repo.ts";
 import { onPostSync } from "../sync/engine.ts";
 import { isAsk, isPromise, jaccard, parseDue, splitSentences, tokens, truncate } from "./text.ts";
 
 /**
  * Feature 1 — Commitment ledger.
- * Extracts "who owes whom what by when" from mail, chats and transcripts.
- * Rule-based on purpose: deterministic, explainable, zero cost. The LLM path
- * (follow-up module) can add higher-confidence items on top.
+ * Heuristics first (deterministic, zero cost). Optional OpenRouter JSON extract
+ * adds items the bilingual rules missed. Dedup is shared.
  */
 
 export interface ExtractionInput {
@@ -20,6 +21,17 @@ export interface ExtractionInput {
   others: string[];
   at: number;
   source: SourceRef;
+}
+
+export type CompleteFn = (system: string, prompt: string, maxTokens?: number) => Promise<string | null>;
+
+export interface LlmCommitmentItem {
+  text: string;
+  direction: Commitment["direction"];
+  counterpart: string;
+  due: string | null;
+  sourceKind: "thread" | "chat" | "meeting";
+  sourceId: string;
 }
 
 export function extractCommitments(input: ExtractionInput): Omit<Commitment, "id" | "createdAt">[] {
@@ -83,8 +95,127 @@ function insertIfNovel(c: Omit<Commitment, "id" | "createdAt">): boolean {
   return commitments.insertUnique(c);
 }
 
-/** Scan everything recent in a space and add new (deduplicated) commitments. Returns inserted count. */
-export function extractForSpace(spaceId: string): number {
+const llmSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        text: z.string().min(3),
+        direction: z.enum(["owed_by_me", "owed_to_me"]),
+        counterpart: z.string(),
+        due: z.string().nullable().optional(),
+        source_kind: z.enum(["thread", "chat", "meeting"]),
+        source_id: z.string(),
+      }),
+    )
+    .max(40),
+});
+
+export function parseLlmCommitmentItems(raw: string): LlmCommitmentItem[] {
+  const jsonText = raw.match(/\{[\s\S]*\}/)?.[0];
+  if (!jsonText) return [];
+  try {
+    const parsed = llmSchema.parse(JSON.parse(jsonText));
+    return parsed.items.map((item) => ({
+      text: truncate(item.text, 200),
+      direction: item.direction,
+      counterpart: senderEmail(item.counterpart) || item.counterpart.toLowerCase(),
+      due: item.due ?? null,
+      sourceKind: item.source_kind,
+      sourceId: item.source_id,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function resolveSource(kind: LlmCommitmentItem["sourceKind"], id: string): SourceRef | null {
+  if (kind === "thread") {
+    const t = threads.get(id);
+    return t ? { kind, id, label: t.subject } : null;
+  }
+  if (kind === "chat") {
+    const c = chats.get(id);
+    return c ? { kind, id, label: c.title } : null;
+  }
+  const m = meetings.get(id);
+  return m ? { kind, id, label: m.title } : null;
+}
+
+function dueFromLlm(due: string | null, ref: number): number | null {
+  if (!due) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(due)) {
+    const ts = Date.parse(`${due}T17:00:00Z`);
+    return Number.isFinite(ts) ? ts : null;
+  }
+  return parseDue(due, ref);
+}
+
+function collectCorpus(spaceId: string, since: number): string {
+  const lines: string[] = [];
+  for (const t of threads.list(spaceId, { since, limit: 80 })) {
+    if (["newsletter", "security"].includes(t.category)) continue;
+    const full = threads.get(t.id);
+    if (!full) continue;
+    for (const m of full.messages) {
+      if (m.at < since) continue;
+      lines.push(`[thread:${t.id}] "${t.subject}" | ${m.from}: ${truncate(m.body, 280)}`);
+    }
+  }
+  for (const chat of chats.list(spaceId)) {
+    for (const m of chats.messages(chat.id)) {
+      if (m.at < since) continue;
+      lines.push(`[chat:${chat.id}] "${chat.title}" | ${m.from}: ${truncate(m.body, 220)}`);
+    }
+  }
+  for (const meeting of meetings.since(spaceId, since)) {
+    const transcript = meetings.transcript(meeting.id);
+    if (!transcript) continue;
+    for (const line of transcript.lines) {
+      lines.push(`[meeting:${meeting.id}] "${meeting.title}" | ${line.speaker}: ${truncate(line.text, 220)}`);
+    }
+  }
+  let out = "";
+  for (const line of lines) {
+    if (out.length + line.length + 1 > 8_000) break;
+    out += (out ? "\n" : "") + line;
+  }
+  return out;
+}
+
+async function extractLlmForSpace(spaceId: string, complete: CompleteFn): Promise<number> {
+  const since = Date.now() - LOOKBACK;
+  const corpus = collectCorpus(spaceId, since);
+  if (!corpus.trim()) return 0;
+  const raw = await complete(
+    'Extract real commitments (who owes whom what by when) from mail/chat/meeting lines. Reply ONLY with JSON: {"items":[{"text":string,"direction":"owed_by_me"|"owed_to_me","counterpart":"email or Name <email>","due":"YYYY-MM-DD or null","source_kind":"thread"|"chat"|"meeting","source_id":"id from the [kind:id] tag"}]}. Include Turkish and English. Skip greetings, FYIs and conversational questions. Use source_id exactly as given.',
+    corpus,
+    1200,
+  );
+  if (!raw) return 0;
+  let inserted = 0;
+  for (const item of parseLlmCommitmentItems(raw)) {
+    const source = resolveSource(item.sourceKind, item.sourceId);
+    if (!source) continue;
+    const counterpart = item.counterpart.trim();
+    if (!counterpart) continue;
+    if (
+      insertIfNovel({
+        spaceId,
+        direction: item.direction,
+        counterpart,
+        text: item.text,
+        dueAt: dueFromLlm(item.due, Date.now()),
+        status: "open",
+        source,
+        confidence: 0.75,
+      })
+    )
+      inserted++;
+  }
+  return inserted;
+}
+
+function extractHeuristicsForSpace(spaceId: string): number {
   const myEmails = new Set(accounts.bySpace(spaceId).map((a) => a.email.toLowerCase()));
   const me = [...myEmails][0] ?? "";
   const since = Date.now() - LOOKBACK;
@@ -116,7 +247,6 @@ export function extractForSpace(spaceId: string): number {
     for (const m of chats.messages(chat.id)) {
       if (m.at < since) continue;
       const mentionsMe = m.mentionsMe || /@you\b/i.test(m.body);
-      // In group chats an ask only lands on me if I am mentioned or it is a 1:1.
       if (!m.isMine && chat.kind !== "oneOnOne" && !mentionsMe && !isPromise(m.body)) continue;
       for (const c of extractCommitments({
         spaceId,
@@ -137,8 +267,8 @@ export function extractForSpace(spaceId: string): number {
     if (!transcript) continue;
     const others = meeting.attendees.filter((p) => !myEmails.has(senderEmail(p)));
     for (const line of transcript.lines) {
-      const speakerEmail = senderEmail(line.speaker);
-      const speakerIsMe = myEmails.has(speakerEmail) || /^you$/i.test(senderName(line.speaker));
+      const lineEmail = senderEmail(line.speaker);
+      const speakerIsMe = myEmails.has(lineEmail) || /^you$/i.test(senderName(line.speaker));
       for (const c of extractCommitments({
         spaceId,
         text: line.text,
@@ -148,7 +278,6 @@ export function extractForSpace(spaceId: string): number {
         at: meeting.start + line.at,
         source: { kind: "meeting", id: meeting.id, label: meeting.title },
       })) {
-        // Transcript asks are conversational; only keep explicit promises.
         if (c.direction === "owed_by_me" && !speakerIsMe) continue;
         if (insertIfNovel({ ...c, confidence: c.confidence + 0.1 })) inserted++;
       }
@@ -157,7 +286,14 @@ export function extractForSpace(spaceId: string): number {
   return inserted;
 }
 
-onPostSync((account: Account) => {
-  const n = extractForSpace(account.spaceId);
+/** Scan recent mail/chats/transcripts. Heuristics first; optional LLM JSON extract on top. */
+export async function extractForSpace(spaceId: string, opts?: { tryComplete?: CompleteFn }): Promise<number> {
+  let inserted = extractHeuristicsForSpace(spaceId);
+  inserted += await extractLlmForSpace(spaceId, opts?.tryComplete ?? tryComplete);
+  return inserted;
+}
+
+onPostSync(async (account: Account) => {
+  const n = await extractForSpace(account.spaceId);
   if (n > 0) console.log(`[commitments] ${n} new in space ${account.spaceId}`);
 });

@@ -43,10 +43,11 @@ export const featureRoutes = {
     }),
   },
   "/api/commitments/extract": {
-    POST: h((req) => {
+    POST: h(async (req) => {
       const spaceId = spaceParam(req);
       const targets = spaceId ? [spaceId] : spaces.all().map((s) => s.id);
-      const inserted = targets.reduce((n, id) => n + extractForSpace(id), 0);
+      let inserted = 0;
+      for (const id of targets) inserted += await extractForSpace(id);
       broadcast({ type: "data", entity: "commitments", spaceId });
       return ok({ inserted });
     }),
