@@ -651,6 +651,7 @@ function seedChats(account: Account, list: SeedChat[], me: string, stats: SyncSt
         at: m.at,
         isMine: senderEmail(m.from) === myEmail,
         mentionsMe: !!m.mentionsMe,
+        replyToId: null,
       };
       chats.upsertMessage(msg);
       stats.chatMessages++;

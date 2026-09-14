@@ -62,8 +62,8 @@ starts in the background.
   matched to online meetings.
 - **Chats**: your 40 most recently active 1:1/group chats and their messages (delta where
   supported). Unread counts come from the chat viewpoint.
-- **Channels**: top-level messages in channels of teams you have joined (replies are not
-  fetched yet).
+- **Channels**: top-level messages in channels of teams you have joined, plus thread replies
+  (capped) stored in the same chat with `replyToId` pointing at the parent.
 - **Meetings**: for past events with a join link, the latest transcript (WebVTT → text) and
   the first recording (downloaded to `data/recordings/`, served at `/api/recordings/:id`).
   Transcripts are retried for 24 h after a meeting since Teams produces them asynchronously.

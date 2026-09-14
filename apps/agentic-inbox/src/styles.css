@@ -664,6 +664,7 @@ code {
 
 .chat-msg {
   max-width: 80%;
+  cursor: pointer;
 }
 
 .chat-msg-mine {
@@ -692,6 +693,39 @@ code {
 
 .chat-msg-mention .chat-msg-body {
   border-color: var(--agent);
+}
+
+.chat-msg-reply {
+  padding-left: 28px;
+  max-width: calc(80% + 28px);
+}
+
+.chat-msg-reply .chat-msg-body {
+  border-left: 2px solid var(--accent);
+}
+
+.chat-msg.is-reply-target .chat-msg-body {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.composer-reply {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--accent);
+  background: var(--bg-hover);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.composer-reply-body {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .detail {

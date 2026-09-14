@@ -138,9 +138,9 @@ export const routes = {
   },
   "/api/chats/:id/send": {
     POST: h(async (req: P<"/api/chats/:id/send">) => {
-      const body = await readJson<{ body: string; actor?: "user" | "agent" }>(req);
+      const body = await readJson<{ body: string; actor?: "user" | "agent"; replyToId?: string | null }>(req);
       if (!body.body?.trim()) badRequest("Empty message");
-      return ok(await sendChat(req.params.id, body.body.trim(), body.actor === "agent" ? "agent" : "user"));
+      return ok(await sendChat(req.params.id, body.body.trim(), body.actor === "agent" ? "agent" : "user", body.replyToId ?? null));
     }),
   },
 

@@ -498,6 +498,7 @@ function rowToChatMessage(raw: unknown): ChatMessage {
     at: r.at,
     isMine: !!r.is_mine,
     mentionsMe: !!r.mentions_me,
+    replyToId: r.reply_to_id ?? null,
   };
 }
 
@@ -558,12 +559,26 @@ export const chats = {
   upsertMessage(m: ChatMessage & { externalId?: string | null }): void {
     getDb()
       .query(
-        `INSERT INTO chat_messages (id, chat_id, external_id, from_addr, body, at, is_mine, mentions_me)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET body=excluded.body`,
+        `INSERT INTO chat_messages (id, chat_id, external_id, from_addr, body, at, is_mine, mentions_me, reply_to_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET body=excluded.body, at=excluded.at, reply_to_id=excluded.reply_to_id`,
       )
-      .run(m.id, m.chatId, m.externalId ?? null, m.from, m.body, m.at, m.isMine ? 1 : 0, m.mentionsMe ? 1 : 0);
+      .run(
+        m.id,
+        m.chatId,
+        m.externalId ?? null,
+        m.from,
+        m.body,
+        m.at,
+        m.isMine ? 1 : 0,
+        m.mentionsMe ? 1 : 0,
+        m.replyToId ?? null,
+      );
     getDb().query("UPDATE chats SET last_at = MAX(last_at, ?) WHERE id = ?").run(m.at, m.chatId);
+  },
+  messageExternalId(messageId: string): string | null {
+    const r = getDb().query("SELECT external_id FROM chat_messages WHERE id = ?").get(messageId) as Row | null;
+    return r?.external_id ?? null;
   },
   markRead(id: string): void {
     getDb().query("UPDATE chats SET unread_count = 0 WHERE id = ?").run(id);

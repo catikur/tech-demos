@@ -10,6 +10,7 @@ export function getDb(): Database {
   const path = process.env.DB_PATH ?? join(env.dataDir, "inbox.sqlite");
   db = new Database(path, { create: true });
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }
 
@@ -17,7 +18,15 @@ export function getDb(): Database {
 export function openMemoryDb(): Database {
   db = new Database(":memory:");
   db.exec(SCHEMA);
+  migrate(db);
   return db;
+}
+
+function migrate(database: Database): void {
+  const cols = database.query("PRAGMA table_info(chat_messages)").all() as { name: string }[];
+  if (cols.length > 0 && !cols.some((c) => c.name === "reply_to_id")) {
+    database.exec("ALTER TABLE chat_messages ADD COLUMN reply_to_id TEXT");
+  }
 }
 
 export function newId(prefix = ""): string {

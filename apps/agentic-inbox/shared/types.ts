@@ -129,6 +129,8 @@ export interface ChatMessage {
   at: number;
   isMine: boolean;
   mentionsMe: boolean;
+  /** Local parent chat_message id when this is a Teams channel thread reply. */
+  replyToId: string | null;
 }
 
 export interface TranscriptLine {

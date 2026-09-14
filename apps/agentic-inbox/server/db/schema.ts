@@ -102,7 +102,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   body TEXT NOT NULL,
   at INTEGER NOT NULL,
   is_mine INTEGER NOT NULL DEFAULT 0,
-  mentions_me INTEGER NOT NULL DEFAULT 0
+  mentions_me INTEGER NOT NULL DEFAULT 0,
+  reply_to_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_chat_messages_chat ON chat_messages(chat_id, at);
 

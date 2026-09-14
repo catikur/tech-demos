@@ -29,6 +29,7 @@ export function ChatsView({
     (ev) => ev.type === "data" && ev.entity === "chats",
   );
   const [draft, setDraft] = useState("");
+  const [replyToId, setReplyToId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const chats = list.data ?? [];
   const chat = detail.data && detail.data.id === selectedId ? detail.data : null;
@@ -36,6 +37,11 @@ export function ChatsView({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [chat?.messages.length, chat?.id]);
+
+  useEffect(() => {
+    setReplyToId(null);
+    setDraft("");
+  }, [chat?.id]);
 
   const select = async (id: string) => {
     onSelect(id);
@@ -47,10 +53,14 @@ export function ChatsView({
 
   const send = async () => {
     if (!chat || !draft.trim()) return;
-    await api.post(`/api/chats/${chat.id}/send`, { body: draft.trim() });
+    await api.post(`/api/chats/${chat.id}/send`, { body: draft.trim(), replyToId: replyToId ?? undefined });
     setDraft("");
+    setReplyToId(null);
     detail.reload();
   };
+
+  const replyTarget = replyToId ? chat?.messages.find((m) => m.id === replyToId) : null;
+  const threadRoot = (m: ChatMessage) => m.replyToId ?? m.id;
 
   return (
     <div className="split split-2">
@@ -101,7 +111,12 @@ export function ChatsView({
             </div>
             <div className="messages" ref={scrollRef}>
               {chat.messages.map((m) => (
-                <article key={m.id} className={`chat-msg ${m.isMine ? "chat-msg-mine" : ""} ${m.mentionsMe ? "chat-msg-mention" : ""}`}>
+                <article
+                  key={m.id}
+                  className={`chat-msg ${m.isMine ? "chat-msg-mine" : ""} ${m.mentionsMe ? "chat-msg-mention" : ""} ${m.replyToId ? "chat-msg-reply" : ""} ${replyToId === m.id ? "is-reply-target" : ""}`}
+                  data-reply-to={m.replyToId ?? undefined}
+                  onClick={() => setReplyToId(threadRoot(m))}
+                >
                   <header className="message-header">
                     <span className="message-from">{m.isMine ? "You" : senderName(m.from)}</span>
                     <span className="message-time">{fmtTime(m.at)}</span>
@@ -110,6 +125,14 @@ export function ChatsView({
                 </article>
               ))}
             </div>
+            {replyTarget && (
+              <div className="composer-reply" data-reply-to={replyTarget.id}>
+                <span className="composer-reply-body">{replyTarget.body}</span>
+                <button type="button" className="btn btn-ghost" onClick={() => setReplyToId(null)}>
+                  ×
+                </button>
+              </div>
+            )}
             <div className="composer composer-compact">
               <input
                 value={draft}
