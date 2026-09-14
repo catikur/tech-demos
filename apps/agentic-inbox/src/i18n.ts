@@ -62,6 +62,7 @@ const en: Dict = {
   "login.hint": "Sign in with your @{domain} Microsoft 365 account. Other domains are refused.",
   "login.withM365": "Sign in with Microsoft 365",
   "login.denied": "That account is not on @{domain}. Sign in with a company Microsoft 365 mailbox.",
+  "login.deniedGot": "That account is not on @{domain} (got {email}).",
   "login.setupHint":
     "First-time setup: paste the Entra app registration (tenant id, application/client id, optional client secret). These are stored encrypted on the server.",
   "login.tenant": "Directory (tenant) ID",
@@ -69,6 +70,7 @@ const en: Dict = {
   "login.clientSecret": "Client secret",
   "login.clientSecretOptional": "optional if public client + PKCE is allowed",
   "login.saveGraph": "Save and continue",
+  "login.editGraph": "Change Entra app",
   "login.signOut": "Sign out",
 
   "common.loading": "Loading…",
@@ -438,6 +440,7 @@ const tr: Dict = {
   "login.hint": "@{domain} Microsoft 365 hesabınızla giriş yapın. Diğer etki alanları reddedilir.",
   "login.withM365": "Microsoft 365 ile giriş",
   "login.denied": "Bu hesap @{domain} üzerinde değil. Şirket Microsoft 365 kutusuyla girin.",
+  "login.deniedGot": "Bu hesap @{domain} üzerinde değil (gelen: {email}).",
   "login.setupHint":
     "İlk kurulum: Entra uygulama kaydını yapıştırın (tenant id, application/client id, isteğe bağlı client secret). Değerler sunucuda şifreli saklanır.",
   "login.tenant": "Dizin (tenant) kimliği",
@@ -445,6 +448,7 @@ const tr: Dict = {
   "login.clientSecret": "İstemci gizli anahtarı",
   "login.clientSecretOptional": "genel istemci + PKCE açıksa isteğe bağlı",
   "login.saveGraph": "Kaydet ve devam et",
+  "login.editGraph": "Entra uygulamasını değiştir",
   "login.signOut": "Çıkış",
 
   "common.loading": "Yükleniyor…",

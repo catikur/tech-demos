@@ -169,6 +169,10 @@ code {
   text-decoration: none;
 }
 
+.login-card .btn-ghost {
+  text-align: center;
+}
+
 .topbar-right {
   display: flex;
   align-items: center;

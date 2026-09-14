@@ -6,9 +6,12 @@ import { allowedLoginDomain, emailAllowed } from "./allowlist.ts";
 import { makeSessionCookie } from "./session.ts";
 
 export function denyLoginRedirect(email: string): Response {
-  const domain = allowedLoginDomain();
-  const reason = encodeURIComponent(`Only @${domain} Microsoft 365 accounts can sign in (got ${email || "unknown"})`);
-  return new Response(null, { status: 302, headers: { Location: `/?login=denied&reason=${reason}` } });
+  const params = new URLSearchParams({
+    login: "denied",
+    email: (email || "unknown").toLowerCase(),
+    domain: allowedLoginDomain(),
+  });
+  return new Response(null, { status: 302, headers: { Location: `/?${params}` } });
 }
 
 /** Persist the M365 mailbox as the Work account and issue the session cookie. */

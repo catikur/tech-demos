@@ -15,13 +15,14 @@ export interface SessionView {
 export function LoginView({ session, onConfigured }: { session: SessionView; onConfigured: () => void }) {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const denied = params.get("login") === "denied";
-  const reason = params.get("reason");
+  const deniedEmail = params.get("email");
 
   const [tenantId, setTenantId] = useState("");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(!session.microsoftConfigured);
 
   const save = async () => {
     setBusy(true);
@@ -34,6 +35,8 @@ export function LoginView({ session, onConfigured }: { session: SessionView; onC
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(body.error ?? res.statusText);
+      setEditing(false);
+      setClientSecret("");
       onConfigured();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -42,14 +45,22 @@ export function LoginView({ session, onConfigured }: { session: SessionView; onC
     }
   };
 
+  const showForm = !session.microsoftConfigured || editing;
+
   return (
     <div className="login-screen">
       <div className="login-card">
         <div className="login-mark">📬</div>
         <h1>{t("login.title")}</h1>
         <p className="muted">{t("login.hint", { domain: session.allowedDomain })}</p>
-        {denied && <div className="error-note">{reason || t("login.denied", { domain: session.allowedDomain })}</div>}
-        {!session.microsoftConfigured ? (
+        {denied && (
+          <div className="error-note">
+            {deniedEmail
+              ? t("login.deniedGot", { domain: session.allowedDomain, email: deniedEmail })
+              : t("login.denied", { domain: session.allowedDomain })}
+          </div>
+        )}
+        {showForm ? (
           <>
             <p className="muted small">{t("login.setupHint")}</p>
             <label className="form-row">
@@ -70,9 +81,16 @@ export function LoginView({ session, onConfigured }: { session: SessionView; onC
             </button>
           </>
         ) : (
-          <a className="btn btn-primary" href="/api/auth/microsoft/start">
-            {t("login.withM365")}
-          </a>
+          <>
+            <a className="btn btn-primary" href="/api/auth/microsoft/start">
+              {t("login.withM365")}
+            </a>
+            {!session.microsoft.fromEnv && (
+              <button className="btn btn-ghost" type="button" onClick={() => setEditing(true)}>
+                {t("login.editGraph")}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

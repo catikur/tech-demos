@@ -117,6 +117,7 @@ describe("Microsoft sign-in finish", () => {
     const res = denyLoginRedirect(outsider.email);
     expect(res.status).toBe(302);
     expect(res.headers.get("Location")).toContain("login=denied");
+    expect(res.headers.get("Location")).toContain("email=ada%40gmail.com");
     expect(accounts.all()).toEqual([]);
   });
 
@@ -165,13 +166,27 @@ describe("first-run Microsoft Graph config", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tenantId: "11111111-1111-1111-1111-111111111111",
-          clientId: "22222222-2222-2222-2222-222222222222",
-          clientSecret: "other",
+          tenantId: "33333333-3333-3333-3333-333333333333",
+          clientId: "44444444-4444-4444-4444-444444444444",
+          clientSecret: "rotated-secret-value",
         }),
       }),
     );
-    expect(again.status).toBe(409);
+    expect(again.status).toBe(200);
+
+    accounts.insert(m365("ada@conforcus.com"), null);
+    const locked = await (routes["/api/setup/microsoft"] as any).POST(
+      new Request("http://local/api/setup/microsoft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId: "33333333-3333-3333-3333-333333333333",
+          clientId: "44444444-4444-4444-4444-444444444444",
+          clientSecret: "rotated-secret-value",
+        }),
+      }),
+    );
+    expect(locked.status).toBe(409);
   });
 
   test("setStoredMicrosoftOAuth round-trips", () => {

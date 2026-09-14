@@ -39,8 +39,11 @@ export const sessionRoutes = {
   },
   "/api/setup/microsoft": {
     POST: h(async (req) => {
-      if (microsoftConfigured()) {
-        return Response.json({ error: "Microsoft 365 is already configured" }, { status: 409 });
+      if (accounts.all().some((a) => a.provider === "m365")) {
+        return Response.json({ error: "Microsoft 365 is already connected via sign-in" }, { status: 409 });
+      }
+      if (microsoftCredentials().fromEnv) {
+        badRequest("Microsoft credentials come from the server environment and cannot be changed here");
       }
       const cfg = readMicrosoftBody(await readJson(req));
       setStoredMicrosoftOAuth(cfg);

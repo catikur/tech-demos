@@ -131,6 +131,17 @@ per-meeting "done" cursors. Recordings stream to `data/recordings/` and are serv
 - Cross-space access is opt-in per question and audited.
 - Graph change notifications: used when `APP_BASE_URL` is public HTTPS; localhost polls with delta queries.
 
+## Production (`butler.conforcus.com`)
+
+The app is a long-running Bun process (SQLite on disk), not a static site. On a Hostinger VPS:
+
+1. Point **`butler.conforcus.com`** A/AAAA at the VPS.
+2. In Entra, add redirect URI `https://butler.conforcus.com/api/auth/microsoft/callback`.
+3. Clone this repo, `cd apps/agentic-inbox`, copy `.env.example` → `.env` (or paste tenant/client on the first-run login form). Set `APP_BASE_URL=https://butler.conforcus.com`.
+4. `docker compose up -d --build` (Caddy terminates TLS). Compose builds from the GitHub subdirectory on this branch.
+
+`MS_*` env vars win over the login form. OpenRouter / Gmail keys also go in compose `environment` or `.env` — Hostinger’s shared-hosting API cannot set Node env vars.
+
 ## Honest scope note
 This is a **local, single-user** app: no multi-tenant hosting, no push notifications outside
 the browser. Heuristics (commitments, topics, radar) stay rule-based; OpenRouter improves
