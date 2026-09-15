@@ -445,32 +445,44 @@ export class M365Connector implements Connector {
 
       let gotTranscript = meeting.hasTranscript;
       if (!gotTranscript) {
-        const transcripts = (await g.collect<any>(`/me/onlineMeetings/${found.id}/transcripts`, { maxPages: 1 })).items;
-        const latest = transcripts.sort((a: any, b: any) => ts(b.createdDateTime) - ts(a.createdDateTime))[0];
-        if (latest) {
-          const vtt = await g.request<string>(`/me/onlineMeetings/${found.id}/transcripts/${latest.id}/content?$format=text/vtt`);
-          const lines = parseVtt(typeof vtt === "string" ? vtt : "");
-          if (lines.length) {
-            meetings.upsert(meeting);
-            meetings.setTranscript(meetingId, lines);
-            meeting.hasTranscript = true;
-            gotTranscript = true;
-            stats.transcripts++;
+        try {
+          const transcripts = (await g.collect<any>(`/me/onlineMeetings/${found.id}/transcripts`, { maxPages: 1 })).items;
+          const latest = transcripts.sort((a: any, b: any) => ts(b.createdDateTime) - ts(a.createdDateTime))[0];
+          if (latest) {
+            const vtt = await g.request<string>(`/me/onlineMeetings/${found.id}/transcripts/${latest.id}/content?$format=text/vtt`);
+            const lines = parseVtt(typeof vtt === "string" ? vtt : "");
+            if (lines.length) {
+              meetings.upsert(meeting);
+              meetings.setTranscript(meetingId, lines);
+              meeting.hasTranscript = true;
+              gotTranscript = true;
+              stats.transcripts++;
+            }
+          }
+        } catch (err) {
+          if (!(err instanceof GraphError && err.status === 403)) throw err;
+          // Tenant policy (GraphAccessToTranscriptsDisabled) or missing admin consent — don't abort other meetings.
+          if (/transcripts is disabled|GraphAccessToTranscriptsDisabled/i.test((err as GraphError).message)) {
+            accounts.setCursor(account.id, doneKey, "done");
           }
         }
       }
 
       if (!meeting.hasRecording) {
-        const recordings = (await g.collect<any>(`/me/onlineMeetings/${found.id}/recordings`, { maxPages: 1 })).items;
-        const rec = recordings[0];
-        if (rec) {
-          const dir = join(env.dataDir, "recordings");
-          mkdirSync(dir, { recursive: true });
-          const file = join(dir, `${meetingId}.mp4`);
-          const res = await g.request<Response>(`/me/onlineMeetings/${found.id}/recordings/${rec.id}/content`, {}, { raw: true });
-          await Bun.write(file, res);
-          meeting.hasRecording = true;
-          meeting.recordingUrl = `/api/recordings/${meetingId}`;
+        try {
+          const recordings = (await g.collect<any>(`/me/onlineMeetings/${found.id}/recordings`, { maxPages: 1 })).items;
+          const rec = recordings[0];
+          if (rec) {
+            const dir = join(env.dataDir, "recordings");
+            mkdirSync(dir, { recursive: true });
+            const file = join(dir, `${meetingId}.mp4`);
+            const res = await g.request<Response>(`/me/onlineMeetings/${found.id}/recordings/${rec.id}/content`, {}, { raw: true });
+            await Bun.write(file, res);
+            meeting.hasRecording = true;
+            meeting.recordingUrl = `/api/recordings/${meetingId}`;
+          }
+        } catch (err) {
+          if (!(err instanceof GraphError && err.status === 403)) throw err;
         }
       }
 

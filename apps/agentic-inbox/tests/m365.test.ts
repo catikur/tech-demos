@@ -266,6 +266,21 @@ describe("M365 connector (fixture-driven sync)", () => {
     await expect(new M365Connector(() => denied).sync(account, {})).resolves.toBeTruthy();
   });
 
+  test("transcript 403 does not fail the rest of sync", async () => {
+    const denied: GraphLike = {
+      async request(url) {
+        return fakeClient.request(url);
+      },
+      async collect(url) {
+        if (url.includes("/transcripts")) {
+          throw new GraphError(403, `GET ${url} → 403: Graph API access to transcripts is disabled for this tenant.`);
+        }
+        return fakeClient.collect(url);
+      },
+    };
+    await expect(new M365Connector(() => denied).sync(account, {})).resolves.toBeTruthy();
+  });
+
   test("skips onlineMeetings lookup when join URL is another tenant", async () => {
     process.env.MS_TENANT_ID = "374a4be9-fd08-4cef-b648-2cbeb034cd92";
     const foreign =
