@@ -10,6 +10,7 @@ export interface SessionView {
   microsoftConfigured: boolean;
   googleConfigured: boolean;
   microsoft: { configured: boolean; fromEnv: boolean; tenantId: string | null; clientIdMasked: string | null };
+  google: { configured: boolean; fromEnv: boolean; clientIdMasked: string | null; redirectUri: string };
 }
 
 export function LoginView({ session, onConfigured }: { session: SessionView; onConfigured: () => void }) {

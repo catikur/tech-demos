@@ -7,6 +7,7 @@ import { emailAllowed, allowedLoginDomain } from "../server/auth/allowlist.ts";
 import { cookieHeader, makeSessionCookie, readSession } from "../server/auth/session.ts";
 import { loginRequired } from "../server/auth/gate.ts";
 import { microsoftConfigured, setStoredMicrosoftOAuth } from "../server/auth/microsoft.ts";
+import { googleConfigured, setStoredGoogleOAuth } from "../server/auth/google.ts";
 import { routes } from "../server/api/routes.ts";
 import { denyLoginRedirect, finishMicrosoftSignIn } from "../server/auth/signin.ts";
 
@@ -221,5 +222,85 @@ describe("signed-in Microsoft 365 account cannot be removed", () => {
     const res = await (routes["/api/accounts/:id"] as any).DELETE(req);
     expect(res.status).toBe(400);
     expect(accounts.get(account.id)?.email).toBe("ada@conforcus.com");
+  });
+});
+
+describe("Google OAuth config from Settings", () => {
+  beforeEach(() => {
+    openMemoryDb();
+    bootstrap();
+    process.env.LOGIN_REQUIRED = "1";
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+  });
+  afterEach(() => restoreEnv());
+
+  const clientId = "123456789012-abcdefghijklmnopqrstuvwxyz.apps.googleusercontent.com";
+
+  test("PATCH /api/setup/google requires a session", async () => {
+    const bare = await (routes["/api/setup/google"] as any).PATCH(
+      new Request("http://local/api/setup/google", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, clientSecret: "GOCSPX-test-secret-value" }),
+      }),
+    );
+    expect(bare.status).toBe(401);
+    expect(googleConfigured()).toBe(false);
+  });
+
+  test("PATCH /api/setup/google stores the app when signed in", async () => {
+    const account = m365("ada@conforcus.com");
+    accounts.insert(account, null);
+    const cookie = cookieHeader(makeSessionCookie(account, false));
+    const res = await (routes["/api/setup/google"] as any).PATCH(
+      new Request("http://local/api/setup/google", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({ clientId, clientSecret: "GOCSPX-test-secret-value" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(googleConfigured()).toBe(true);
+    const session = await (await (routes["/api/session"] as any).GET(new Request("http://local/api/session"))).json();
+    expect(session.google).toMatchObject({ configured: true, fromEnv: false, redirectUri: "http://localhost:3000/api/auth/google/callback" });
+    expect(session.google.clientIdMasked).toContain("123456789012");
+  });
+
+  test("rejects a non-Google client id", async () => {
+    const account = m365("ada@conforcus.com");
+    accounts.insert(account, null);
+    const cookie = cookieHeader(makeSessionCookie(account, false));
+    const res = await (routes["/api/setup/google"] as any).PATCH(
+      new Request("http://local/api/setup/google", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({ clientId: "22222222-2222-2222-2222-222222222222", clientSecret: "GOCSPX-test-secret-value" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(googleConfigured()).toBe(false);
+  });
+
+  test("env wins and locks the form", async () => {
+    process.env.GOOGLE_CLIENT_ID = clientId;
+    process.env.GOOGLE_CLIENT_SECRET = "env-secret-value";
+    expect(googleConfigured()).toBe(true);
+    const account = m365("ada@conforcus.com");
+    accounts.insert(account, null);
+    const cookie = cookieHeader(makeSessionCookie(account, false));
+    const res = await (routes["/api/setup/google"] as any).PATCH(
+      new Request("http://local/api/setup/google", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({ clientId, clientSecret: "GOCSPX-should-not-store" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  test("setStoredGoogleOAuth round-trips", () => {
+    setStoredGoogleOAuth({ clientId, clientSecret: "xyz-secret" });
+    expect(googleConfigured()).toBe(true);
   });
 });

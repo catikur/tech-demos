@@ -5,7 +5,7 @@ import type { Account, CalendarEvent, Chat, ChatMessage, EmailMessage, Meeting }
 import { formatAddress, senderEmail } from "../../shared/types.ts";
 import { env } from "../env.ts";
 import { accounts, chats, events, meetings, threads } from "../db/repo.ts";
-import { microsoftAccessToken } from "../auth/microsoft.ts";
+import { microsoftAccessToken, microsoftCredentials } from "../auth/microsoft.ts";
 import { categorize, htmlToText, parseVtt } from "../sync/normalize.ts";
 import { emptyStats, type Connector, type SendChatInput, type SendMailInput, type SyncStats } from "./types.ts";
 
@@ -346,6 +346,8 @@ export class M365Connector implements Connector {
       if (err instanceof GraphError && (err.status === 400 || err.status === 404 || err.status === 501)) {
         return (await g.collect<any>(`${base}?$top=50`, { maxPages: 2 })).items;
       }
+      // ChannelMessage.Read.All needs admin consent — skip this channel until it is granted.
+      if (err instanceof GraphError && err.status === 403) return [];
       throw err;
     }
   }
@@ -398,11 +400,29 @@ export class M365Connector implements Connector {
     const now = Date.now();
     const past = events.list(account.spaceId, now - 30 * DAY, now).filter((e) => e.accountId === account.id && e.joinUrl && e.end < now);
     const cursors = accounts.cursors(account.id);
+    const ourTenant = (microsoftCredentials().tenantId || "").toLowerCase();
     for (const ev of past) {
       const doneKey = `meeting.${ev.id}`;
       if (cursors[doneKey] === "done") continue;
+      const otherTid = teamsJoinTenantId(ev.joinUrl);
+      if (otherTid && ourTenant && ourTenant !== "common" && ourTenant !== "organizations" && otherTid !== ourTenant) {
+        accounts.setCursor(account.id, doneKey, "done");
+        continue;
+      }
       const filter = encodeURIComponent(`JoinWebUrl eq '${ev.joinUrl}'`);
-      const found = (await g.collect<any>(`/me/onlineMeetings?$filter=${filter}`, { maxPages: 1 })).items[0];
+      let found: any;
+      try {
+        found = (await g.collect<any>(`/me/onlineMeetings?$filter=${filter}`, { maxPages: 1 })).items[0];
+      } catch (err) {
+        // External-org meetings return 3003; missing OnlineMeetings.Read also 403. Don't abort the rest.
+        if (err instanceof GraphError && err.status === 403) {
+          if (/3003|does not have access to lookup meeting/i.test(err.message)) {
+            accounts.setCursor(account.id, doneKey, "done");
+          }
+          continue;
+        }
+        throw err;
+      }
       if (!found) {
         accounts.setCursor(account.id, doneKey, "done");
         continue;
@@ -540,4 +560,21 @@ function chatExternalId(chatId: string): string {
 
 function describe(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/** Tenant id from a Teams join URL `context.Tid` (often URI-encoded several times). */
+export function teamsJoinTenantId(joinUrl: string | null | undefined): string | null {
+  if (!joinUrl) return null;
+  try {
+    let decoded = joinUrl;
+    for (let i = 0; i < 3; i++) {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    }
+    const m = decoded.match(/["']Tid["']\s*:\s*["']([0-9a-f-]{36})["']/i);
+    return m?.[1]?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
 }

@@ -1,7 +1,7 @@
 import { allowedLoginDomain } from "../auth/allowlist.ts";
 import { loginRequired } from "../auth/gate.ts";
 import { microsoftConfigured, microsoftCredentials, microsoftPublicView, setStoredMicrosoftOAuth } from "../auth/microsoft.ts";
-import { googleConfigured } from "../auth/google.ts";
+import { googleConfigured, googleCredentials, googlePublicView, setStoredGoogleOAuth, storedGoogleOAuth } from "../auth/google.ts";
 import { accounts } from "../db/repo.ts";
 import { clearSessionCookie, readSession } from "../auth/session.ts";
 import { badRequest, h, ok, readJson } from "./util.ts";
@@ -19,6 +19,18 @@ function readMicrosoftBody(body: { tenantId?: string; clientId?: string; clientS
   return { tenantId, clientId, clientSecret };
 }
 
+const GOOGLE_CLIENT_ID = /^[0-9]+-[a-z0-9-]+\.apps\.googleusercontent\.com$/i;
+
+function readGoogleBody(body: { clientId?: string; clientSecret?: string | null }) {
+  const clientId = body.clientId?.trim() ?? "";
+  if (!GOOGLE_CLIENT_ID.test(clientId)) {
+    badRequest("Client id must look like 123-abc.apps.googleusercontent.com");
+  }
+  const clientSecret = body.clientSecret?.trim() || storedGoogleOAuth()?.clientSecret || "";
+  if (clientSecret.length < 8) badRequest("Client secret is required (8+ characters)");
+  return { clientId, clientSecret };
+}
+
 export const sessionRoutes = {
   "/api/session": {
     GET: h((req) => {
@@ -33,6 +45,7 @@ export const sessionRoutes = {
         microsoftConfigured: microsoftConfigured(),
         googleConfigured: googleConfigured(),
         microsoft: microsoftPublicView(),
+        google: googlePublicView(),
       });
     }),
     DELETE: h(() => ok({ ok: true, authenticated: false }, { headers: { "Set-Cookie": clearSessionCookie() } })),
@@ -54,6 +67,14 @@ export const sessionRoutes = {
       const cfg = readMicrosoftBody(await readJson(req));
       setStoredMicrosoftOAuth(cfg);
       return ok({ ok: true, microsoft: microsoftPublicView() });
+    }),
+  },
+  "/api/setup/google": {
+    PATCH: h(async (req) => {
+      if (googleCredentials().fromEnv) badRequest("Google credentials come from the server environment and cannot be changed here");
+      const cfg = readGoogleBody(await readJson(req));
+      setStoredGoogleOAuth(cfg);
+      return ok({ ok: true, google: googlePublicView() });
     }),
   },
 };

@@ -48,6 +48,10 @@ export function SettingsView({ status, onChanged }: { status: AppStatus | null; 
         <p className="muted">{t("settings.graphHint")}</p>
         <GraphSettings onChanged={onChanged} />
 
+        <h2>{t("settings.google")}</h2>
+        <p className="muted">{t("settings.googleHint")}</p>
+        <GoogleSettings onChanged={onChanged} />
+
         <h2>{t("settings.accounts")}</h2>
         <p className="muted">{t("settings.accountsHint")}</p>
         {error && <div className="error-note">{error}</div>}
@@ -202,6 +206,72 @@ function GraphSettings({ onChanged }: { onChanged: () => void }) {
           </label>
           <button className="btn btn-small btn-primary" disabled={busy || !tenantId.trim() || !clientId.trim()} onClick={() => void save()}>
             {t("settings.graphSave")}
+          </button>
+          {saved && <span className="sent-note"> ✓ {t("common.saved")}</span>}
+          {error && <div className="error-note">{error}</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
+function GoogleSettings({ onChanged }: { onChanged: () => void }) {
+  const session = useData<SessionView>(() => api.get("/api/session"), []);
+  const g = session.data?.google;
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  if (!g) return <p className="muted">{t("common.loading")}</p>;
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patch("/api/setup/google", { clientId, clientSecret: clientSecret || null });
+      setSaved(true);
+      setClientSecret("");
+      session.reload();
+      onChanged();
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="form-card" style={{ marginBottom: 16 }}>
+      <p className="small" style={{ margin: 0 }}>
+        {g.configured ? (
+          <span className="pill pill-ok">
+            {t("settings.googleClient")} <code>{g.clientIdMasked}</code>
+            {g.fromEnv ? ` · ${t("llm.source.env")}` : ` · ${t("llm.source.settings")}`}
+          </span>
+        ) : (
+          <span className="pill pill-warn">{t("settings.oauthGoogle")}</span>
+        )}
+      </p>
+      <p className="muted small">
+        {t("settings.googleRedirect")} <code>{g.redirectUri}</code>
+      </p>
+      {g.fromEnv ? (
+        <p className="muted small">{t("settings.googleFromEnv")}</p>
+      ) : (
+        <>
+          <label className="form-row">
+            {t("settings.googleClient")}
+            <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder={g.clientIdMasked ?? t("settings.googlePlaceholder")} autoComplete="off" />
+          </label>
+          <label className="form-row">
+            {t("settings.googleSecret")}
+            <input type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} autoComplete="off" />
+          </label>
+          <button className="btn btn-small btn-primary" disabled={busy || !clientId.trim()} onClick={() => void save()}>
+            {t("settings.googleSave")}
           </button>
           {saved && <span className="sent-note"> ✓ {t("common.saved")}</span>}
           {error && <div className="error-note">{error}</div>}

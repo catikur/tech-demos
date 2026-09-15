@@ -3,7 +3,7 @@ import type { Account } from "../shared/types.ts";
 import { openMemoryDb } from "../server/db/index.ts";
 import { bootstrap, WORK_SPACE_ID } from "../server/bootstrap.ts";
 import { accounts, chats, events, meetings, threads } from "../server/db/repo.ts";
-import { M365Connector, localId, type GraphLike } from "../server/connectors/m365.ts";
+import { GraphError, M365Connector, localId, teamsJoinTenantId, type GraphLike } from "../server/connectors/m365.ts";
 
 /**
  * Recorded-shape Graph responses (trimmed to the fields the connector reads).
@@ -242,5 +242,55 @@ describe("M365 connector (fixture-driven sync)", () => {
     const lines = meetings.transcript(ms[0].id)!.lines;
     expect(lines.map((l) => l.speaker)).toEqual(["Marcus Chen", "You"]);
     expect(events.get(ms[0].eventId!)!.meetingId).toBe(ms[0].id);
+  });
+
+  test("teamsJoinTenantId decodes URI-encoded context.Tid", () => {
+    const url =
+      "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0?context=%7b%22Tid%22%3a%22c4115323-28a5-4c46-a39c-84f8ec394dce%22%2c%22Oid%22%3a%229448cc65-ab49-432e-a58c-6767f1f854fa%22%7d";
+    expect(teamsJoinTenantId(url)).toBe("c4115323-28a5-4c46-a39c-84f8ec394dce");
+    expect(teamsJoinTenantId("https://teams.microsoft.com/l/meetup-join/abc")).toBeNull();
+  });
+
+  test("channel 403 does not fail the rest of sync", async () => {
+    const denied: GraphLike = {
+      async request(url) {
+        return fakeClient.request(url);
+      },
+      async collect(url) {
+        if (url.includes("/channels/") && url.includes("/messages")) {
+          throw new GraphError(403, `GET ${url} → 403: UnknownError`);
+        }
+        return fakeClient.collect(url);
+      },
+    };
+    await expect(new M365Connector(() => denied).sync(account, {})).resolves.toBeTruthy();
+  });
+
+  test("skips onlineMeetings lookup when join URL is another tenant", async () => {
+    process.env.MS_TENANT_ID = "374a4be9-fd08-4cef-b648-2cbeb034cd92";
+    const foreign =
+      "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0?context=%7b%22Tid%22%3a%22c4115323-28a5-4c46-a39c-84f8ec394dce%22%7d";
+    events.upsert({
+      id: "ev_foreign",
+      externalId: "EV-FOREIGN",
+      spaceId: WORK_SPACE_ID,
+      accountId: account.id,
+      title: "External org call",
+      start: Date.now() - 3_600_000,
+      end: Date.now() - 1_800_000,
+      location: "",
+      organizer: "You",
+      attendees: [],
+      joinUrl: foreign,
+      description: "",
+      meetingId: null,
+      responseStatus: "accepted",
+    });
+    requested.length = 0;
+    const before = meetings.list(WORK_SPACE_ID).length;
+    await new M365Connector(() => fakeClient).sync(account, {});
+    expect(requested.some((u) => u.includes("onlineMeetings") && u.includes("meeting_x"))).toBe(false);
+    expect(meetings.list(WORK_SPACE_ID)).toHaveLength(before);
+    expect(accounts.cursors(account.id)["meeting.ev_foreign"]).toBe("done");
   });
 });

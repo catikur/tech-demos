@@ -33,12 +33,13 @@ Requires [Bun](https://bun.sh) ≥ 1.2.
 | What | Guide | Env vars |
 |---|---|---|
 | Microsoft 365 — Outlook, Calendar, Teams chats/channels, meeting transcripts + recordings | [docs/microsoft-365.md](docs/microsoft-365.md) | `MS_CLIENT_ID`, `MS_TENANT_ID`, `MS_CLIENT_SECRET` (optional) |
-| Gmail + Google Calendar | [docs/gmail.md](docs/gmail.md) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
+| Gmail + Google Calendar | [docs/gmail.md](docs/gmail.md) | Settings after sign-in, or `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` |
 | Agent model (OpenRouter) | [openrouter.ai](https://openrouter.ai) | `OPENROUTER_API_KEY`, optional `OPENROUTER_MODEL` / `OPENROUTER_EMBED_MODEL` / `OPENROUTER_BASE_URL` — or paste the key and pick chat + embedding models from the live catalog in **Settings → Agent** (stored encrypted, overrides `.env`) |
 
 Copy [`.env.example`](.env.example) to `.env` (or paste tenant / client id on the
-first-run login form), restart, then **sign in with Microsoft 365**. Gmail is optional
-and is connected later from **Settings**. Accounts can be moved between spaces later.
+first-run login form), restart, then **sign in with Microsoft 365**. Gmail is optional:
+paste the Google Cloud client id and secret in **Settings → Gmail / Google Cloud**, then
+**Connect Gmail**. Accounts can be moved between spaces later.
 
 Both OAuth flows are auth-code + PKCE implemented with plain `fetch`; tokens are stored
 **AES-256-GCM encrypted** (`TOKEN_ENCRYPTION_KEY` or an auto-generated `data/.token-key`).

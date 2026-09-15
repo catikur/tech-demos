@@ -40,9 +40,15 @@ export const env = {
     },
   },
   google: {
-    clientId: process.env.GOOGLE_CLIENT_ID ?? null,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? null,
-    calendar: bool("GOOGLE_CALENDAR", true),
+    get clientId() {
+      return process.env.GOOGLE_CLIENT_ID ?? null;
+    },
+    get clientSecret() {
+      return process.env.GOOGLE_CLIENT_SECRET ?? null;
+    },
+    get calendar() {
+      return bool("GOOGLE_CALENDAR", true);
+    },
   },
   // Read lazily so tests can change the model without a restart.
   get llm() {

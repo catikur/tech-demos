@@ -1,6 +1,5 @@
 import type { BunRequest } from "bun";
 import type { AgentContext, AppStatus } from "../../shared/types.ts";
-import { env } from "../env.ts";
 import { isDemoMode } from "../bootstrap.ts";
 import {
   accounts,
@@ -26,6 +25,7 @@ import { handleGraphWebhook } from "../webhooks/graph.ts";
 import { badRequest, h, notFound, num, ok, query, readJson, spaceParam } from "./util.ts";
 import { loginRequired, withLoginGate } from "../auth/gate.ts";
 import { microsoftConfigured } from "../auth/microsoft.ts";
+import { googleConfigured } from "../auth/google.ts";
 import { readSession } from "../auth/session.ts";
 
 type P<T extends string> = BunRequest<T>;
@@ -44,7 +44,7 @@ const rawRoutes = {
       spaces: spaces.all(),
       accounts: accounts.all(),
       llm: llmStatus(),
-      oauth: { microsoft: microsoftConfigured(), google: !!env.google.clientId && !!env.google.clientSecret },
+      oauth: { microsoft: microsoftConfigured(), google: googleConfigured() },
       demoMode: isDemoMode(),
       unreadNotifications: notifications.unreadCount(null),
     };

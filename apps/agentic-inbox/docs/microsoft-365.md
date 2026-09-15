@@ -124,6 +124,8 @@ block the To Do task. Pulling tasks back from To Do is not implemented.
 ## Troubleshooting
 
 - `AADSTS65001` / consent errors → admin consent has not been granted for the admin-only scopes.
+- `403` on `/teams/{id}/channels/{id}/messages` (`UnknownError`) → grant **admin consent** for `ChannelMessage.Read.All`. Until then, 1:1/group chats still sync; that channel is skipped.
+- `403` `3003: User does not have access to lookup meeting` on `/me/onlineMeetings` → the join link belongs to **another tenant**. Calendar still shows the event; transcript/recording cannot be fetched. Same-tenant meetings need `OnlineMeetings.Read` plus admin consent for transcript/recording scopes.
 - `403` on `/transcripts` or `/recordings` → the transcript/recording scopes are missing consent, or the meeting was not transcribed/recorded.
 - Transcripts empty right after a meeting → normal; the app retries on the next sync.
 - Throttling (`429`) → the client honours `Retry-After`; lower `SYNC_INTERVAL_MINUTES` only if you need it.
