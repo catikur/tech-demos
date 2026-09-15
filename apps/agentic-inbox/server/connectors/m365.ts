@@ -482,7 +482,10 @@ export class M365Connector implements Connector {
             meeting.recordingUrl = `/api/recordings/${meetingId}`;
           }
         } catch (err) {
-          if (!(err instanceof GraphError && err.status === 403)) throw err;
+          if (!(err instanceof GraphError && (err.status === 403 || err.status === 423))) throw err;
+          if (/blocked|Locked/i.test((err as GraphError).message)) {
+            accounts.setCursor(account.id, doneKey, "done");
+          }
         }
       }
 
