@@ -1,5 +1,15 @@
 {
-  "proposed": [],
+  "proposed": [
+    {
+      "id": "2098941338297458746-tradingagents",
+      "title": "TradingAgents (multi-agent LLM trading framework)",
+      "url": "https://x.com/shanyanggm/status/2098941338297458746",
+      "github": "https://github.com/TauricResearch/TradingAgents",
+      "date": "2026-09-15",
+      "source": "daily-x-tech-scout",
+      "slug": "trading-agents"
+    }
+  ],
   "skipped": [
     {
       "id": "2098941338297458746-hyperframes",
