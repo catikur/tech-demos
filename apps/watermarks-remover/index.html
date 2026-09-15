@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>watermarks-remover — strip AI provenance marks, locally</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧼</text></svg>" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="site-header">
+        <div class="brand">
+          <span class="brand-mark">🧼</span>
+          <span class="brand-name">watermarks&#8209;remover</span>
+        </div>
+        <span class="privacy-pill" title="Files are parsed with in-browser byte-level code. No network requests are made with your image.">
+          <span class="dot"></span> 100% local — your image never leaves this tab
+        </span>
+      </header>
+
+      <section id="hero">
+        <h1>Strip AI provenance marks<br /><span class="grad">from images you own</span></h1>
+        <p class="pitch">
+          Detects and removes <strong>Claude</strong>, <strong>OpenAI</strong> and <strong>Gemini&nbsp;/&nbsp;SynthID</strong>-class
+          provenance surfaces — C2PA manifests, EXIF, XMP and text metadata — from PNG, JPEG and WebP.
+          Byte-level, lossless: your pixels are never re-encoded.
+        </p>
+
+        <div id="dropzone" tabindex="0" role="button" aria-label="Upload an image">
+          <div class="dz-inner">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            <p class="dz-title">Drop an image here</p>
+            <p class="dz-sub">or click to choose a file — PNG · JPEG · WebP</p>
+          </div>
+          <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp" hidden />
+        </div>
+
+        <div class="samples">
+          <p class="samples-label">No watermarked image handy? Try a sample:</p>
+          <div class="samples-row">
+            <button class="sample-btn" data-sample="/samples/claude-watermarked.png">
+              <img src="/samples/claude-watermarked.png" alt="Claude-class sample" />
+              <span>Claude class</span>
+            </button>
+            <button class="sample-btn" data-sample="/samples/openai-watermarked.png">
+              <img src="/samples/openai-watermarked.png" alt="OpenAI-class sample" />
+              <span>OpenAI class</span>
+            </button>
+            <button class="sample-btn" data-sample="/samples/gemini-watermarked.png">
+              <img src="/samples/gemini-watermarked.png" alt="Gemini-class sample" />
+              <span>Gemini class</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="result" hidden>
+        <div id="summary-bar"></div>
+        <div class="compare">
+          <div class="pane" id="pane-before">
+            <div class="pane-head">
+              <h2>Before</h2>
+              <span class="pane-meta" id="before-meta"></span>
+            </div>
+            <div class="img-wrap"><img id="img-before" alt="Original image" /></div>
+            <div class="marks" id="marks-before"></div>
+          </div>
+          <div class="pane-arrow" aria-hidden="true">→</div>
+          <div class="pane pane-clean" id="pane-after">
+            <div class="pane-head">
+              <h2>After</h2>
+              <span class="pane-meta" id="after-meta"></span>
+            </div>
+            <div class="img-wrap"><img id="img-after" alt="Cleaned image" /></div>
+            <div class="marks" id="marks-after"></div>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="download-btn" class="btn btn-primary">Download cleaned image</button>
+          <button id="reset-btn" class="btn btn-ghost">Clean another image</button>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <p>
+          Inspired by <a href="https://github.com/guillaumemeyer/watermarks-remover" target="_blank" rel="noreferrer">guillaumemeyer/watermarks-remover</a>
+          · source bookmark <a href="https://x.com/guillaumemeyer/status/2087275734608007415" target="_blank" rel="noreferrer">@guillaumemeyer</a>
+          · for content <em>you own</em> — provenance marks can serve legitimate transparency purposes.
+        </p>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
