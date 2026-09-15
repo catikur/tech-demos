@@ -18,10 +18,11 @@ bun install
 bun run dev          # http://localhost:3000
 ```
 
-The app starts empty. Copy [`.env.example`](.env.example) to `.env`, set Microsoft 365 and/or
-Gmail OAuth plus `OPENROUTER_API_KEY`, then **Settings → hesap bağla**. The UI is Turkish by
-default (`?lang=en` switches to English). Without an OpenRouter key the agent uses a
-rule-based fallback so the chrome still works; mail and calendar need real accounts.
+The app starts behind a **Microsoft 365 sign-in screen**. Only `@{ALLOWED_LOGIN_DOMAIN}`
+(default `conforcus.com`) mailboxes are accepted; that account is connected as Work mail.
+Copy [`.env.example`](.env.example) to `.env`, or paste tenant / client id on the first-run
+form. Add Gmail later from Settings. The UI is Turkish by default (`?lang=en` switches to
+English). Without an OpenRouter key the agent uses a rule-based fallback.
 
 Other scripts: `bun run typecheck`, `bun test` (offline), `bun run start` (production).
 
@@ -32,12 +33,13 @@ Requires [Bun](https://bun.sh) ≥ 1.2.
 | What | Guide | Env vars |
 |---|---|---|
 | Microsoft 365 — Outlook, Calendar, Teams chats/channels, meeting transcripts + recordings | [docs/microsoft-365.md](docs/microsoft-365.md) | `MS_CLIENT_ID`, `MS_TENANT_ID`, `MS_CLIENT_SECRET` (optional) |
-| Gmail + Google Calendar | [docs/gmail.md](docs/gmail.md) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
+| Gmail + Google Calendar | [docs/gmail.md](docs/gmail.md) | Settings after sign-in, or `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` |
 | Agent model (OpenRouter) | [openrouter.ai](https://openrouter.ai) | `OPENROUTER_API_KEY`, optional `OPENROUTER_MODEL` / `OPENROUTER_EMBED_MODEL` / `OPENROUTER_BASE_URL` — or paste the key and pick chat + embedding models from the live catalog in **Settings → Agent** (stored encrypted, overrides `.env`) |
 
-Copy [`.env.example`](.env.example) to `.env`, fill what you need, restart, then use
-**Settings → hesap bağla** under the space the account belongs to. Accounts can be
-moved between spaces later.
+Copy [`.env.example`](.env.example) to `.env` (or paste tenant / client id on the
+first-run login form), restart, then **sign in with Microsoft 365**. Gmail is optional:
+paste the Google Cloud client id and secret in **Settings → Gmail / Google Cloud**, then
+**Connect Gmail**. Accounts can be moved between spaces later.
 
 Both OAuth flows are auth-code + PKCE implemented with plain `fetch`; tokens are stored
 **AES-256-GCM encrypted** (`TOKEN_ENCRYPTION_KEY` or an auto-generated `data/.token-key`).
@@ -123,10 +125,30 @@ Sync is incremental: Graph delta links (mail, chats, channels), Gmail `historyId
 per-meeting "done" cursors. Recordings stream to `data/recordings/` and are served locally.
 
 ## Security notes
+- Production starts with a **Microsoft 365 login gate**. Only `@{ALLOWED_LOGIN_DOMAIN}`
+  (default `conforcus.com`) can sign in; that mailbox is the Work account. Gmail is optional.
 - Tokens encrypted at rest; the key file is `0600`. Secrets never appear in logs or the audit trail.
 - Outbound actions always require a click in the UI; the agent cannot send on its own.
 - Cross-space access is opt-in per question and audited.
 - Graph change notifications: used when `APP_BASE_URL` is public HTTPS; localhost polls with delta queries.
+
+## Production (`butler.conforcus.com`)
+
+The app is a long-running Bun process (SQLite on disk), not a static site. On the
+Conforcus Hostinger VPS (`srv1709361`), **do not bind 80/443** — `conforcus-web`
+Caddy already owns them. Deploy as `/opt/butler` and add a site block:
+
+```
+butler.conforcus.com {
+	encode gzip
+	reverse_proxy butler:3000
+}
+```
+
+Join `conforcus-web_default` (see `docker-compose.yml`). Entra redirect URI:
+`https://butler.conforcus.com/api/auth/microsoft/callback`.
+
+`MS_*` env vars win over the login form. OpenRouter / Gmail keys go in `/opt/butler/.env`.
 
 ## Honest scope note
 This is a **local, single-user** app: no multi-tenant hosting, no push notifications outside

@@ -25,16 +25,30 @@ export const env = {
   graphWebhookSecret: process.env.GRAPH_WEBHOOK_SECRET ?? null,
 
   microsoft: {
-    clientId: process.env.MS_CLIENT_ID ?? null,
-    clientSecret: process.env.MS_CLIENT_SECRET ?? null,
-    tenantId: process.env.MS_TENANT_ID ?? "common",
+    get clientId() {
+      return process.env.MS_CLIENT_ID ?? null;
+    },
+    get clientSecret() {
+      return process.env.MS_CLIENT_SECRET ?? null;
+    },
+    get tenantId() {
+      return process.env.MS_TENANT_ID ?? "common";
+    },
     /** Optional Planner plan id — when set, a matching Planner task is created alongside To Do. */
-    plannerPlanId: process.env.MS_PLANNER_PLAN_ID ?? null,
+    get plannerPlanId() {
+      return process.env.MS_PLANNER_PLAN_ID ?? null;
+    },
   },
   google: {
-    clientId: process.env.GOOGLE_CLIENT_ID ?? null,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? null,
-    calendar: bool("GOOGLE_CALENDAR", true),
+    get clientId() {
+      return process.env.GOOGLE_CLIENT_ID ?? null;
+    },
+    get clientSecret() {
+      return process.env.GOOGLE_CLIENT_SECRET ?? null;
+    },
+    get calendar() {
+      return bool("GOOGLE_CALENDAR", true);
+    },
   },
   // Read lazily so tests can change the model without a restart.
   get llm() {

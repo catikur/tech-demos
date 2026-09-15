@@ -1,6 +1,5 @@
 import type { BunRequest } from "bun";
 import type { AgentContext, AppStatus } from "../../shared/types.ts";
-import { env } from "../env.ts";
 import { isDemoMode } from "../bootstrap.ts";
 import {
   accounts,
@@ -21,15 +20,21 @@ import { agentStream, broadcast, sseResponse } from "./events.ts";
 import { authRoutes } from "./auth.ts";
 import { featureRoutes } from "./features.ts";
 import { llmRoutes } from "./llm.ts";
+import { sessionRoutes } from "./session.ts";
 import { handleGraphWebhook } from "../webhooks/graph.ts";
 import { badRequest, h, notFound, num, ok, query, readJson, spaceParam } from "./util.ts";
+import { loginRequired, withLoginGate } from "../auth/gate.ts";
+import { microsoftConfigured } from "../auth/microsoft.ts";
+import { googleConfigured } from "../auth/google.ts";
+import { readSession } from "../auth/session.ts";
 
 type P<T extends string> = BunRequest<T>;
 
-export const routes = {
+const rawRoutes = {
   ...authRoutes,
   ...featureRoutes,
   ...llmRoutes,
+  ...sessionRoutes,
   // Raw handler: Graph validation handshake must be 200 text/plain, not JSON.
   "/api/webhooks/graph": { POST: (req: Request) => handleGraphWebhook(req) },
   "/api/health": h(() => ok({ ok: true })),
@@ -39,7 +44,7 @@ export const routes = {
       spaces: spaces.all(),
       accounts: accounts.all(),
       llm: llmStatus(),
-      oauth: { microsoft: !!env.microsoft.clientId, google: !!env.google.clientId && !!env.google.clientSecret },
+      oauth: { microsoft: microsoftConfigured(), google: googleConfigured() },
       demoMode: isDemoMode(),
       unreadNotifications: notifications.unreadCount(null),
     };
@@ -75,6 +80,10 @@ export const routes = {
     }),
     DELETE: h((req: P<"/api/accounts/:id">) => {
       const account = accounts.get(req.params.id) ?? notFound("Account not found");
+      const session = readSession(req);
+      if (account.provider === "m365" && (session?.accountId === account.id || loginRequired())) {
+        badRequest("Cannot remove the Microsoft 365 account used to sign in");
+      }
       accounts.remove(account.id);
       if (account.provider === "demo" && !accounts.all().some((a) => a.provider === "demo")) {
         settings.set("demo_removed", "1");
@@ -190,3 +199,5 @@ export const routes = {
     }),
   },
 };
+
+export const routes = withLoginGate(rawRoutes);

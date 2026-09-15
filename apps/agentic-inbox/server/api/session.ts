@@ -1,0 +1,80 @@
+import { allowedLoginDomain } from "../auth/allowlist.ts";
+import { loginRequired } from "../auth/gate.ts";
+import { microsoftConfigured, microsoftCredentials, microsoftPublicView, setStoredMicrosoftOAuth } from "../auth/microsoft.ts";
+import { googleConfigured, googleCredentials, googlePublicView, setStoredGoogleOAuth, storedGoogleOAuth } from "../auth/google.ts";
+import { accounts } from "../db/repo.ts";
+import { clearSessionCookie, readSession } from "../auth/session.ts";
+import { badRequest, h, ok, readJson } from "./util.ts";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function readMicrosoftBody(body: { tenantId?: string; clientId?: string; clientSecret?: string | null }) {
+  const tenantId = body.tenantId?.trim() ?? "";
+  const clientId = body.clientId?.trim() ?? "";
+  const clientSecret = body.clientSecret?.trim() || null;
+  const tenantOk = UUID.test(tenantId) || ["common", "organizations", "consumers"].includes(tenantId.toLowerCase());
+  if (!tenantOk) badRequest("Tenant id must be a GUID, or common / organizations");
+  if (!UUID.test(clientId)) badRequest("Application (client) id must be a GUID");
+  if (clientSecret && clientSecret.length < 8) badRequest("Client secret looks too short");
+  return { tenantId, clientId, clientSecret };
+}
+
+const GOOGLE_CLIENT_ID = /^[0-9]+-[a-z0-9-]+\.apps\.googleusercontent\.com$/i;
+
+function readGoogleBody(body: { clientId?: string; clientSecret?: string | null }) {
+  const clientId = body.clientId?.trim() ?? "";
+  if (!GOOGLE_CLIENT_ID.test(clientId)) {
+    badRequest("Client id must look like 123-abc.apps.googleusercontent.com");
+  }
+  const clientSecret = body.clientSecret?.trim() || storedGoogleOAuth()?.clientSecret || "";
+  if (clientSecret.length < 8) badRequest("Client secret is required (8+ characters)");
+  return { clientId, clientSecret };
+}
+
+export const sessionRoutes = {
+  "/api/session": {
+    GET: h((req) => {
+      const session = readSession(req);
+      const account = session ? accounts.get(session.accountId) : null;
+      return ok({
+        authenticated: !!account,
+        loginRequired: loginRequired(),
+        allowedDomain: allowedLoginDomain(),
+        email: account?.email ?? null,
+        accountId: account?.id ?? null,
+        microsoftConfigured: microsoftConfigured(),
+        googleConfigured: googleConfigured(),
+        microsoft: microsoftPublicView(),
+        google: googlePublicView(),
+      });
+    }),
+    DELETE: h(() => ok({ ok: true, authenticated: false }, { headers: { "Set-Cookie": clearSessionCookie() } })),
+  },
+  "/api/setup/microsoft": {
+    POST: h(async (req) => {
+      if (accounts.all().some((a) => a.provider === "m365")) {
+        return Response.json({ error: "Microsoft 365 is already connected via sign-in" }, { status: 409 });
+      }
+      if (microsoftCredentials().fromEnv) {
+        badRequest("Microsoft credentials come from the server environment and cannot be changed here");
+      }
+      const cfg = readMicrosoftBody(await readJson(req));
+      setStoredMicrosoftOAuth(cfg);
+      return ok({ ok: true, microsoft: microsoftPublicView() });
+    }),
+    PATCH: h(async (req) => {
+      if (microsoftCredentials().fromEnv) badRequest("Microsoft credentials come from the server environment and cannot be changed here");
+      const cfg = readMicrosoftBody(await readJson(req));
+      setStoredMicrosoftOAuth(cfg);
+      return ok({ ok: true, microsoft: microsoftPublicView() });
+    }),
+  },
+  "/api/setup/google": {
+    PATCH: h(async (req) => {
+      if (googleCredentials().fromEnv) badRequest("Google credentials come from the server environment and cannot be changed here");
+      const cfg = readGoogleBody(await readJson(req));
+      setStoredGoogleOAuth(cfg);
+      return ok({ ok: true, google: googlePublicView() });
+    }),
+  },
+};

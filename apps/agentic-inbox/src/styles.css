@@ -122,6 +122,57 @@ code {
   font-size: 13px;
 }
 
+.topbar-user {
+  font-size: 12px;
+  color: var(--text-dim);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.login-screen {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  background:
+    radial-gradient(1200px 400px at 50% -10%, var(--accent-soft), transparent 60%),
+    var(--bg);
+}
+
+.login-card {
+  width: min(440px, 100%);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background: var(--bg-raised);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login-mark {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.login-card .btn-primary {
+  text-align: center;
+  text-decoration: none;
+}
+
+.login-card .btn-ghost {
+  text-align: center;
+}
+
 .topbar-right {
   display: flex;
   align-items: center;

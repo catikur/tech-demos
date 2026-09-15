@@ -1,0 +1,37 @@
+# Butler on the Hostinger VPS (srv1709361).
+# Port 80/443 already belong to /opt/conforcus-web Caddy — do not start another
+# Caddy here. Join that stack's network and add a site block:
+#   butler.conforcus.com { reverse_proxy butler:3000 }
+
+name: butler
+
+services:
+  butler:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "3000"
+      NODE_ENV: production
+      APP_BASE_URL: https://butler.conforcus.com
+      LOGIN_REQUIRED: "1"
+      ALLOWED_LOGIN_DOMAIN: conforcus.com
+      OPENROUTER_SITE_URL: https://butler.conforcus.com
+      OPENROUTER_APP_NAME: Butler
+    volumes:
+      - butler-data:/app/data
+    expose:
+      - "3000"
+    networks:
+      default: {}
+      web:
+        aliases:
+          - butler
+
+networks:
+  web:
+    external: true
+    name: conforcus-web_default
+
+volumes:
+  butler-data:
