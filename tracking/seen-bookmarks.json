@@ -1,15 +1,5 @@
 {
-  "proposed": [
-    {
-      "id": "2098941338297458746-agent-skills",
-      "title": "agent-skills (Addy Osmani) — production skills for coding agents",
-      "url": "https://x.com/shanyanggm/status/2098941338297458746",
-      "github": "https://github.com/addyosmani/agent-skills",
-      "date": "2026-09-16",
-      "source": "daily-x-tech-scout",
-      "slug": "agent-skills"
-    }
-  ],
+  "proposed": [],
   "skipped": [
     {
       "id": "2098941338297458746-hyperframes",
@@ -29,6 +19,16 @@
       "date": "2026-09-15",
       "source": "daily-x-tech-scout",
       "slug": "trading-agents",
+      "reason": "owner skipped"
+    },
+    {
+      "id": "2098941338297458746-agent-skills",
+      "title": "agent-skills (Addy Osmani) — production skills for coding agents",
+      "url": "https://x.com/shanyanggm/status/2098941338297458746",
+      "github": "https://github.com/addyosmani/agent-skills",
+      "date": "2026-09-16",
+      "source": "daily-x-tech-scout",
+      "slug": "agent-skills",
       "reason": "owner skipped"
     }
   ],
