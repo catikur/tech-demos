@@ -1,16 +1,5 @@
 {
-  "proposed": [
-    {
-      "id": "2098941338297458746-librechat",
-      "title": "LibreChat — multi-model open-source ChatGPT clone",
-      "url": "https://x.com/shanyanggm/status/2098941338297458746",
-      "github": "https://github.com/danny-avila/LibreChat",
-      "date": "2026-09-17",
-      "source": "daily-x-tech-scout",
-      "slug": "librechat-lite",
-      "reason": "next unproposed item from viral OSS bookmark list after TradingAgents/HyperFrames/agent-skills skips and Agentic Inbox build"
-    }
-  ],
+  "proposed": [],
   "skipped": [
     {
       "id": "2098941338297458746-hyperframes",
@@ -41,6 +30,16 @@
       "source": "daily-x-tech-scout",
       "slug": "agent-skills",
       "reason": "owner skipped"
+    },
+    {
+      "id": "2098941338297458746-librechat",
+      "title": "LibreChat — multi-model open-source ChatGPT clone",
+      "url": "https://x.com/shanyanggm/status/2098941338297458746",
+      "github": "https://github.com/danny-avila/LibreChat",
+      "date": "2026-09-17",
+      "source": "daily-x-tech-scout",
+      "slug": "librechat-lite",
+      "reason": "owner dismissed approval prompt without responding"
     }
   ],
   "built": [
