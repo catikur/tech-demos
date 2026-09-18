@@ -1,13 +1,13 @@
 {
   "proposed": [
     {
-      "id": "2098941338297458746-nango",
-      "title": "Nango — open-source API integration platform (OAuth + 900+ APIs)",
-      "url": "https://x.com/shanyanggm/status/2098941338297458746",
-      "github": "https://github.com/NangoHQ/nango",
+      "id": "2048618137830969438",
+      "title": "ATLAS / atlas-gic — self-improving AI trading agents (autoresearch)",
+      "url": "https://x.com/tom_doerr/status/2048618137830969438",
+      "github": "https://github.com/chrisworsey55/atlas-gic",
       "date": "2026-09-18",
-      "source": "daily-x-tech-scout",
-      "slug": "nango-lite"
+      "source": "owner-pick-trade-folder",
+      "slug": "atlas-gic"
     }
   ],
   "skipped": [
@@ -49,7 +49,27 @@
       "date": "2026-09-17",
       "source": "daily-x-tech-scout",
       "slug": "librechat-lite",
-      "reason": "owner dismissed approval prompt without responding"
+      "reason": "owner dismissed then asked for a completely different bookmark"
+    },
+    {
+      "id": "2098941338297458746-nango",
+      "title": "Nango — open-source API integration / OAuth platform",
+      "url": "https://x.com/shanyanggm/status/2098941338297458746",
+      "github": "https://github.com/NangoHQ/nango",
+      "date": "2026-09-18",
+      "source": "daily-x-tech-scout",
+      "slug": "nango-lite",
+      "reason": "owner asked to leave viral list; picked Trade-folder atlas-gic instead"
+    },
+    {
+      "id": "2048820787260375041-obsidian-second-brain",
+      "title": "obsidian-second-brain",
+      "url": "https://x.com/tom_doerr/status/2048820787260375041",
+      "github": "https://github.com/eugeniughelbur/obsidian-second-brain",
+      "date": "2026-09-18",
+      "source": "manual-scout",
+      "slug": "obsidian-second-brain",
+      "reason": "owner chose atlas-gic instead"
     }
   ],
   "built": [
