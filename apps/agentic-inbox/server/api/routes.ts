@@ -27,6 +27,7 @@ import { loginRequired, withLoginGate } from "../auth/gate.ts";
 import { microsoftConfigured } from "../auth/microsoft.ts";
 import { googleConfigured } from "../auth/google.ts";
 import { readSession } from "../auth/session.ts";
+import { contactEmails, ensureVisibleAccount, viewerEmail, visibleAccountIds, visibleAccounts } from "../auth/scope.ts";
 
 type P<T extends string> = BunRequest<T>;
 
@@ -39,14 +40,15 @@ const rawRoutes = {
   "/api/webhooks/graph": { POST: (req: Request) => handleGraphWebhook(req) },
   "/api/health": h(() => ok({ ok: true })),
 
-  "/api/status": h(() => {
+  "/api/status": h((req) => {
+    const owner = viewerEmail(req);
     const status: AppStatus = {
       spaces: spaces.all(),
-      accounts: accounts.all(),
+      accounts: visibleAccounts(req),
       llm: llmStatus(),
       oauth: { microsoft: microsoftConfigured(), google: googleConfigured() },
       demoMode: isDemoMode(),
-      unreadNotifications: notifications.unreadCount(null),
+      unreadNotifications: notifications.unreadCount(null, owner),
     };
     return ok(status);
   }),
@@ -65,7 +67,7 @@ const rawRoutes = {
   },
 
   /* ---------- accounts & sync ---------- */
-  "/api/accounts": h(() => ok(accounts.all())),
+  "/api/accounts": h((req) => ok(visibleAccounts(req))),
   "/api/accounts/:id": {
     PATCH: h(async (req: P<"/api/accounts/:id">) => {
       const account = accounts.get(req.params.id) ?? notFound("Account not found");
@@ -110,10 +112,15 @@ const rawRoutes = {
         query: q.get("q") ?? undefined,
         since: q.get("since") ? num(q.get("since"), 0) : undefined,
         limit: num(q.get("limit"), 200),
+        accountIds: visibleAccountIds(req),
       }),
     );
   }),
-  "/api/threads/:id": h((req: P<"/api/threads/:id">) => ok(threads.get(req.params.id) ?? notFound("Thread not found"))),
+  "/api/threads/:id": h((req: P<"/api/threads/:id">) => {
+    const thread = threads.get(req.params.id) ?? notFound("Thread not found");
+    ensureVisibleAccount(req, thread.accountId);
+    return ok(thread);
+  }),
   "/api/threads/:id/read": {
     POST: h(async (req: P<"/api/threads/:id/read">) => {
       const body = await readJson<{ unread?: boolean }>(req).catch(() => ({}) as { unread?: boolean });
@@ -134,14 +141,19 @@ const rawRoutes = {
   "/api/events": h((req) => {
     const q = query(req);
     const now = Date.now();
-    return ok(events.list(spaceParam(req), num(q.get("from"), now - 7 * 86_400_000), num(q.get("to"), now + 14 * 86_400_000)));
+    return ok(events.list(spaceParam(req), num(q.get("from"), now - 7 * 86_400_000), num(q.get("to"), now + 14 * 86_400_000), visibleAccountIds(req)));
   }),
-  "/api/events/:id": h((req: P<"/api/events/:id">) => ok(events.get(req.params.id) ?? notFound("Event not found"))),
+  "/api/events/:id": h((req: P<"/api/events/:id">) => {
+    const event = events.get(req.params.id) ?? notFound("Event not found");
+    ensureVisibleAccount(req, event.accountId);
+    return ok(event);
+  }),
 
   /* ---------- chats ---------- */
-  "/api/chats": h((req) => ok(chats.list(spaceParam(req), query(req).get("q") ?? undefined))),
+  "/api/chats": h((req) => ok(chats.list(spaceParam(req), query(req).get("q") ?? undefined, visibleAccountIds(req)))),
   "/api/chats/:id": h((req: P<"/api/chats/:id">) => {
     const chat = chats.get(req.params.id) ?? notFound("Chat not found");
+    ensureVisibleAccount(req, chat.accountId);
     return ok({ ...chat, messages: chats.messages(chat.id) });
   }),
   "/api/chats/:id/read": {
@@ -159,17 +171,22 @@ const rawRoutes = {
   },
 
   /* ---------- meetings ---------- */
-  "/api/meetings": h((req) => ok(meetings.list(spaceParam(req)))),
+  "/api/meetings": h((req) => ok(meetings.list(spaceParam(req), 100, visibleAccountIds(req)))),
   "/api/meetings/:id": h((req: P<"/api/meetings/:id">) => {
     const m = meetings.get(req.params.id) ?? notFound("Meeting not found");
+    ensureVisibleAccount(req, m.accountId);
     return ok({ ...m, transcript: meetings.transcript(m.id)?.lines ?? null });
   }),
 
   /* ---------- people ---------- */
-  "/api/people": h((req) => ok(people.list(spaceParam(req)))),
+  "/api/people": h((req) => {
+    const list = people.list(spaceParam(req));
+    const emails = contactEmails(spaceParam(req), visibleAccountIds(req));
+    return ok(emails ? list.filter((p) => emails.has(p.email)) : list);
+  }),
 
   /* ---------- notifications ---------- */
-  "/api/notifications": h((req) => ok(notifications.list(spaceParam(req)))),
+  "/api/notifications": h((req) => ok(notifications.list(spaceParam(req), 50, viewerEmail(req)))),
   "/api/notifications/read": {
     POST: h(async (req) => {
       const body = await readJson<{ id?: string }>(req).catch(() => ({}) as { id?: string });

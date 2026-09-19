@@ -9,11 +9,11 @@ import { isAsk, isAutomatedSender, truncate } from "./text.ts";
  * mail, chats and meetings, ranked by how much it needs you.
  */
 
-export async function buildCatchUp(spaceId: string | null, fromAt: number, toAt: number, opts: { polish?: boolean } = {}): Promise<CatchUp> {
+export async function buildCatchUp(spaceId: string | null, fromAt: number, toAt: number, opts: { polish?: boolean; accountIds?: string[] | null } = {}): Promise<CatchUp> {
   const vip = people.vipEmails(spaceId);
   const items: CatchUpItem[] = [];
 
-  for (const m of threads.messagesSince(spaceId, fromAt)) {
+  for (const m of threads.messagesSince(spaceId, fromAt, opts.accountIds)) {
     if (m.at > toAt || m.isMine) continue;
     const t = threads.list(m.spaceId, { limit: 500 }).find((x) => x.id === m.threadId);
     if (!t) continue;
@@ -47,7 +47,7 @@ export async function buildCatchUp(spaceId: string | null, fromAt: number, toAt:
     });
   }
 
-  for (const m of chats.messagesSince(spaceId, fromAt)) {
+  for (const m of chats.messagesSince(spaceId, fromAt, opts.accountIds)) {
     if (m.at > toAt || m.isMine) continue;
     let score = 1;
     const reasons: string[] = [];
@@ -76,7 +76,7 @@ export async function buildCatchUp(spaceId: string | null, fromAt: number, toAt:
   }
 
   const meetingItems: CatchUpItem[] = [];
-  for (const mt of meetings.since(spaceId, fromAt)) {
+  for (const mt of meetings.since(spaceId, fromAt, opts.accountIds)) {
     if (mt.end > toAt || mt.end < fromAt) continue;
     const followup = notes.list(mt.spaceId, { meetingId: mt.id, kind: "followup" })[0];
     const transcript = meetings.transcript(mt.id);

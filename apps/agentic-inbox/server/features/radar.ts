@@ -11,12 +11,12 @@ import { isAsk, isAutomatedSender, truncate } from "./text.ts";
 
 const HOUR = 3_600_000;
 
-export function computeRadar(spaceId: string | null): RadarItem[] {
+export function computeRadar(spaceId: string | null, accountIds?: string[] | null): RadarItem[] {
   const now = Date.now();
   const vip = people.vipEmails(spaceId);
   const out: RadarItem[] = [];
 
-  for (const summary of threads.list(spaceId, { limit: 400 })) {
+  for (const summary of threads.list(spaceId, { limit: 400, accountIds })) {
     if (["newsletter", "security"].includes(summary.category)) continue;
     const t = threads.get(summary.id);
     if (!t || t.messages.length === 0) continue;
@@ -58,7 +58,7 @@ export function computeRadar(spaceId: string | null): RadarItem[] {
     }
   }
 
-  for (const c of chats.list(spaceId)) {
+  for (const c of chats.list(spaceId, undefined, accountIds)) {
     const msgs = chats.messages(c.id);
     const last = msgs[msgs.length - 1];
     if (!last) continue;

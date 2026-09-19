@@ -681,6 +681,8 @@ function seedMeetings(account: Account, list: SeedEvent[], stats: SyncStats): vo
       hasTranscript: true,
       hasRecording: s.recording,
       recordingUrl: s.recording ? "https://demo.local/recordings/export-incident-review.mp4" : null,
+      recordingLocked: false,
+      joinUrl: ev.joinUrl ?? null,
     };
     meetings.upsert(m);
     meetings.setTranscript(m.id, s.transcript);

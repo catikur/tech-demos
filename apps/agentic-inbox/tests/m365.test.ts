@@ -305,7 +305,90 @@ describe("M365 connector (fixture-driven sync)", () => {
     const before = meetings.list(WORK_SPACE_ID).length;
     await new M365Connector(() => fakeClient).sync(account, {});
     expect(requested.some((u) => u.includes("onlineMeetings") && u.includes("meeting_x"))).toBe(false);
-    expect(meetings.list(WORK_SPACE_ID)).toHaveLength(before);
+    expect(meetings.list(WORK_SPACE_ID)).toHaveLength(before + 1);
+    const stub = meetings.byEventId("ev_foreign");
+    expect(stub?.hasTranscript).toBe(false);
+    expect(stub?.joinUrl).toContain("teams.microsoft.com");
     expect(accounts.cursors(account.id)["meeting.ev_foreign"]).toBe("done");
+  });
+
+  test("423 Locked on recording content keeps the meeting and a Teams link", async () => {
+    events.upsert({
+      id: "ev_locked_rec",
+      externalId: "EV-LOCKED",
+      spaceId: WORK_SPACE_ID,
+      accountId: account.id,
+      title: "Locked recording call",
+      start: Date.now() - 3_600_000,
+      end: Date.now() - 1_800_000,
+      location: "",
+      organizer: "Marcus Chen <marcus@lumenlabs.io>",
+      attendees: ["You <you@lumenlabs.io>"],
+      joinUrl: "https://teams.microsoft.com/l/meetup-join/locked-rec",
+      description: "",
+      meetingId: null,
+      responseStatus: "accepted",
+    });
+    const locked: GraphLike = {
+      async request(url, init, opts) {
+        if (url.includes("/recordings/") && url.includes("/content")) {
+          throw new GraphError(423, `GET ${url} → 423: Locked`);
+        }
+        return fakeClient.request(url, init, opts);
+      },
+      async collect<T = any>(url: string) {
+        if (url.includes("JoinWebUrl") && url.includes("locked-rec")) {
+          return { items: [{ id: "OM-LOCKED" }] as T[], deltaLink: null };
+        }
+        if (url.includes("/onlineMeetings/OM-LOCKED/recordings")) {
+          return { items: [{ id: "REC-LOCKED" }] as T[], deltaLink: null };
+        }
+        if (url.includes("/onlineMeetings/OM-LOCKED/transcripts")) {
+          return { items: [] as T[], deltaLink: null };
+        }
+        return fakeClient.collect<T>(url);
+      },
+    };
+    await new M365Connector(() => locked).sync(account, {});
+    const row = meetings.byEventId("ev_locked_rec");
+    expect(row?.hasRecording).toBe(true);
+    expect(row?.recordingLocked).toBe(true);
+    expect(row?.recordingUrl).toContain("teams.microsoft.com");
+    expect(row?.joinUrl).toContain("locked-rec");
+  });
+
+  test("past calendar event without a Graph onlineMeeting still creates a meeting stub", async () => {
+    events.upsert({
+      id: "ev_cal_only",
+      externalId: "EV-CAL",
+      spaceId: WORK_SPACE_ID,
+      accountId: account.id,
+      title: "Calendar-only standup",
+      start: Date.now() - 2 * 3_600_000,
+      end: Date.now() - 3_600_000,
+      location: "",
+      organizer: "You <you@lumenlabs.io>",
+      attendees: ["Dana Kowalski <dana@lumenlabs.io>"],
+      joinUrl: "https://teams.microsoft.com/l/meetup-join/cal-only",
+      description: "",
+      meetingId: null,
+      responseStatus: "accepted",
+    });
+    const empty: GraphLike = {
+      async request(url, init, opts) {
+        return fakeClient.request(url, init, opts);
+      },
+      async collect<T = any>(url: string) {
+        if (url.includes("JoinWebUrl") && url.includes("cal-only")) {
+          return { items: [] as T[], deltaLink: null };
+        }
+        return fakeClient.collect<T>(url);
+      },
+    };
+    await new M365Connector(() => empty).sync(account, {});
+    const row = meetings.byEventId("ev_cal_only");
+    expect(row).toBeTruthy();
+    expect(row?.hasTranscript).toBe(false);
+    expect(row?.joinUrl).toContain("cal-only");
   });
 });

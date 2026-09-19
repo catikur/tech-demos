@@ -84,7 +84,7 @@ function build(
 const LOOKBACK = 21 * 86_400_000;
 
 /** Insert unless a near-duplicate (same person, same direction, similar wording) is already open. */
-function insertIfNovel(c: Omit<Commitment, "id" | "createdAt">): boolean {
+function insertIfNovel(c: Omit<Commitment, "id" | "createdAt">, ownerEmail?: string): boolean {
   const existing = commitments.list(c.spaceId, { counterpart: c.counterpart }).filter((e) => e.direction === c.direction);
   const words = tokens(c.text);
   for (const e of existing) {
@@ -92,7 +92,7 @@ function insertIfNovel(c: Omit<Commitment, "id" | "createdAt">): boolean {
     const sameDay = c.dueAt && e.dueAt && Math.abs(c.dueAt - e.dueAt) < 86_400_000;
     if (sim >= 0.5 || (sim >= 0.3 && sameDay)) return false;
   }
-  return commitments.insertUnique(c);
+  return commitments.insertUnique({ ...c, ownerEmail });
 }
 
 const llmSchema = z.object({
@@ -183,7 +183,11 @@ function collectCorpus(spaceId: string, since: number): string {
 }
 
 /** One model call per distinct corpus: an unchanged mailbox is not re-sent every sync. */
-async function extractLlmForSpace(spaceId: string, complete: CompleteFn): Promise<number> {
+async function extractLlmForSpace(
+  spaceId: string,
+  complete: CompleteFn,
+  opts: { ownerEmail?: string; accountIds?: string[] | null } = {},
+): Promise<number> {
   const since = Date.now() - LOOKBACK;
   const corpus = collectCorpus(spaceId, since);
   if (!corpus.trim()) return 0;
@@ -204,29 +208,35 @@ async function extractLlmForSpace(spaceId: string, complete: CompleteFn): Promis
     const counterpart = item.counterpart.trim();
     if (!counterpart) continue;
     if (
-      insertIfNovel({
-        spaceId,
-        direction: item.direction,
-        counterpart,
-        text: item.text,
-        dueAt: dueFromLlm(item.due, Date.now()),
-        status: "open",
-        source,
-        confidence: 0.75,
-      })
+      insertIfNovel(
+        {
+          spaceId,
+          direction: item.direction,
+          counterpart,
+          text: item.text,
+          dueAt: dueFromLlm(item.due, Date.now()),
+          status: "open",
+          source,
+          confidence: 0.75,
+        },
+        opts.ownerEmail,
+      )
     )
       inserted++;
   }
   return inserted;
 }
 
-function extractHeuristicsForSpace(spaceId: string): number {
-  const myEmails = new Set(accounts.bySpace(spaceId).map((a) => a.email.toLowerCase()));
+function extractHeuristicsForSpace(spaceId: string, opts: { ownerEmail?: string; accountIds?: string[] | null } = {}): number {
+  const scoped = opts.accountIds
+    ? accounts.all().filter((a) => opts.accountIds!.includes(a.id))
+    : accounts.bySpace(spaceId);
+  const myEmails = new Set(scoped.map((a) => a.email.toLowerCase()));
   const me = [...myEmails][0] ?? "";
   const since = Date.now() - LOOKBACK;
   let inserted = 0;
 
-  for (const t of threads.list(spaceId, { since, limit: 500 })) {
+  for (const t of threads.list(spaceId, { since, limit: 500, accountIds: opts.accountIds })) {
     if (["newsletter", "security"].includes(t.category)) continue;
     const full = threads.get(t.id);
     if (!full) continue;
@@ -242,12 +252,12 @@ function extractHeuristicsForSpace(spaceId: string): number {
         at: m.at,
         source: { kind: "thread", id: t.id, label: t.subject },
       })) {
-        if (insertIfNovel(c)) inserted++;
+        if (insertIfNovel(c, opts.ownerEmail)) inserted++;
       }
     }
   }
 
-  for (const chat of chats.list(spaceId)) {
+  for (const chat of chats.list(spaceId, undefined, opts.accountIds)) {
     const others = chat.members.filter((p) => !myEmails.has(senderEmail(p)));
     for (const m of chats.messages(chat.id)) {
       if (m.at < since) continue;
@@ -262,12 +272,12 @@ function extractHeuristicsForSpace(spaceId: string): number {
         at: m.at,
         source: { kind: "chat", id: chat.id, label: chat.title },
       })) {
-        if (insertIfNovel(c)) inserted++;
+        if (insertIfNovel(c, opts.ownerEmail)) inserted++;
       }
     }
   }
 
-  for (const meeting of meetings.since(spaceId, since)) {
+  for (const meeting of meetings.since(spaceId, since, opts.accountIds)) {
     const transcript = meetings.transcript(meeting.id);
     if (!transcript) continue;
     const others = meeting.attendees.filter((p) => !myEmails.has(senderEmail(p)));
@@ -284,7 +294,7 @@ function extractHeuristicsForSpace(spaceId: string): number {
         source: { kind: "meeting", id: meeting.id, label: meeting.title },
       })) {
         if (c.direction === "owed_by_me" && !speakerIsMe) continue;
-        if (insertIfNovel({ ...c, confidence: c.confidence + 0.1 })) inserted++;
+        if (insertIfNovel({ ...c, confidence: c.confidence + 0.1 }, opts.ownerEmail)) inserted++;
       }
     }
   }
@@ -292,13 +302,18 @@ function extractHeuristicsForSpace(spaceId: string): number {
 }
 
 /** Scan recent mail/chats/transcripts. Heuristics first; optional LLM JSON extract on top. */
-export async function extractForSpace(spaceId: string, opts?: { tryComplete?: CompleteFn }): Promise<number> {
-  let inserted = extractHeuristicsForSpace(spaceId);
-  inserted += await extractLlmForSpace(spaceId, opts?.tryComplete ?? tryComplete);
+export async function extractForSpace(
+  spaceId: string,
+  opts?: { tryComplete?: CompleteFn; ownerEmail?: string; accountId?: string },
+): Promise<number> {
+  const accountIds = opts?.accountId ? [opts.accountId] : null;
+  const pass = { ownerEmail: opts?.ownerEmail, accountIds };
+  let inserted = extractHeuristicsForSpace(spaceId, pass);
+  inserted += await extractLlmForSpace(spaceId, opts?.tryComplete ?? tryComplete, pass);
   return inserted;
 }
 
 onPostSync(async (account: Account) => {
-  const n = await extractForSpace(account.spaceId);
+  const n = await extractForSpace(account.spaceId, { ownerEmail: account.ownerEmail || account.email, accountId: account.id });
   if (n > 0) console.log(`[commitments] ${n} new in space ${account.spaceId}`);
 });

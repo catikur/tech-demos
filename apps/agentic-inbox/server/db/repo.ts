@@ -8,6 +8,7 @@ import type {
   Chunk,
   Commitment,
   Digest,
+  DraftStatus,
   EmailMessage,
   Meeting,
   Memory,
@@ -15,6 +16,7 @@ import type {
   Note,
   Notification,
   Person,
+  ProposedDraft,
   Space,
   Thread,
   ThreadSummary,
@@ -30,6 +32,12 @@ type Row = Record<string, any>;
 
 function scope(spaceId: string | null, column = "space_id"): { sql: string; params: string[] } {
   return spaceId ? { sql: ` AND ${column} = ?`, params: [spaceId] } : { sql: "", params: [] };
+}
+
+function accountScope(accountIds: string[] | null | undefined, column = "account_id"): { sql: string; params: string[] } {
+  if (accountIds == null) return { sql: "", params: [] };
+  if (accountIds.length === 0) return { sql: " AND 1=0", params: [] };
+  return { sql: ` AND ${column} IN (${accountIds.map(() => "?").join(",")})`, params: accountIds };
 }
 
 /* ---------------- spaces ---------------- */
@@ -92,6 +100,7 @@ function rowToAccount(raw: unknown): Account {
     lastSyncAt: r.last_sync_at,
     lastSyncError: r.last_sync_error,
     capabilities: json.parse<Capability[]>(r.capabilities, []),
+    ownerEmail: (r.owner_email || r.email || "").toLowerCase(),
   };
 }
 
@@ -109,13 +118,22 @@ export const accounts = {
       .all(spaceId)
       .map(rowToAccount);
   },
+  ownedBy(email: string): Account[] {
+    const e = email.toLowerCase();
+    return getDb()
+      .query("SELECT * FROM accounts WHERE lower(owner_email) = ? OR (owner_email = '' AND lower(email) = ?) ORDER BY connected_at")
+      .all(e, e)
+      .map(rowToAccount);
+  },
   insert(a: Account, tokenBlob: string | null): void {
+    const owner = (a.ownerEmail || a.email).toLowerCase();
     getDb()
       .query(
-        `INSERT INTO accounts (id, space_id, provider, email, display_name, connected_at, last_sync_at, last_sync_error, capabilities, token_blob)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO accounts (id, space_id, provider, email, display_name, connected_at, last_sync_at, last_sync_error, capabilities, token_blob, owner_email)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET space_id=excluded.space_id, email=excluded.email, display_name=excluded.display_name,
-           capabilities=excluded.capabilities, token_blob=COALESCE(excluded.token_blob, accounts.token_blob)`,
+           capabilities=excluded.capabilities, token_blob=COALESCE(excluded.token_blob, accounts.token_blob),
+           owner_email=COALESCE(NULLIF(excluded.owner_email, ''), accounts.owner_email)`,
       )
       .run(
         a.id,
@@ -128,6 +146,7 @@ export const accounts = {
         a.lastSyncError,
         json.stringify(a.capabilities),
         tokenBlob,
+        owner,
       );
   },
   remove(id: string): void {
@@ -280,10 +299,11 @@ function rowToThreadBase(r: Row): Omit<Thread, "messages"> {
 }
 
 export const threads = {
-  list(spaceId: string | null, opts: { limit?: number; since?: number; query?: string } = {}): ThreadSummary[] {
+  list(spaceId: string | null, opts: { limit?: number; since?: number; query?: string; accountIds?: string[] | null } = {}): ThreadSummary[] {
     const s = scope(spaceId, "t.space_id");
-    const params: any[] = [...s.params];
-    let where = `1=1${s.sql}`;
+    const a = accountScope(opts.accountIds, "t.account_id");
+    const params: any[] = [...s.params, ...a.params];
+    let where = `1=1${s.sql}${a.sql}`;
     if (opts.since) {
       where += " AND t.last_at >= ?";
       params.push(opts.since);
@@ -391,15 +411,16 @@ export const threads = {
     const id = threads.messageIdByExternal(accountId, externalId);
     if (id) getDb().query("DELETE FROM messages WHERE id = ?").run(id);
   },
-  messagesSince(spaceId: string | null, since: number): (EmailMessage & { subject: string; spaceId: string })[] {
+  messagesSince(spaceId: string | null, since: number, accountIds?: string[] | null): (EmailMessage & { subject: string; spaceId: string })[] {
     const s = scope(spaceId, "t.space_id");
+    const a = accountScope(accountIds, "t.account_id");
     return (
       getDb()
         .query(
           `SELECT m.*, t.subject, t.space_id FROM messages m JOIN threads t ON t.id = m.thread_id
-           WHERE m.at >= ?${s.sql} ORDER BY m.at DESC`,
+           WHERE m.at >= ?${s.sql}${a.sql} ORDER BY m.at DESC`,
         )
-        .all(since, ...s.params) as Row[]
+        .all(since, ...s.params, ...a.params) as Row[]
     ).map((r) => ({ ...rowToMessage(r), subject: r.subject, spaceId: r.space_id }));
   },
   forPerson(spaceId: string | null, email: string, limit = 5): ThreadSummary[] {
@@ -432,11 +453,12 @@ function rowToEvent(raw: unknown): CalendarEvent {
 }
 
 export const events = {
-  list(spaceId: string | null, from: number, to: number): CalendarEvent[] {
+  list(spaceId: string | null, from: number, to: number, accountIds?: string[] | null): CalendarEvent[] {
     const s = scope(spaceId);
+    const a = accountScope(accountIds);
     return getDb()
-      .query(`SELECT * FROM events WHERE end_at >= ? AND start <= ?${s.sql} ORDER BY start`)
-      .all(from, to, ...s.params)
+      .query(`SELECT * FROM events WHERE end_at >= ? AND start <= ?${s.sql}${a.sql} ORDER BY start`)
+      .all(from, to, ...s.params, ...a.params)
       .map(rowToEvent);
   },
   get(id: string): CalendarEvent | null {
@@ -519,10 +541,11 @@ function rowToChatMessage(raw: unknown): ChatMessage {
 }
 
 export const chats = {
-  list(spaceId: string | null, query?: string): Chat[] {
+  list(spaceId: string | null, query?: string, accountIds?: string[] | null): Chat[] {
     const s = scope(spaceId, "c.space_id");
-    const params: any[] = [...s.params];
-    let where = `1=1${s.sql}`;
+    const a = accountScope(accountIds, "c.account_id");
+    const params: any[] = [...s.params, ...a.params];
+    let where = `1=1${s.sql}${a.sql}`;
     if (query) {
       where += ` AND (c.title LIKE ? OR EXISTS (SELECT 1 FROM chat_messages m WHERE m.chat_id = c.id AND m.body LIKE ?))`;
       params.push(`%${query}%`, `%${query}%`);
@@ -542,15 +565,16 @@ export const chats = {
       .all(chatId)
       .map(rowToChatMessage);
   },
-  messagesSince(spaceId: string | null, since: number): (ChatMessage & { chatTitle: string; spaceId: string; kind: string })[] {
+  messagesSince(spaceId: string | null, since: number, accountIds?: string[] | null): (ChatMessage & { chatTitle: string; spaceId: string; kind: string })[] {
     const s = scope(spaceId, "c.space_id");
+    const a = accountScope(accountIds, "c.account_id");
     return (
       getDb()
         .query(
           `SELECT m.*, c.title AS chat_title, c.space_id, c.kind FROM chat_messages m JOIN chats c ON c.id = m.chat_id
-           WHERE m.at >= ?${s.sql} ORDER BY m.at DESC`,
+           WHERE m.at >= ?${s.sql}${a.sql} ORDER BY m.at DESC`,
         )
-        .all(since, ...s.params) as Row[]
+        .all(since, ...s.params, ...a.params) as Row[]
     ).map((r) => ({ ...rowToChatMessage(r), chatTitle: r.chat_title, spaceId: r.space_id, kind: r.kind }));
   },
   upsert(c: Chat & { externalId?: string | null }): void {
@@ -627,15 +651,18 @@ function rowToMeeting(raw: unknown): Meeting {
     hasTranscript: !!r.has_transcript,
     hasRecording: !!r.has_recording,
     recordingUrl: r.recording_url,
+    recordingLocked: !!r.recording_locked,
+    joinUrl: r.join_url ?? null,
   };
 }
 
 export const meetings = {
-  list(spaceId: string | null, limit = 100): Meeting[] {
+  list(spaceId: string | null, limit = 100, accountIds?: string[] | null): Meeting[] {
     const s = scope(spaceId);
+    const a = accountScope(accountIds);
     return getDb()
-      .query(`SELECT * FROM meetings WHERE 1=1${s.sql} ORDER BY start DESC LIMIT ?`)
-      .all(...s.params, limit)
+      .query(`SELECT * FROM meetings WHERE 1=1${s.sql}${a.sql} ORDER BY start DESC LIMIT ?`)
+      .all(...s.params, ...a.params, limit)
       .map(rowToMeeting);
   },
   get(id: string): Meeting | null {
@@ -648,13 +675,18 @@ export const meetings = {
       .get(accountId, externalId) as Row | null;
     return r ? rowToMeeting(r) : null;
   },
+  byEventId(eventId: string): Meeting | null {
+    const r = getDb().query("SELECT * FROM meetings WHERE event_id = ?").get(eventId) as Row | null;
+    return r ? rowToMeeting(r) : null;
+  },
   upsert(m: Meeting & { externalId?: string | null }): void {
     getDb()
       .query(
-        `INSERT INTO meetings (id, space_id, account_id, external_id, event_id, title, start, end_at, attendees, has_transcript, has_recording, recording_url)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO meetings (id, space_id, account_id, external_id, event_id, title, start, end_at, attendees, has_transcript, has_recording, recording_url, recording_locked, join_url)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET title=excluded.title, start=excluded.start, end_at=excluded.end_at, attendees=excluded.attendees,
            has_transcript=excluded.has_transcript, has_recording=excluded.has_recording, recording_url=excluded.recording_url,
+           recording_locked=excluded.recording_locked, join_url=COALESCE(excluded.join_url, meetings.join_url),
            event_id=COALESCE(excluded.event_id, meetings.event_id)`,
       )
       .run(
@@ -670,6 +702,8 @@ export const meetings = {
         m.hasTranscript ? 1 : 0,
         m.hasRecording ? 1 : 0,
         m.recordingUrl,
+        m.recordingLocked ? 1 : 0,
+        m.joinUrl,
       );
     if (m.eventId) events.linkMeeting(m.eventId, m.id);
   },
@@ -686,11 +720,12 @@ export const meetings = {
       .run(meetingId, json.stringify(lines));
     getDb().query("UPDATE meetings SET has_transcript = 1 WHERE id = ?").run(meetingId);
   },
-  since(spaceId: string | null, since: number): Meeting[] {
+  since(spaceId: string | null, since: number, accountIds?: string[] | null): Meeting[] {
     const s = scope(spaceId);
+    const a = accountScope(accountIds);
     return getDb()
-      .query(`SELECT * FROM meetings WHERE end_at >= ?${s.sql} ORDER BY start DESC`)
-      .all(since, ...s.params)
+      .query(`SELECT * FROM meetings WHERE end_at >= ?${s.sql}${a.sql} ORDER BY start DESC`)
+      .all(since, ...s.params, ...a.params)
       .map(rowToMeeting);
   },
 };
@@ -713,11 +748,12 @@ function rowToCommitment(raw: unknown): Commitment {
     createdAt: r.created_at,
     confidence: r.confidence,
     msTaskId: r.ms_task_id ?? null,
+    ownerEmail: r.owner_email || undefined,
   };
 }
 
 export const commitments = {
-  list(spaceId: string | null, opts: { status?: string; counterpart?: string } = {}): Commitment[] {
+  list(spaceId: string | null, opts: { status?: string; counterpart?: string; ownerEmail?: string | null; shareWork?: boolean } = {}): Commitment[] {
     const s = scope(spaceId);
     const params: any[] = [...s.params];
     let where = `1=1${s.sql}`;
@@ -729,10 +765,16 @@ export const commitments = {
       where += " AND counterpart = ?";
       params.push(opts.counterpart.toLowerCase());
     }
-    return getDb()
+    const rows = getDb()
       .query(`SELECT * FROM commitments WHERE ${where} ORDER BY status ASC, COALESCE(due_at, 9e15) ASC, created_at DESC`)
       .all(...params)
       .map(rowToCommitment);
+    if (!opts.ownerEmail) return rows;
+    const owner = opts.ownerEmail.toLowerCase();
+    return rows.filter((c) => {
+      if (opts.shareWork !== false && spaces.get(c.spaceId)?.kind === "work") return true;
+      return (c.ownerEmail || "").toLowerCase() === owner;
+    });
   },
   get(id: string): Commitment | null {
     const r = getDb().query("SELECT * FROM commitments WHERE id = ?").get(id) as Row | null;
@@ -740,13 +782,15 @@ export const commitments = {
   },
   /** Insert unless an identical (fingerprinted) commitment exists. Returns true when inserted. */
   insertUnique(c: Omit<Commitment, "id" | "createdAt"> & { id?: string }): boolean {
-    const fingerprint = `${c.spaceId}|${c.direction}|${c.counterpart}|${c.text.toLowerCase().replace(/\W+/g, " ").trim().slice(0, 120)}`;
+    const owner = (c.ownerEmail || "").toLowerCase();
+    const ownerKey = spaces.get(c.spaceId)?.kind === "work" ? "*" : owner;
+    const fingerprint = `${c.spaceId}|${ownerKey}|${c.direction}|${c.counterpart}|${c.text.toLowerCase().replace(/\W+/g, " ").trim().slice(0, 120)}`;
     const exists = getDb().query("SELECT 1 FROM commitments WHERE fingerprint = ?").get(fingerprint);
     if (exists) return false;
     getDb()
       .query(
-        `INSERT INTO commitments (id, space_id, direction, counterpart, text, due_at, status, source_kind, source_id, source_label, created_at, confidence, fingerprint)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO commitments (id, space_id, direction, counterpart, text, due_at, status, source_kind, source_id, source_label, created_at, confidence, fingerprint, owner_email)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         c.id ?? newId("cm"),
@@ -762,6 +806,7 @@ export const commitments = {
         Date.now(),
         c.confidence,
         fingerprint,
+        owner,
       );
     return true;
   },
@@ -889,31 +934,34 @@ function rowToNotification(raw: unknown): Notification {
     link: r.link,
     read: !!r.read,
     createdAt: r.created_at,
+    ownerEmail: r.owner_email || undefined,
   };
 }
 
 export const notifications = {
-  list(spaceId: string | null, limit = 50): Notification[] {
+  list(spaceId: string | null, limit = 50, ownerEmail?: string | null): Notification[] {
     const s = spaceId ? { sql: " AND (space_id = ? OR space_id IS NULL)", params: [spaceId] } : { sql: "", params: [] as string[] };
+    const owner = ownerEmail ? { sql: " AND (owner_email = '' OR owner_email = ?)", params: [ownerEmail.toLowerCase()] } : { sql: "", params: [] as string[] };
     return getDb()
-      .query(`SELECT * FROM notifications WHERE 1=1${s.sql} ORDER BY created_at DESC LIMIT ?`)
-      .all(...s.params, limit)
+      .query(`SELECT * FROM notifications WHERE 1=1${s.sql}${owner.sql} ORDER BY created_at DESC LIMIT ?`)
+      .all(...s.params, ...owner.params, limit)
       .map(rowToNotification);
   },
-  unreadCount(spaceId: string | null): number {
+  unreadCount(spaceId: string | null, ownerEmail?: string | null): number {
     const s = spaceId ? { sql: " AND (space_id = ? OR space_id IS NULL)", params: [spaceId] } : { sql: "", params: [] as string[] };
+    const owner = ownerEmail ? { sql: " AND (owner_email = '' OR owner_email = ?)", params: [ownerEmail.toLowerCase()] } : { sql: "", params: [] as string[] };
     const r = getDb()
-      .query(`SELECT COUNT(*) AS c FROM notifications WHERE read = 0${s.sql}`)
-      .get(...s.params) as Row;
+      .query(`SELECT COUNT(*) AS c FROM notifications WHERE read = 0${s.sql}${owner.sql}`)
+      .get(...s.params, ...owner.params) as Row;
     return r.c;
   },
-  push(n: Omit<Notification, "id" | "read" | "createdAt">): Notification {
-    const full: Notification = { ...n, id: newId("nt"), read: false, createdAt: Date.now() };
+  push(n: Omit<Notification, "id" | "read" | "createdAt"> & { ownerEmail?: string }): Notification {
+    const full: Notification & { ownerEmail?: string } = { ...n, id: newId("nt"), read: false, createdAt: Date.now() };
     getDb()
       .query(
-        "INSERT INTO notifications (id, space_id, kind, title, body, link, read, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?)",
+        "INSERT INTO notifications (id, space_id, kind, title, body, link, read, created_at, owner_email) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
       )
-      .run(full.id, full.spaceId, full.kind, full.title, full.body, full.link, full.createdAt);
+      .run(full.id, full.spaceId, full.kind, full.title, full.body, full.link, full.createdAt, (n.ownerEmail || "").toLowerCase());
     return full;
   },
   markAllRead(spaceId: string | null): void {
@@ -1187,6 +1235,72 @@ export const memories = {
   },
 };
 
+function rowToDraft(raw: unknown): ProposedDraft {
+  const r = raw as Row;
+  return {
+    id: r.id,
+    spaceId: r.space_id,
+    ownerEmail: r.owner_email ?? "",
+    threadId: r.thread_id,
+    subject: r.subject,
+    body: r.body,
+    status: r.status,
+    createdAt: r.created_at,
+  };
+}
+
+export const proposedDrafts = {
+  list(spaceId: string | null, opts: { status?: DraftStatus; ownerEmail?: string | null } = {}): ProposedDraft[] {
+    const s = scope(spaceId);
+    const params: any[] = [...s.params];
+    let where = `1=1${s.sql}`;
+    if (opts.status) {
+      where += " AND status = ?";
+      params.push(opts.status);
+    }
+    if (opts.ownerEmail) {
+      where += " AND owner_email = ?";
+      params.push(opts.ownerEmail.toLowerCase());
+    }
+    return getDb()
+      .query(`SELECT * FROM proposed_drafts WHERE ${where} ORDER BY created_at DESC`)
+      .all(...params)
+      .map(rowToDraft);
+  },
+  get(id: string): ProposedDraft | null {
+    const r = getDb().query("SELECT * FROM proposed_drafts WHERE id = ?").get(id) as Row | null;
+    return r ? rowToDraft(r) : null;
+  },
+  pendingForThread(threadId: string): ProposedDraft | null {
+    const r = getDb()
+      .query("SELECT * FROM proposed_drafts WHERE thread_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1")
+      .get(threadId) as Row | null;
+    return r ? rowToDraft(r) : null;
+  },
+  insert(d: Omit<ProposedDraft, "id" | "createdAt"> & { id?: string }): ProposedDraft {
+    const row: ProposedDraft = {
+      id: d.id ?? newId("dr"),
+      spaceId: d.spaceId,
+      ownerEmail: d.ownerEmail.toLowerCase(),
+      threadId: d.threadId,
+      subject: d.subject,
+      body: d.body,
+      status: d.status,
+      createdAt: Date.now(),
+    };
+    getDb()
+      .query(
+        `INSERT INTO proposed_drafts (id, space_id, owner_email, thread_id, subject, body, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(row.id, row.spaceId, row.ownerEmail, row.threadId, row.subject, row.body, row.status, row.createdAt);
+    return row;
+  },
+  setStatus(id: string, status: DraftStatus): void {
+    getDb().query("UPDATE proposed_drafts SET status = ? WHERE id = ?").run(status, id);
+  },
+};
+
 /**
  * Space-level rows derived from mailbox data — wiped when no account remains.
  * `memories` are user-authored preferences and deliberately survive.
@@ -1202,6 +1316,7 @@ export function wipeDerivedData(): void {
     DELETE FROM people;
     DELETE FROM audit_log;
     DELETE FROM chunks;
+    DELETE FROM proposed_drafts;
   `);
 }
 

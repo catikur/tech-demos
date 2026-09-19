@@ -58,7 +58,35 @@ function migrate(database: Database): void {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_memories_space ON memories(space_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS proposed_drafts (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id),
+      owner_email TEXT NOT NULL DEFAULT '',
+      thread_id TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_drafts_space_status ON proposed_drafts(space_id, status, created_at DESC);
   `);
+  const accountCols = columnNames(database, "accounts");
+  if (accountCols.size > 0 && !accountCols.has("owner_email")) {
+    database.exec("ALTER TABLE accounts ADD COLUMN owner_email TEXT NOT NULL DEFAULT ''");
+  }
+  database.exec("UPDATE accounts SET owner_email = lower(email) WHERE owner_email = '' OR owner_email IS NULL");
+  const meetingCols = columnNames(database, "meetings");
+  if (meetingCols.size > 0) {
+    if (!meetingCols.has("recording_locked")) database.exec("ALTER TABLE meetings ADD COLUMN recording_locked INTEGER NOT NULL DEFAULT 0");
+    if (!meetingCols.has("join_url")) database.exec("ALTER TABLE meetings ADD COLUMN join_url TEXT");
+  }
+  if (commitmentCols.size > 0 && !commitmentCols.has("owner_email")) {
+    database.exec("ALTER TABLE commitments ADD COLUMN owner_email TEXT NOT NULL DEFAULT ''");
+  }
+  const notifCols = columnNames(database, "notifications");
+  if (notifCols.size > 0 && !notifCols.has("owner_email")) {
+    database.exec("ALTER TABLE notifications ADD COLUMN owner_email TEXT NOT NULL DEFAULT ''");
+  }
 }
 
 export function getDb(): Database {

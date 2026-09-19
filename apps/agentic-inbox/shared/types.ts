@@ -30,6 +30,8 @@ export interface Account {
   lastSyncAt: number | null;
   lastSyncError: string | null;
   capabilities: Capability[];
+  /** Microsoft 365 login that connected this mailbox (Gmail is owned by that user). */
+  ownerEmail?: string;
 }
 
 export type Capability =
@@ -175,6 +177,9 @@ export interface Meeting {
   hasTranscript: boolean;
   hasRecording: boolean;
   recordingUrl: string | null;
+  /** Teams/SharePoint blocked the mp4; `recordingUrl` is a Teams/join link instead. */
+  recordingLocked: boolean;
+  joinUrl: string | null;
 }
 
 export interface Transcript {
@@ -201,6 +206,8 @@ export interface Commitment {
   confidence: number;
   /** Microsoft To Do task id when this commitment has been pushed. */
   msTaskId?: string | null;
+  /** User who extracted/created this; Work-space rows are still shared. */
+  ownerEmail?: string;
 }
 
 export type SourceKind = "thread" | "chat" | "meeting" | "event" | "manual";
@@ -244,6 +251,7 @@ export interface Notification {
   link: string | null;
   read: boolean;
   createdAt: number;
+  ownerEmail?: string;
 }
 
 export interface Digest {
@@ -335,6 +343,30 @@ export interface PersonProfile extends Person {
   recentChats: Chat[];
   upcomingMeetings: CalendarEvent[];
   topics: string[];
+}
+
+export type DraftStatus = "pending" | "accepted" | "dismissed";
+
+export interface ProposedDraft {
+  id: string;
+  spaceId: string;
+  ownerEmail: string;
+  threadId: string;
+  subject: string;
+  body: string;
+  status: DraftStatus;
+  createdAt: number;
+}
+
+export interface MorningBriefing {
+  generatedAt: number;
+  fromAt: number;
+  toAt: number;
+  events: CalendarEvent[];
+  unread: ThreadSummary[];
+  dueCommitments: Commitment[];
+  drafts: ProposedDraft[];
+  recentMeetings: Meeting[];
 }
 
 export interface MeetingBrief {

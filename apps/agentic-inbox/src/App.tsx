@@ -17,12 +17,14 @@ import { CatchUpView } from "./views/CatchUpView.tsx";
 import { TopicsView } from "./views/TopicsView.tsx";
 import { RadarView } from "./views/RadarView.tsx";
 import { PeopleView } from "./views/PeopleView.tsx";
+import { BriefingView } from "./views/BriefingView.tsx";
 import { LoginView, type SessionView } from "./components/LoginView.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
 
-export type ViewId = "inbox" | "calendar" | "chats" | "meetings" | "catchup" | "commitments" | "radar" | "topics" | "people" | "settings";
+export type ViewId = "briefing" | "inbox" | "calendar" | "chats" | "meetings" | "catchup" | "commitments" | "radar" | "topics" | "people" | "settings";
 
 const NAV: { id: ViewId; labelKey: string; icon: string }[] = [
+  { id: "briefing", labelKey: "nav.briefing", icon: "☀" },
   { id: "inbox", labelKey: "nav.inbox", icon: "✉" },
   { id: "calendar", labelKey: "nav.calendar", icon: "▦" },
   { id: "chats", labelKey: "nav.chats", icon: "◫" },
@@ -46,7 +48,7 @@ export function App() {
   const session = useData<SessionView>(() => api.get("/api/session"), []);
   const status = useStatus();
   const [spaceId, setSpaceId] = useActiveSpace();
-  const [view, setView] = useState<ViewId>("inbox");
+  const [view, setView] = useState<ViewId>("briefing");
   const [selection, setSelection] = useState<Selection>({ threadId: null, chatId: null, eventId: null, meetingId: null });
   const [composerPrefill, setComposerPrefill] = useState<{ threadId: string; body: string } | null>(null);
   const [agentOpen, setAgentOpen] = useState(true);
@@ -178,6 +180,14 @@ export function App() {
                 {t("empty.accountsCta")}
               </button>
             </div>
+          )}
+          {view === "briefing" && (
+            <BriefingView
+              spaceId={spaceId}
+              spaces={spaces}
+              onOpenSource={openSource}
+              onOpenDraft={(threadId, body) => openSource({ kind: "thread", id: threadId, label: "" }, body)}
+            />
           )}
           {view === "inbox" && (
             <InboxView
