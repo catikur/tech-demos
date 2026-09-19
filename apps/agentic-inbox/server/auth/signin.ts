@@ -17,7 +17,12 @@ export function denyLoginRedirect(email: string): Response {
 /** Persist the M365 mailbox as the Work account and issue the session cookie. */
 export function finishMicrosoftSignIn(account: Account, tokens: TokenSet | null): Response {
   if (!emailAllowed(account.email)) return denyLoginRedirect(account.email);
-  const row: Account = { ...account, spaceId: account.spaceId || WORK_SPACE_ID, email: account.email.toLowerCase() };
+  const row: Account = {
+    ...account,
+    spaceId: account.spaceId || WORK_SPACE_ID,
+    email: account.email.toLowerCase(),
+    ownerEmail: account.email.toLowerCase(),
+  };
   accounts.insert(row, null);
   if (tokens) saveTokens(row.id, tokens);
   return new Response(null, {

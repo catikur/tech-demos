@@ -141,7 +141,7 @@ describe("features over the demo mailbox", () => {
   test("people card aggregates threads, meetings, commitments and topics", () => {
     const marcus = personProfile(people.byEmail(WORK_SPACE_ID, "marcus@lumenlabs.io")!);
     expect(marcus.threadCount).toBeGreaterThanOrEqual(2);
-    expect(marcus.meetingCount).toBe(2);
+    expect(marcus.meetingCount).toBe(3);
     expect(marcus.openCommitments.length).toBeGreaterThan(0);
     expect(marcus.upcomingMeetings.length).toBeGreaterThan(0);
     expect(marcus.lastContactAt).not.toBeNull();

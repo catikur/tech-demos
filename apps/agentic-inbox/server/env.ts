@@ -70,6 +70,10 @@ export const env = {
     digestEmailToSelf: bool("DIGEST_EMAIL_TO_SELF", false),
     schedulerEnabled: bool("SCHEDULER_ENABLED", true),
   },
+  /** Local playground only. Production must stay off — never seed demo mailboxes on the VPS. */
+  get seedDemo() {
+    return bool("SEED_DEMO", false);
+  },
 };
 
 mkdirSync(env.dataDir, { recursive: true });

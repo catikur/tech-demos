@@ -21,11 +21,11 @@ Upstream: https://github.com/cloudflare/agentic-inbox
 | 4 | Agent: OpenAI-compatible + Anthropic providers, server-side tool loop, injection guard, mock fallback | done |
 | 5 | Features: commitment ledger, meeting briefs, follow-through, catch-up, topic graph, radar, people cards | done |
 | 6 | Scheduler (sync, T-15 briefs, daily/weekly digests, reminders), notification center | done |
-| 7 | Token encryption, 48 offline tests (`bun test`), docs (README + Azure/Google guides), PR artifacts | done |
+| 8 | Morning briefing, overnight drafts, calendar meeting stubs, Graph 423 → Teams link, Google “one client / two Library APIs” copy, multi-user owner wall + shared Work commitments | this PR |
 
 ## Out of scope (for now)
-- Multi-user / hosted deployment, Graph change-notification webhooks (polling + delta instead)
-- Teams channel *replies* (top-level messages only), Planner / To Do task sync
+- Hosted multi-tenant SaaS beyond @conforcus.com on one SQLite
+- Planner / To Do *pull* sync
 - Changes outside `apps/agentic-inbox/`; new GitHub repository
 
 ## Stack

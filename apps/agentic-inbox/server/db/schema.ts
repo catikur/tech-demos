@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   last_sync_error TEXT,
   capabilities TEXT NOT NULL DEFAULT '[]',
   token_blob TEXT,
-  cursors TEXT NOT NULL DEFAULT '{}'
+  cursors TEXT NOT NULL DEFAULT '{}',
+  owner_email TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS people (
@@ -121,7 +122,9 @@ CREATE TABLE IF NOT EXISTS meetings (
   attendees TEXT NOT NULL DEFAULT '[]',
   has_transcript INTEGER NOT NULL DEFAULT 0,
   has_recording INTEGER NOT NULL DEFAULT 0,
-  recording_url TEXT
+  recording_url TEXT,
+  recording_locked INTEGER NOT NULL DEFAULT 0,
+  join_url TEXT
 );
 
 CREATE TABLE IF NOT EXISTS transcripts (
@@ -144,7 +147,8 @@ CREATE TABLE IF NOT EXISTS commitments (
   confidence REAL NOT NULL DEFAULT 0.5,
   fingerprint TEXT UNIQUE,
   ms_task_id TEXT,
-  ms_list_id TEXT
+  ms_list_id TEXT,
+  owner_email TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS topics (
@@ -184,7 +188,8 @@ CREATE TABLE IF NOT EXISTS notifications (
   body TEXT NOT NULL,
   link TEXT,
   read INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  owner_email TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS digests (
@@ -251,4 +256,16 @@ CREATE TABLE IF NOT EXISTS memories (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_memories_space ON memories(space_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS proposed_drafts (
+  id TEXT PRIMARY KEY,
+  space_id TEXT NOT NULL REFERENCES spaces(id),
+  owner_email TEXT NOT NULL DEFAULT '',
+  thread_id TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_drafts_space_status ON proposed_drafts(space_id, status, created_at DESC);
 `;

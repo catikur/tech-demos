@@ -57,7 +57,9 @@ export function MeetingsView({
                   <span className="thread-snippet">{t("meetings.snippet", { when: fmtDateTime(m.start), n: m.attendees.length })}</span>
                   <span className="thread-labels">
                     {m.hasTranscript && <span className="pill pill-agent">{t("calendar.transcript")}</span>}
-                    {m.hasRecording && <span className="pill">{t("meetings.recording")}</span>}
+                    {m.recordingLocked && <span className="pill pill-warn">{t("meetings.lockedRecording")}</span>}
+                    {m.hasRecording && !m.recordingLocked && <span className="pill">{t("meetings.recording")}</span>}
+                    {!m.hasTranscript && <span className="pill">{t("briefing.calendarOnly")}</span>}
                     {spaceId === null && <SpaceBadge spaces={spaces} spaceId={m.spaceId} />}
                   </span>
                 </span>
@@ -67,22 +69,34 @@ export function MeetingsView({
         </ul>
       </section>
       <section className="pane pane-detail">
-        {!meeting ? (
+        {!selectedId ? (
           <div className="empty-state">
             <div className="empty-icon">🎙️</div>
             <p>{t("meetings.select")}</p>
           </div>
+        ) : !meeting ? (
+          <p className="muted" style={{ padding: 16 }}>
+            {t("common.loading")}
+          </p>
         ) : (
           <div className="detail scroll">
             <h2 className="detail-title">{meeting.title}</h2>
             <div className="detail-meta">
               <div>{fmtDateTime(meeting.start)}</div>
               <div>{meeting.attendees.map(senderName).join(", ")}</div>
+              {meeting.joinUrl && (
+                <div>
+                  <a href={meeting.joinUrl} target="_blank" rel="noreferrer">
+                    {t("calendar.join")}
+                  </a>
+                </div>
+              )}
               {meeting.recordingUrl && (
                 <div>
                   <a href={meeting.recordingUrl} target="_blank" rel="noreferrer">
-                    {t("meetings.recordingLink")}
+                    {meeting.recordingLocked ? t("meetings.openInTeams") : t("meetings.recordingLink")}
                   </a>
+                  {meeting.recordingLocked && <span className="muted small"> — {t("meetings.lockedHint")}</span>}
                 </div>
               )}
             </div>

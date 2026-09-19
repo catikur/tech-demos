@@ -74,9 +74,7 @@ Redirect URIs to register on the Entra app:
   supported). Unread counts come from the chat viewpoint.
 - **Channels**: top-level messages in channels of teams you have joined, plus thread replies
   (capped) stored in the same chat with `replyToId` pointing at the parent.
-- **Meetings**: for past events with a join link, the latest transcript (WebVTT → text) and
-  the first recording (downloaded to `data/recordings/`, served at `/api/recordings/:id`).
-  Transcripts are retried for 24 h after a meeting since Teams produces them asynchronously.
+- **Meetings**: for past events with a join link, Butler always stores a meeting row (calendar stub) even when Graph cannot resolve the online meeting. When it can, it pulls the latest transcript (WebVTT → text) and tries to download the first recording to `data/recordings/` (`/api/recordings/:id`). If SharePoint returns **423 Locked** (or 403) on the mp4 **or** the VTT, the row stays, `recordingLocked` is set when a recording exists, and the UI links to Teams instead of an mp4. One locked meeting does not abort the rest of the meeting pass. Transcripts are retried for 14 days after the meeting.
 
 ## Sending
 
@@ -127,7 +125,7 @@ block the To Do task. Pulling tasks back from To Do is not implemented.
 - `403` on `/teams/{id}/channels/{id}/messages` (`UnknownError`) → grant **admin consent** for `ChannelMessage.Read.All`. Until then, 1:1/group chats still sync; that channel is skipped.
 - `403` `3003: User does not have access to lookup meeting` on `/me/onlineMeetings` → the join link belongs to **another tenant**. Calendar still shows the event; transcript/recording cannot be fetched. Same-tenant meetings need `OnlineMeetings.Read` plus admin consent for transcript/recording scopes.
 - `403` `Graph API access to transcripts is disabled for this tenant` → Teams admin center: turn on **transcription** for the org, and allow Graph access to transcripts/recordings. Until then the calendar event still syncs; Meetings view stays empty.
-- `423 Locked` on `/recordings/{id}/content` → SharePoint/OneDrive blocked Graph from the recording file. The meeting row still appears.
+- `423 Locked` on `/recordings/{id}/content` → SharePoint/OneDrive (or Teams “block download of meeting recordings”) refused the mp4. Delegated Graph can also refuse anyone who is not the organizer. Butler still creates the meeting row, sets **download locked**, and links the Teams join URL instead of a local file. Tenant admins can allow downloads with SharePoint: `Set-SPOTenant -BlockDownloadFileTypePolicy $false` (or exclude Teams meeting recordings from the blocked file type policy) and confirm the signed-in user is allowed to download. After a policy change, the next sync retries meetings without a transcript for 14 days — you do not need a full resync.
 - Transcripts empty right after a meeting → normal; the app retries on the next sync.
 - Throttling (`429`) → the client honours `Retry-After`; lower `SYNC_INTERVAL_MINUTES` only if you need it.
 - `403` on `/me/todo/lists` → add `Tasks.ReadWrite` and reconnect the Microsoft 365 account (re-consent).

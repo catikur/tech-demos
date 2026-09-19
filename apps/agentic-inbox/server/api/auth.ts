@@ -1,7 +1,7 @@
 import type { BunRequest } from "bun";
 import type { Account } from "../../shared/types.ts";
 import { env } from "../env.ts";
-import { accounts, audit, oauthStates, spaces } from "../db/repo.ts";
+import { accounts, audit, meetings, oauthStates, spaces } from "../db/repo.ts";
 import { authorizeUrl, exchangeCode, pkcePair, saveTokens, type OAuthProviderConfig, type TokenSet } from "../auth/oauth.ts";
 import { microsoftConfigured, microsoftOAuth } from "../auth/microsoft.ts";
 import { googleConfigured, googleOAuth } from "../auth/google.ts";
@@ -15,6 +15,7 @@ import { WORK_SPACE_ID } from "../bootstrap.ts";
 import { emailAllowed } from "../auth/allowlist.ts";
 import { loginRequired } from "../auth/gate.ts";
 import { readSession } from "../auth/session.ts";
+import { ensureVisibleAccount } from "../auth/scope.ts";
 import { denyLoginRedirect, finishMicrosoftSignIn } from "../auth/signin.ts";
 
 /**
@@ -116,6 +117,7 @@ export const authRoutes = {
       const tokens = await exchangeCode(flow.config(), code, state.codeVerifier);
       const account = await flow.identify(tokens, state.spaceId);
       if (req.params.provider === "microsoft") {
+        account.ownerEmail = account.email;
         if (!emailAllowed(account.email)) return denyLoginRedirect(account.email);
         const res = finishMicrosoftSignIn(account, tokens);
         audit.log({ spaceId: account.spaceId, actor: "user", action: "account.connect", detail: `${account.provider} ${account.email}` });
@@ -131,6 +133,7 @@ export const authRoutes = {
       if (loginRequired() && !readSession(req)) {
         return Response.json({ error: "Sign in with Microsoft 365" }, { status: 401 });
       }
+      account.ownerEmail = readSession(req)?.email ?? account.email;
       accounts.insert(account, null);
       saveTokens(account.id, tokens);
       audit.log({ spaceId: state.spaceId, actor: "user", action: "account.connect", detail: `${account.provider} ${account.email}` });
@@ -146,6 +149,8 @@ export const authRoutes = {
 
   "/api/recordings/:meetingId": h(async (req: BunRequest<"/api/recordings/:meetingId">) => {
     const safe = req.params.meetingId.replace(/[^a-z0-9_]/gi, "");
+    const meeting = meetings.get(safe);
+    if (meeting) ensureVisibleAccount(req, meeting.accountId);
     const file = Bun.file(`${env.dataDir}/recordings/${safe}.mp4`);
     if (!(await file.exists())) return new Response("Recording not found", { status: 404 });
     return new Response(file, { headers: { "Content-Type": "video/mp4" } });

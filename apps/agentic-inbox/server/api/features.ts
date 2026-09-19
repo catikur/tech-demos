@@ -1,6 +1,6 @@
 import type { BunRequest } from "bun";
 import type { Commitment, MemoryKind } from "../../shared/types.ts";
-import { audit, commitments, events, meetings, memories, notes, people, spaces, topics } from "../db/repo.ts";
+import { audit, commitments, events, meetings, memories, notes, people, proposedDrafts, spaces, topics } from "../db/repo.ts";
 import { extractForSpace } from "../features/commitments.ts";
 import { completeTodoTask, pushCommitmentToTodo } from "../features/ms-tasks.ts";
 import { briefForEvent } from "../features/briefs.ts";
@@ -11,18 +11,29 @@ import { computeRadar } from "../features/radar.ts";
 import { findPerson, personProfile } from "../features/people.ts";
 import { parseDue } from "../features/text.ts";
 import { produceDigest } from "../features/digests.ts";
+import { buildMorningBriefing } from "../features/briefing.ts";
+import { produceOvernightDrafts } from "../features/overnight-drafts.ts";
 import { schedulerState, tick } from "../sync/scheduler.ts";
 import { digests } from "../db/repo.ts";
 import { sendNewMail } from "../services/messaging.ts";
 import { broadcast } from "./events.ts";
 import { badRequest, h, notFound, num, ok, query, readJson, spaceParam } from "./util.ts";
+import { ensureVisibleAccount, viewerEmail, visibleAccountIds } from "../auth/scope.ts";
 
 type P<T extends string> = BunRequest<T>;
 
 export const featureRoutes = {
   /* ---------- commitments ---------- */
   "/api/commitments": {
-    GET: h((req) => ok(commitments.list(spaceParam(req), { status: query(req).get("status") ?? undefined }))),
+    GET: h((req) =>
+      ok(
+        commitments.list(spaceParam(req), {
+          status: query(req).get("status") ?? undefined,
+          ownerEmail: viewerEmail(req),
+          shareWork: true,
+        }),
+      ),
+    ),
     POST: h(async (req) => {
       const body = await readJson<{ spaceId: string; direction: Commitment["direction"]; counterpart: string; text: string; due?: string }>(req);
       if (!body.spaceId || !spaces.get(body.spaceId)) badRequest("spaceId required");
@@ -37,6 +48,7 @@ export const featureRoutes = {
         status: "open",
         source: { kind: "manual", id: "ui", label: "Added manually" },
         confidence: 1,
+        ownerEmail: viewerEmail(req) || undefined,
       });
       broadcast({ type: "data", entity: "commitments", spaceId: body.spaceId });
       return ok({ ok: true });
@@ -46,8 +58,13 @@ export const featureRoutes = {
     POST: h(async (req) => {
       const spaceId = spaceParam(req);
       const targets = spaceId ? [spaceId] : spaces.all().map((s) => s.id);
+      const owner = viewerEmail(req) || undefined;
+      const accountIds = visibleAccountIds(req);
       let inserted = 0;
-      for (const id of targets) inserted += await extractForSpace(id);
+      for (const id of targets) {
+        if (accountIds === null) inserted += await extractForSpace(id, { ownerEmail: owner });
+        else for (const accountId of accountIds) inserted += await extractForSpace(id, { ownerEmail: owner, accountId });
+      }
       broadcast({ type: "data", entity: "commitments", spaceId });
       return ok({ inserted });
     }),
@@ -87,6 +104,7 @@ export const featureRoutes = {
   /* ---------- meeting briefs ---------- */
   "/api/events/:id/brief": h(async (req: P<"/api/events/:id/brief">) => {
     const event = events.get(req.params.id) ?? notFound("Event not found");
+    ensureVisibleAccount(req, event.accountId);
     // `existing=1` only returns a brief the scheduler (or user) already produced; never generates.
     if (query(req).get("existing") === "1" && notes.list(event.spaceId, { eventId: event.id, kind: "brief" }).length === 0) return ok(null);
     return ok(await briefForEvent(req.params.id, { refresh: query(req).get("refresh") === "1" }));
@@ -96,6 +114,7 @@ export const featureRoutes = {
   "/api/meetings/:id/followup": {
     GET: h(async (req: P<"/api/meetings/:id/followup">) => {
       const m = meetings.get(req.params.id) ?? notFound("Meeting not found");
+      ensureVisibleAccount(req, m.accountId);
       return ok({ ...(await buildFollowUp(m, { refresh: query(req).get("refresh") === "1" })), recipients: followUpRecipients(m) });
     }),
     POST: h(async (req: P<"/api/meetings/:id/followup">) => {
@@ -122,10 +141,47 @@ export const featureRoutes = {
     const to = num(q.get("to"), Date.now());
     const preset = q.get("preset");
     const from = preset === "seen" ? (lastSeen(spaceId) ?? to - 24 * 3_600_000) : num(q.get("from"), to - 24 * 3_600_000);
-    const result = await buildCatchUp(spaceId, from, to, { polish: q.get("polish") !== "0" });
+    const result = await buildCatchUp(spaceId, from, to, { polish: q.get("polish") !== "0", accountIds: visibleAccountIds(req) });
     return ok(result);
   }),
   "/api/catchup/seen": { POST: h((req) => (markSeen(spaceParam(req)), ok({ ok: true }))) },
+
+  /* ---------- morning briefing + overnight drafts ---------- */
+  "/api/briefing": h((req) =>
+    ok(
+      buildMorningBriefing(spaceParam(req), {
+        accountIds: visibleAccountIds(req),
+        ownerEmail: viewerEmail(req),
+      }),
+    ),
+  ),
+  "/api/drafts": {
+    GET: h((req) =>
+      ok(proposedDrafts.list(spaceParam(req), { status: (query(req).get("status") as "pending" | "accepted" | "dismissed") || "pending", ownerEmail: viewerEmail(req) || undefined })),
+    ),
+    POST: h((req) => {
+      const spaceId = spaceParam(req);
+      const targets = spaceId ? [spaces.get(spaceId) ?? badRequest("Unknown space")] : spaces.all();
+      const owner = viewerEmail(req) || "";
+      let created = 0;
+      for (const s of targets) {
+        created += produceOvernightDrafts(s, { accountIds: visibleAccountIds(req), ownerEmail: owner }).length;
+      }
+      broadcast({ type: "data", entity: "drafts", spaceId });
+      return ok({ created });
+    }),
+  },
+  "/api/drafts/:id": {
+    PATCH: h(async (req: P<"/api/drafts/:id">) => {
+      const row = proposedDrafts.get(req.params.id) ?? notFound("Draft not found");
+      const owner = viewerEmail(req);
+      if (owner && row.ownerEmail && row.ownerEmail !== owner) notFound("Draft not found");
+      const body = await readJson<{ status: "accepted" | "dismissed" }>(req);
+      if (body.status !== "accepted" && body.status !== "dismissed") badRequest("status must be accepted or dismissed");
+      proposedDrafts.setStatus(row.id, body.status);
+      return ok(proposedDrafts.get(row.id));
+    }),
+  },
 
   /* ---------- topics ---------- */
   "/api/topics": h((req) => ok(topics.list(spaceParam(req)))),
@@ -161,7 +217,7 @@ export const featureRoutes = {
   },
 
   /* ---------- radar ---------- */
-  "/api/radar": h((req) => ok(computeRadar(spaceParam(req)))),
+  "/api/radar": h((req) => ok(computeRadar(spaceParam(req), visibleAccountIds(req)))),
 
   /* ---------- people ---------- */
   "/api/people/by-email": h((req) => {

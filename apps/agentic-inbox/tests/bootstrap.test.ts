@@ -36,4 +36,15 @@ describe("bootstrap (no demo seed)", () => {
     expect(commitments.list(null)).toEqual([]);
     expect(isDemoMode()).toBe(false);
   });
+
+  test("SEED_DEMO inserts Work + Personal demo accounts instead of wiping them", () => {
+    openMemoryDb();
+    const result = bootstrap({ seedDemo: true });
+    expect(result.seededDemo).toBe(true);
+    expect(accounts.all().map((a) => a.provider).sort()).toEqual(["demo", "demo"]);
+    expect(isDemoMode()).toBe(true);
+    const again = bootstrap({ seedDemo: true });
+    expect(again.seededDemo).toBe(false);
+    expect(accounts.all()).toHaveLength(2);
+  });
 });

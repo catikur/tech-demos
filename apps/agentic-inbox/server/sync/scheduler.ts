@@ -4,6 +4,7 @@ import { accounts, commitments, events, notes, notifications, settings, spaces }
 import { broadcast } from "../api/events.ts";
 import { briefForEvent } from "../features/briefs.ts";
 import { produceDigest } from "../features/digests.ts";
+import { produceOvernightDrafts } from "../features/overnight-drafts.ts";
 import { computeRadar } from "../features/radar.ts";
 import { syncAll } from "./engine.ts";
 import { graphPushEnabled, renewExpiringSubscriptions } from "../webhooks/graph.ts";
@@ -63,14 +64,23 @@ export async function tick(now = Date.now()): Promise<void> {
           title: `Brief ready: ${e.title}`,
           body: `Starts ${new Date(e.start).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC · ${e.attendees.length - 1} other attendee(s)`,
           link: `event:${e.id}`,
+          ownerEmail: accounts.get(e.accountId)?.ownerEmail || accounts.get(e.accountId)?.email,
         });
       } catch (err) {
         console.warn(`[scheduler] brief failed for ${e.title}: ${err instanceof Error ? err.message : err}`);
       }
     }
 
-    // Digests at the space's digest hour (local time), once per day; weekly on Mondays.
     const local = new Date(now);
+
+    // Overnight drafts at the digest hour so the morning briefing has them.
+    const draftKey = `drafts.overnight.${space.id}.${dateKey(local)}`;
+    if (local.getHours() === space.digestHour && !settings.get(draftKey)) {
+      settings.set(draftKey, "1");
+      produceOvernightDrafts(space);
+    }
+
+    // Digests at the space's digest hour (local time), once per day; weekly on Mondays.
     const dailyKey = `digest.daily.${space.id}.${dateKey(local)}`;
     if (local.getHours() === space.digestHour && !settings.get(dailyKey)) {
       settings.set(dailyKey, "1");

@@ -47,14 +47,16 @@ Both OAuth flows are auth-code + PKCE implemented with plain `fetch`; tokens are
 ## What's inside
 
 ### Views
-- **Inbox** — unified threads across accounts (space-filtered), search, composer, and a
+- **Inbox** — unified threads across *your* accounts (space-filtered), search, composer, and a
   **person chip** under every thread showing last contact, open commitments and the next
   meeting with that person.
+- **Morning briefing** — today’s calendar, overnight unread mail, due commitments (Work is
+  shared across @conforcus.com), pending draft replies, and recent meetings even without a transcript.
 - **Calendar** — day-grouped events, cross-space overlap warnings, join links, and the
   **Meeting brief** panel.
 - **Chats** — Teams 1:1, group and channel messages (including channel thread replies), mention highlighting; send after confirm.
-- **Meetings** — transcripts (WebVTT → speaker lines), recordings, and the **Follow-through** panel.
-- **Catch-up**, **Commitments** (push to Microsoft To Do), **Radar**, **Topics**, **People** — the seven features (below).
+- **Meetings** — calendar stubs + transcripts when Graph allows them; if recording download is **423 Locked**, the row still appears with an Open in Teams link.
+- **Catch-up**, **Commitments** (push to Microsoft To Do; Work ledger is shared), **Radar**, **Topics**, **People** — the seven features (below).
 - **Settings** — space rules (quiet hours, digest hour, agent tone, signature), accounts, connectors, OpenRouter status.
 - **Notification bell** — briefs, digests, commitment reminders and radar nudges from the scheduler.
 

@@ -10,7 +10,8 @@ encrypted, same as the Entra app). Alternatively set `GOOGLE_CLIENT_ID` /
 ## 1. Create an OAuth client
 
 1. [Google Cloud console](https://console.cloud.google.com) → create/select a project.
-2. **APIs & Services → Library**: enable **Gmail API** and (optional) **Google Calendar API**.
+2. **APIs & Services → Library**: enable **Gmail API** and **Google Calendar API** on the *same* project.
+   Butler Settings has **one** OAuth client form (id + secret), not separate Gmail vs Calendar fields.
 3. **APIs & Services → OAuth consent screen**: External, add yourself as a test user while the
    app is in *Testing* (no verification needed for personal use). Add the scopes below.
 4. **Credentials → Create credentials → OAuth client ID → Web application**.
