@@ -69,11 +69,15 @@ export function MeetingsView({
         </ul>
       </section>
       <section className="pane pane-detail">
-        {!meeting ? (
+        {!selectedId ? (
           <div className="empty-state">
             <div className="empty-icon">🎙️</div>
             <p>{t("meetings.select")}</p>
           </div>
+        ) : !meeting ? (
+          <p className="muted" style={{ padding: 16 }}>
+            {t("common.loading")}
+          </p>
         ) : (
           <div className="detail scroll">
             <h2 className="detail-title">{meeting.title}</h2>
