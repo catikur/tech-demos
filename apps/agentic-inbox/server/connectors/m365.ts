@@ -88,6 +88,10 @@ export class GraphError extends Error {
   }
 }
 
+function graphBlocked(err: unknown): boolean {
+  return err instanceof GraphError && (err.status === 403 || err.status === 423);
+}
+
 interface Me {
   id: string;
   mail: string;
@@ -423,93 +427,99 @@ export class M365Connector implements Connector {
     const cursors = accounts.cursors(account.id);
     const ourTenant = (microsoftCredentials().tenantId || "").toLowerCase();
     for (const ev of past) {
-      const doneKey = `meeting.${ev.id}`;
-      const existing = meetings.byEventId(ev.id);
-      // Policy 403/423 used to mark the meeting done forever; retry until a transcript lands or 14 days pass.
-      if (cursors[doneKey] === "done" && (existing?.hasTranscript || now - ev.end > 14 * DAY)) continue;
-
-      const otherTid = teamsJoinTenantId(ev.joinUrl);
-      if (otherTid && ourTenant && ourTenant !== "common" && ourTenant !== "organizations" && otherTid !== ourTenant) {
-        meetings.upsert(this.stubMeeting(account, ev, null));
-        stats.meetings++;
-        accounts.setCursor(account.id, doneKey, "done");
-        continue;
-      }
-
-      const filter = encodeURIComponent(`JoinWebUrl eq '${ev.joinUrl}'`);
-      let found: any;
       try {
-        found = (await g.collect<any>(`/me/onlineMeetings?$filter=${filter}`, { maxPages: 1 })).items[0];
-      } catch (err) {
-        if (err instanceof GraphError && err.status === 403) {
+        const doneKey = `meeting.${ev.id}`;
+        const existing = meetings.byEventId(ev.id);
+        // Policy 403/423 used to mark the meeting done forever; retry until a transcript lands or 14 days pass.
+        if (cursors[doneKey] === "done" && (existing?.hasTranscript || now - ev.end > 14 * DAY)) continue;
+
+        const otherTid = teamsJoinTenantId(ev.joinUrl);
+        if (otherTid && ourTenant && ourTenant !== "common" && ourTenant !== "organizations" && otherTid !== ourTenant) {
           meetings.upsert(this.stubMeeting(account, ev, null));
           stats.meetings++;
-          if (/3003|does not have access to lookup meeting/i.test(err.message)) {
-            accounts.setCursor(account.id, doneKey, "done");
-          }
+          accounts.setCursor(account.id, doneKey, "done");
           continue;
         }
-        throw err;
-      }
-      if (!found) {
+
+        const filter = encodeURIComponent(`JoinWebUrl eq '${ev.joinUrl}'`);
+        let found: any;
+        try {
+          found = (await g.collect<any>(`/me/onlineMeetings?$filter=${filter}`, { maxPages: 1 })).items[0];
+        } catch (err) {
+          if (graphBlocked(err)) {
+            meetings.upsert(this.stubMeeting(account, ev, null));
+            stats.meetings++;
+            if (/3003|does not have access to lookup meeting/i.test(err instanceof Error ? err.message : "")) {
+              accounts.setCursor(account.id, doneKey, "done");
+            }
+            continue;
+          }
+          throw err;
+        }
+        if (!found) {
+          meetings.upsert(this.stubMeeting(account, ev, null));
+          stats.meetings++;
+          accounts.setCursor(account.id, doneKey, "done");
+          continue;
+        }
+
+        const meeting = this.stubMeeting(account, ev, found.id);
+        let gotTranscript = meeting.hasTranscript;
+        if (!gotTranscript) {
+          try {
+            const transcripts = (await g.collect<any>(`/me/onlineMeetings/${found.id}/transcripts`, { maxPages: 1 })).items;
+            const latest = transcripts.sort((a: any, b: any) => ts(b.createdDateTime) - ts(a.createdDateTime))[0];
+            if (latest) {
+              const vtt = await g.request<string>(`/me/onlineMeetings/${found.id}/transcripts/${latest.id}/content?$format=text/vtt`);
+              const lines = parseVtt(typeof vtt === "string" ? vtt : "");
+              if (lines.length) {
+                meetings.upsert(meeting);
+                meetings.setTranscript(meeting.id, lines);
+                meeting.hasTranscript = true;
+                gotTranscript = true;
+                stats.transcripts++;
+              }
+            }
+          } catch (err) {
+            if (!graphBlocked(err)) throw err;
+            // SharePoint / tenant policy — keep retrying; calendar stub stays visible.
+          }
+        }
+
+        if (!meeting.hasRecording || meeting.recordingLocked) {
+          try {
+            const recordings = (await g.collect<any>(`/me/onlineMeetings/${found.id}/recordings`, { maxPages: 1 })).items;
+            const rec = recordings[0];
+            if (rec) {
+              meeting.hasRecording = true;
+              meeting.recordingUrl = ev.joinUrl;
+              meeting.recordingLocked = true;
+              try {
+                const dir = join(env.dataDir, "recordings");
+                mkdirSync(dir, { recursive: true });
+                const file = join(dir, `${meeting.id}.mp4`);
+                const res = await g.request<Response>(`/me/onlineMeetings/${found.id}/recordings/${rec.id}/content`, {}, { raw: true });
+                await Bun.write(file, res);
+                meeting.recordingUrl = `/api/recordings/${meeting.id}`;
+                meeting.recordingLocked = false;
+              } catch (err) {
+                if (!graphBlocked(err)) throw err;
+                // SharePoint BlockDownload / organizer-only: keep the Teams join link.
+              }
+            }
+          } catch (err) {
+            if (!graphBlocked(err)) throw err;
+          }
+        }
+
+        meetings.upsert(meeting);
+        stats.meetings++;
+        if (gotTranscript || now - ev.end > 14 * DAY) accounts.setCursor(account.id, doneKey, "done");
+      } catch (err) {
+        if (!graphBlocked(err)) throw err;
         meetings.upsert(this.stubMeeting(account, ev, null));
         stats.meetings++;
-        accounts.setCursor(account.id, doneKey, "done");
-        continue;
       }
-
-      const meeting = this.stubMeeting(account, ev, found.id);
-      let gotTranscript = meeting.hasTranscript;
-      if (!gotTranscript) {
-        try {
-          const transcripts = (await g.collect<any>(`/me/onlineMeetings/${found.id}/transcripts`, { maxPages: 1 })).items;
-          const latest = transcripts.sort((a: any, b: any) => ts(b.createdDateTime) - ts(a.createdDateTime))[0];
-          if (latest) {
-            const vtt = await g.request<string>(`/me/onlineMeetings/${found.id}/transcripts/${latest.id}/content?$format=text/vtt`);
-            const lines = parseVtt(typeof vtt === "string" ? vtt : "");
-            if (lines.length) {
-              meetings.upsert(meeting);
-              meetings.setTranscript(meeting.id, lines);
-              meeting.hasTranscript = true;
-              gotTranscript = true;
-              stats.transcripts++;
-            }
-          }
-        } catch (err) {
-          if (!(err instanceof GraphError && err.status === 403)) throw err;
-          // Tenant policy — keep retrying; calendar stub stays visible.
-        }
-      }
-
-      if (!meeting.hasRecording || meeting.recordingLocked) {
-        try {
-          const recordings = (await g.collect<any>(`/me/onlineMeetings/${found.id}/recordings`, { maxPages: 1 })).items;
-          const rec = recordings[0];
-          if (rec) {
-            meeting.hasRecording = true;
-            meeting.recordingUrl = ev.joinUrl;
-            meeting.recordingLocked = true;
-            try {
-              const dir = join(env.dataDir, "recordings");
-              mkdirSync(dir, { recursive: true });
-              const file = join(dir, `${meeting.id}.mp4`);
-              const res = await g.request<Response>(`/me/onlineMeetings/${found.id}/recordings/${rec.id}/content`, {}, { raw: true });
-              await Bun.write(file, res);
-              meeting.recordingUrl = `/api/recordings/${meeting.id}`;
-              meeting.recordingLocked = false;
-            } catch (err) {
-              if (!(err instanceof GraphError && (err.status === 403 || err.status === 423))) throw err;
-              // SharePoint BlockDownload / organizer-only: keep the Teams join link.
-            }
-          }
-        } catch (err) {
-          if (!(err instanceof GraphError && (err.status === 403 || err.status === 423))) throw err;
-        }
-      }
-
-      meetings.upsert(meeting);
-      stats.meetings++;
-      if (gotTranscript || now - ev.end > 14 * DAY) accounts.setCursor(account.id, doneKey, "done");
     }
   }
 

@@ -357,6 +357,55 @@ describe("M365 connector (fixture-driven sync)", () => {
     expect(row?.joinUrl).toContain("locked-rec");
   });
 
+  test("423 Locked on transcript content keeps the stub and still fetches recordings", async () => {
+    events.upsert({
+      id: "ev_locked_vtt",
+      externalId: "EV-LOCKED-VTT",
+      spaceId: WORK_SPACE_ID,
+      accountId: account.id,
+      title: "Locked transcript call",
+      start: Date.now() - 3_600_000,
+      end: Date.now() - 1_800_000,
+      location: "",
+      organizer: "Marcus Chen <marcus@lumenlabs.io>",
+      attendees: ["You <you@lumenlabs.io>"],
+      joinUrl: "https://teams.microsoft.com/l/meetup-join/locked-vtt",
+      description: "",
+      meetingId: null,
+      responseStatus: "accepted",
+    });
+    const locked: GraphLike = {
+      async request(url, init, opts) {
+        if (url.includes("/transcripts/") && url.includes("/content")) {
+          throw new GraphError(423, `GET ${url} → 423: Locked`);
+        }
+        if (url.includes("/recordings/") && url.includes("/content")) {
+          throw new GraphError(423, `GET ${url} → 423: Locked`);
+        }
+        return fakeClient.request(url, init, opts);
+      },
+      async collect<T = any>(url: string) {
+        if (url.includes("JoinWebUrl") && url.includes("locked-vtt")) {
+          return { items: [{ id: "OM-LOCKED-VTT" }] as T[], deltaLink: null };
+        }
+        if (url.includes("/onlineMeetings/OM-LOCKED-VTT/transcripts")) {
+          return { items: [{ id: "TR-LOCKED", createdDateTime: new Date().toISOString() }] as T[], deltaLink: null };
+        }
+        if (url.includes("/onlineMeetings/OM-LOCKED-VTT/recordings")) {
+          return { items: [{ id: "REC-OK" }] as T[], deltaLink: null };
+        }
+        return fakeClient.collect<T>(url);
+      },
+    };
+    await new M365Connector(() => locked).sync(account, {});
+    const row = meetings.byEventId("ev_locked_vtt");
+    expect(row?.hasTranscript).toBe(false);
+    expect(row?.joinUrl).toContain("locked-vtt");
+    expect(row?.hasRecording).toBe(true);
+    expect(row?.recordingLocked).toBe(true);
+    expect(row?.recordingUrl).toContain("teams.microsoft.com");
+  });
+
   test("past calendar event without a Graph onlineMeeting still creates a meeting stub", async () => {
     events.upsert({
       id: "ev_cal_only",

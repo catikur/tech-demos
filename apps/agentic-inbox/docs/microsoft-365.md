@@ -74,7 +74,7 @@ Redirect URIs to register on the Entra app:
   supported). Unread counts come from the chat viewpoint.
 - **Channels**: top-level messages in channels of teams you have joined, plus thread replies
   (capped) stored in the same chat with `replyToId` pointing at the parent.
-- **Meetings**: for past events with a join link, Butler always stores a meeting row (calendar stub) even when Graph cannot resolve the online meeting. When it can, it pulls the latest transcript (WebVTT → text) and tries to download the first recording to `data/recordings/` (`/api/recordings/:id`). If SharePoint returns **423 Locked** (or 403), the row stays, `recordingLocked` is set, and the UI links to Teams instead of an mp4. Transcripts are retried for 14 days after the meeting.
+- **Meetings**: for past events with a join link, Butler always stores a meeting row (calendar stub) even when Graph cannot resolve the online meeting. When it can, it pulls the latest transcript (WebVTT → text) and tries to download the first recording to `data/recordings/` (`/api/recordings/:id`). If SharePoint returns **423 Locked** (or 403) on the mp4 **or** the VTT, the row stays, `recordingLocked` is set when a recording exists, and the UI links to Teams instead of an mp4. One locked meeting does not abort the rest of the meeting pass. Transcripts are retried for 14 days after the meeting.
 
 ## Sending
 
