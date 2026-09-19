@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from "bun:test";
-import { commitments, events, proposedDrafts, threads } from "../server/db/repo.ts";
+import { commitments, events, meetings, proposedDrafts, threads } from "../server/db/repo.ts";
 import { buildMorningBriefing } from "../server/features/briefing.ts";
 import { produceOvernightDrafts } from "../server/features/overnight-drafts.ts";
 import { spaces } from "../server/db/repo.ts";
@@ -54,5 +54,16 @@ describe("morning briefing + overnight drafts", () => {
     expect(brief.dueCommitments.some((c) => c.text.includes("standup notes"))).toBe(true);
     expect(brief.drafts.every((d) => d.status === "pending")).toBe(true);
     expect(threads.list(PERSONAL_SPACE_ID).length).toBeGreaterThan(0);
+  });
+
+  test("demo seed includes a locked recording (Teams link) and a calendar-only stub", () => {
+    const locked = meetings.list(WORK_SPACE_ID).find((m) => m.id === "mt-locked");
+    expect(locked?.recordingLocked).toBe(true);
+    expect(locked?.hasRecording).toBe(true);
+    expect(locked?.hasTranscript).toBe(false);
+    expect(locked?.recordingUrl).toContain("teams.microsoft.com");
+    const calOnly = meetings.list(WORK_SPACE_ID).find((m) => m.id === "mt-cal-only");
+    expect(calOnly?.hasTranscript).toBe(false);
+    expect(calOnly?.joinUrl).toContain("teams.microsoft.com");
   });
 });

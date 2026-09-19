@@ -424,6 +424,30 @@ function workEvents(now: number): SeedEvent[] {
       description: "Review the /api/export 504 incident reported by Northwind Ops.",
       responseStatus: "accepted",
     },
+    {
+      id: "ev-locked-rec",
+      title: "Customer QBR",
+      start: at(11, 0, -2),
+      end: at(12, 0, -2),
+      organizer: PEOPLE.marcus,
+      attendees: [ME_WORK, PEOPLE.marcus, PEOPLE.priya],
+      location: "Microsoft Teams",
+      joinUrl: "https://teams.microsoft.com/l/meetup-join/demo-locked-qbr",
+      description: "Quarterly business review. SharePoint blocks the mp4 download (Graph 423).",
+      responseStatus: "accepted",
+    },
+    {
+      id: "ev-standup-prev",
+      title: "Daily standup",
+      start: at(9, 0, -1),
+      end: at(9, 15, -1),
+      organizer: PEOPLE.dana,
+      attendees: [ME_WORK, PEOPLE.dana, PEOPLE.tomas],
+      location: "Microsoft Teams",
+      joinUrl: "https://teams.microsoft.com/l/meetup-join/demo-standup",
+      description: "Yesterday's standup — calendar stub, no transcript yet.",
+      responseStatus: "accepted",
+    },
   ];
 }
 
@@ -661,13 +685,23 @@ function seedChats(account: Account, list: SeedChat[], me: string, stats: SyncSt
 
 function seedMeetings(account: Account, list: SeedEvent[], stats: SyncStats): void {
   const byId = new Map(list.map((e) => [e.id, e]));
-  const specs: { id: string; eventId: string; transcript: TranscriptLine[]; recording: boolean }[] = [
-    { id: "mt-incident", eventId: "ev-incident-review", transcript: incidentTranscript(), recording: true },
+  const specs: {
+    id: string;
+    eventId: string;
+    transcript: TranscriptLine[];
+    recording: "file" | "locked" | false;
+  }[] = [
+    { id: "mt-incident", eventId: "ev-incident-review", transcript: incidentTranscript(), recording: "file" },
     { id: "mt-roadmap-prev", eventId: "ev-roadmap-prev", transcript: roadmapPrevTranscript(), recording: false },
+    { id: "mt-locked", eventId: "ev-locked-rec", transcript: [], recording: "locked" },
+    { id: "mt-cal-only", eventId: "ev-standup-prev", transcript: [], recording: false },
   ];
   for (const s of specs) {
     const ev = byId.get(s.eventId);
     if (!ev) continue;
+    const locked = s.recording === "locked";
+    const hasFile = s.recording === "file";
+    const hasTranscript = s.transcript.length > 0;
     const m: Meeting & { externalId: string } = {
       id: s.id,
       externalId: s.id,
@@ -678,16 +712,18 @@ function seedMeetings(account: Account, list: SeedEvent[], stats: SyncStats): vo
       start: ev.start,
       end: ev.end,
       attendees: ev.attendees,
-      hasTranscript: true,
-      hasRecording: s.recording,
-      recordingUrl: s.recording ? "https://demo.local/recordings/export-incident-review.mp4" : null,
-      recordingLocked: false,
+      hasTranscript,
+      hasRecording: hasFile || locked,
+      recordingUrl: locked ? ev.joinUrl : hasFile ? "https://demo.local/recordings/export-incident-review.mp4" : null,
+      recordingLocked: locked,
       joinUrl: ev.joinUrl ?? null,
     };
     meetings.upsert(m);
-    meetings.setTranscript(m.id, s.transcript);
+    if (hasTranscript) {
+      meetings.setTranscript(m.id, s.transcript);
+      stats.transcripts++;
+    }
     stats.meetings++;
-    stats.transcripts++;
   }
 }
 
