@@ -8,6 +8,7 @@ import { SpaceSwitcher } from "./components/SpaceSwitcher.tsx";
 import { NotificationBell } from "./components/NotificationBell.tsx";
 import { BriefPanel } from "./components/BriefPanel.tsx";
 import { FollowUpPanel } from "./components/FollowUpPanel.tsx";
+import { MinutesPanel } from "./components/MinutesPanel.tsx";
 import { InboxView } from "./views/InboxView.tsx";
 import { CalendarView } from "./views/CalendarView.tsx";
 import { ChatsView } from "./views/ChatsView.tsx";
@@ -216,7 +217,10 @@ export function App() {
               selectedId={selection.meetingId}
               onSelect={(id) => select({ meetingId: id })}
               renderDetailExtras={(meeting) => (
-                <FollowUpPanel key={meeting.id} meeting={meeting} onSent={(threadId) => openSource({ kind: "thread", id: threadId, label: "" })} />
+                <>
+                  <MinutesPanel key={`min-${meeting.id}`} meeting={meeting} />
+                  <FollowUpPanel key={meeting.id} meeting={meeting} onSent={(threadId) => openSource({ kind: "thread", id: threadId, label: "" })} />
+                </>
               )}
             />
           )}

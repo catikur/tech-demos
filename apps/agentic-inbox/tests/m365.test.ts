@@ -3,7 +3,7 @@ import type { Account } from "../shared/types.ts";
 import { openMemoryDb } from "../server/db/index.ts";
 import { bootstrap, WORK_SPACE_ID } from "../server/bootstrap.ts";
 import { accounts, chats, events, meetings, threads } from "../server/db/repo.ts";
-import { GraphError, M365Connector, localId, teamsJoinTenantId, type GraphLike } from "../server/connectors/m365.ts";
+import { GraphError, M365Connector, graphChatSendPath, localId, parseChannelExternalId, teamsJoinTenantId, type GraphLike } from "../server/connectors/m365.ts";
 
 /**
  * Recorded-shape Graph responses (trimmed to the fields the connector reads).
@@ -474,5 +474,50 @@ describe("M365 skips Graph delta shells that are not real mail", () => {
     };
     await new M365Connector(() => ghost).sync(account, {});
     expect(threads.list(WORK_SPACE_ID)).toHaveLength(0);
+  });
+
+  test("channel send path keeps the full 19:…@thread.tacv2 id (not split on colon)", () => {
+    const team = "948ca14e-91b8-4606-8338-54be746acf96";
+    const channel = "19:abcDEF@thread.tacv2";
+    const parsed = parseChannelExternalId(`channel:${team}:${channel}`);
+    expect(parsed).toEqual({ teamId: team, channelId: channel });
+    const path = graphChatSendPath(`channel:${team}:${channel}`);
+    expect(path).toContain(`/teams/${team}/channels/`);
+    expect(path).not.toContain("/channels/19/messages");
+    expect(path).toContain(encodeURIComponent(channel));
+    expect(path.endsWith("/messages")).toBe(true);
+  });
+
+  test("sendChatMessage posts to the encoded channel path", async () => {
+    const team = "948ca14e-91b8-4606-8338-54be746acf96";
+    const channel = "19:abcDEF@thread.tacv2";
+    chats.upsert({
+      id: "ch_live_butler",
+      externalId: `channel:${team}:${channel}`,
+      spaceId: WORK_SPACE_ID,
+      accountId: account.id,
+      kind: "channel",
+      title: "Yonetim › Butler",
+      members: [],
+      lastAt: Date.now(),
+      unreadCount: 0,
+    });
+    const posted: string[] = [];
+    const client: GraphLike = {
+      async request(url, init) {
+        posted.push(`${init?.method ?? "GET"} ${url}`);
+        return { id: "msg-posted" } as never;
+      },
+      async collect() {
+        return { items: [], deltaLink: null };
+      },
+    };
+    const result = await new M365Connector(() => client).sendChatMessage(account, {
+      chatId: "ch_live_butler",
+      body: "Butler · sabah brifingi",
+      replyToMessageId: null,
+    });
+    expect(result.externalId).toBe("msg-posted");
+    expect(posted).toEqual([`POST /teams/${team}/channels/${encodeURIComponent(channel)}/messages`]);
   });
 });

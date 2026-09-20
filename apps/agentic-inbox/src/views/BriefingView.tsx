@@ -54,6 +54,21 @@ export function BriefingView({
         <button className="btn btn-small" disabled={busy !== null} onClick={() => void generate()}>
           {busy === "gen" ? t("briefing.generating") : t("briefing.generateDrafts")}
         </button>
+        <button
+          className="btn btn-small"
+          disabled={busy !== null}
+          onClick={async () => {
+            setBusy("teams");
+            try {
+              await api.post(`/api/org/briefing/post?${spaceQuery(spaceId)}`);
+              briefing.reload();
+            } finally {
+              setBusy(null);
+            }
+          }}
+        >
+          {busy === "teams" ? t("org.posting") : t("org.postNow")}
+        </button>
       </div>
       {briefing.loading && !data && <p className="muted" style={{ padding: 16 }}>{t("common.loading")}</p>}
       {data && (

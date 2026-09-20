@@ -2,6 +2,7 @@ import type { Space } from "../shared/types.ts";
 import { env } from "./env.ts";
 import { demoAccounts } from "./connectors/demo.ts";
 import { accounts, settings, spaces, threads, wipeDerivedData } from "./db/repo.ts";
+import { ensureOrgDefaults } from "./features/org-config.ts";
 
 export const WORK_SPACE_ID = "space_work";
 export const PERSONAL_SPACE_ID = "space_personal";
@@ -40,6 +41,7 @@ export function bootstrap(opts?: { seedDemo?: boolean }): { seededDemo: boolean 
   for (const s of DEFAULT_SPACES) {
     if (!spaces.get(s.id)) spaces.upsert(s);
   }
+  ensureOrgDefaults();
   if (seedDemo) {
     const existing = accounts.all().filter((a) => a.provider === "demo");
     if (existing.length === 0) {

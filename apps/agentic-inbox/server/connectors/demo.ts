@@ -552,6 +552,16 @@ function workChats(now: number): SeedChat[] {
         { id: "cm-eng-3", from: PEOPLE.marcus, body: "Northwind escalation call is tomorrow 10:00 — Tomás and You please join", at: now - 2 * HOUR },
       ],
     },
+    {
+      id: "c-butler",
+      kind: "channel",
+      title: "Yonetim › Butler",
+      members: [ME_WORK, PEOPLE.marcus, PEOPLE.dana],
+      unreadCount: 0,
+      messages: [
+        { id: "cm-butler-1", from: PEOPLE.dana, body: "Butler sabah brifingi bu kanala düşecek.", at: now - 26 * HOUR },
+      ],
+    },
   ];
 }
 

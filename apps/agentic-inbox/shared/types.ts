@@ -68,7 +68,7 @@ export interface Person {
 export interface Chunk {
   id: string;
   spaceId: string;
-  sourceKind: "thread" | "chat" | "meeting";
+  sourceKind: "thread" | "chat" | "meeting" | "kb";
   sourceId: string;
   text: string;
   embedding: Float32Array | null;
@@ -229,7 +229,7 @@ export interface Topic {
   summary: string;
 }
 
-export type NoteKind = "brief" | "followup" | "manual";
+export type NoteKind = "brief" | "followup" | "manual" | "minutes";
 
 export interface Note {
   id: string;

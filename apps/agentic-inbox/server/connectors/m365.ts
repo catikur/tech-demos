@@ -565,16 +565,8 @@ export class M365Connector implements Connector {
     const chat = chats.get(input.chatId);
     if (!chat) throw new Error("Chat not found");
     const external = chatExternalId(input.chatId);
-    let path: string;
-    if (external.startsWith("channel:")) {
-      const [, teamId, channelId] = external.split(":");
-      const parentExternal = input.replyToMessageId ? chats.messageExternalId(input.replyToMessageId) : null;
-      path = parentExternal
-        ? `/teams/${teamId}/channels/${channelId}/messages/${parentExternal}/replies`
-        : `/teams/${teamId}/channels/${channelId}/messages`;
-    } else {
-      path = `/chats/${external}/messages`;
-    }
+    const parentExternal = input.replyToMessageId ? chats.messageExternalId(input.replyToMessageId) : null;
+    const path = graphChatSendPath(external, parentExternal);
     const res = await g.request<any>(path, { method: "POST", body: JSON.stringify({ body: { contentType: "text", content: input.body } }) });
     return { externalId: res?.id ?? null };
   }
@@ -596,6 +588,28 @@ function mapResponse(r: string | undefined): CalendarEvent["responseStatus"] {
     default:
       return "none";
   }
+}
+
+/** Local prefix `channel:{teamId}:{channelId}` — channel ids contain colons (`19:…@thread.tacv2`). */
+export function parseChannelExternalId(external: string): { teamId: string; channelId: string } | null {
+  if (!external.startsWith("channel:")) return null;
+  const rest = external.slice("channel:".length);
+  const splitAt = rest.indexOf(":");
+  if (splitAt <= 0 || splitAt === rest.length - 1) return null;
+  return { teamId: rest.slice(0, splitAt), channelId: rest.slice(splitAt + 1) };
+}
+
+export function graphChatSendPath(external: string, replyToExternalId?: string | null): string {
+  const channel = parseChannelExternalId(external);
+  if (channel) {
+    const team = encodeURIComponent(channel.teamId);
+    const ch = encodeURIComponent(channel.channelId);
+    if (replyToExternalId) {
+      return `/teams/${team}/channels/${ch}/messages/${encodeURIComponent(replyToExternalId)}/replies`;
+    }
+    return `/teams/${team}/channels/${ch}/messages`;
+  }
+  return `/chats/${encodeURIComponent(external)}/messages`;
 }
 
 function chatExternalId(chatId: string): string {

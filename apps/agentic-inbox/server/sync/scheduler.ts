@@ -5,6 +5,8 @@ import { broadcast } from "../api/events.ts";
 import { briefForEvent } from "../features/briefs.ts";
 import { produceDigest } from "../features/digests.ts";
 import { produceOvernightDrafts } from "../features/overnight-drafts.ts";
+import { postMorningBriefing } from "../features/briefing-teams.ts";
+import { syncSharePointVault } from "../features/vault.ts";
 import { computeRadar } from "../features/radar.ts";
 import { syncAll } from "./engine.ts";
 import { graphPushEnabled, renewExpiringSubscriptions } from "../webhooks/graph.ts";
@@ -49,6 +51,11 @@ export async function tick(now = Date.now()): Promise<void> {
     lastSyncAt = now;
     schedulerState.lastSyncAt = now;
     await syncAll().catch((err) => console.error("[scheduler] sync failed", err));
+    const vaultKey = `vault.sync.${dateKey(new Date(now))}`;
+    if (!settings.get(vaultKey)) {
+      settings.set(vaultKey, "1");
+      await syncSharePointVault().catch((err) => console.warn(`[scheduler] vault sync failed: ${err instanceof Error ? err.message : err}`));
+    }
   }
 
   for (const space of spaces.all()) {
@@ -85,6 +92,11 @@ export async function tick(now = Date.now()): Promise<void> {
     if (local.getHours() === space.digestHour && !settings.get(dailyKey)) {
       settings.set(dailyKey, "1");
       await produceDigest(space, "daily").catch((err) => console.warn(`[scheduler] daily digest failed: ${err instanceof Error ? err.message : err}`));
+      if (space.kind === "work") {
+        await postMorningBriefing(space.id, { now }).catch((err) =>
+          console.warn(`[scheduler] Teams briefing failed: ${err instanceof Error ? err.message : err}`),
+        );
+      }
       const weeklyKey = `digest.weekly.${space.id}.${dateKey(local)}`;
       if (local.getDay() === 1 && !settings.get(weeklyKey)) {
         settings.set(weeklyKey, "1");
