@@ -26,6 +26,8 @@ const HOST = process.env.HOST || "0.0.0.0";
 const DIST = join(import.meta.dir, "..", "dist");
 const SERVE_WEB = existsSync(join(DIST, "index.html"));
 
+let pendingProposal: AutoresearchProposal | null = null;
+
 function mime(path: string): string {
   if (path.endsWith(".html")) return "text/html; charset=utf-8";
   if (path.endsWith(".js")) return "text/javascript; charset=utf-8";
