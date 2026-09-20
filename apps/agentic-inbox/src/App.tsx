@@ -184,8 +184,10 @@ export function App() {
     );
   };
 
+  const hasDetail = Boolean(selection.threadId || selection.chatId || selection.eventId || selection.meetingId);
+
   return (
-    <div className={`app ${agentOpen ? "agent-open" : ""} ${moreOpen ? "more-open" : ""}`}>
+    <div className={`app ${agentOpen ? "agent-open" : ""} ${moreOpen ? "more-open" : ""} ${hasDetail ? "has-detail" : ""}`}>
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden>
