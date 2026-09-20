@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { base64Url, buildMime, extractBody, splitAddresses } from "../server/connectors/gmail.ts";
+import { base64Url, buildMime, extractBody, googleQuotaExceeded, splitAddresses } from "../server/connectors/gmail.ts";
 
 const b64 = (s: string) => Buffer.from(s).toString("base64").replace(/\+/g, "-").replace(/\//g, "_");
 
@@ -46,5 +46,10 @@ describe("gmail helpers", () => {
     const body = mime.split("\r\n\r\n")[1];
     expect(Buffer.from(body, "base64").toString("utf8")).toBe("Varım!");
     expect(base64Url("a+b/c")).not.toMatch(/[+/=]/);
+  });
+
+  test("googleQuotaExceeded matches Gmail query-cost 403s", () => {
+    expect(googleQuotaExceeded(`{"error":{"code":403,"message":"Quota exceeded for quota metric 'Total Query Cost'"}}`)).toBe(true);
+    expect(googleQuotaExceeded(`{"error":{"status":"PERMISSION_DENIED"}}`)).toBe(false);
   });
 });

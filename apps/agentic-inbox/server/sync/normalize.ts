@@ -78,3 +78,9 @@ function mergeConsecutive(lines: TranscriptLine[]): TranscriptLine[] {
 export function snippet(text: string, n = 140): string {
   return text.replace(/\s+/g, " ").trim().slice(0, n);
 }
+
+/** True for empty / whitespace-only strings, including NBSP and zero-width chars Graph sometimes sends. */
+export function isBlankText(value: string | null | undefined): boolean {
+  if (!value) return true;
+  return value.replace(/[\s\u00a0\u1680\u2000-\u200d\u2028\u2029\u202f\u205f\u3000\ufeff]+/g, "").length === 0;
+}

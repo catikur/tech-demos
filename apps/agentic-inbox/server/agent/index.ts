@@ -1,13 +1,31 @@
 import type { AgentContext, AgentEvent, LlmStatus } from "../../shared/types.ts";
-import { audit } from "../db/repo.ts";
+import { audit, chats, events, threads } from "../db/repo.ts";
 import { selectProvider } from "./llm.ts";
 import { runLlmAgent } from "./loop.ts";
 import { runMockAgent } from "./mock.ts";
-import { applyScopePolicy } from "./policy.ts";
+import { applyScopePolicy, inAccountScope } from "./policy.ts";
 
 export function llmStatus(): LlmStatus {
   const p = selectProvider();
   return p ? { provider: p.name, model: p.model, configured: true } : { provider: "mock", model: null, configured: false };
+}
+
+function pinToOwnedMailboxes(ctx: AgentContext): AgentContext {
+  if (ctx.accountIds == null) return ctx;
+  const next = { ...ctx };
+  if (next.selectedThreadId) {
+    const t = threads.get(next.selectedThreadId);
+    if (!t || !inAccountScope(next, t.accountId)) next.selectedThreadId = null;
+  }
+  if (next.selectedChatId) {
+    const c = chats.get(next.selectedChatId);
+    if (!c || !inAccountScope(next, c.accountId)) next.selectedChatId = null;
+  }
+  if (next.selectedEventId) {
+    const e = events.get(next.selectedEventId);
+    if (!e || !inAccountScope(next, e.accountId)) next.selectedEventId = null;
+  }
+  return next;
 }
 
 /**
@@ -17,8 +35,9 @@ export function llmStatus(): LlmStatus {
  * still answers.
  */
 export async function* runAgent(input: string, rawCtx: AgentContext): AsyncGenerator<AgentEvent> {
-  audit.log({ spaceId: rawCtx.spaceId, actor: "user", action: "agent.ask", detail: input });
-  const { ctx, note } = applyScopePolicy(input, rawCtx);
+  const owned = pinToOwnedMailboxes(rawCtx);
+  audit.log({ spaceId: owned.spaceId, actor: "user", action: "agent.ask", detail: input });
+  const { ctx, note } = applyScopePolicy(input, owned);
   if (note) yield { kind: "thought", text: note };
 
   const provider = selectProvider();

@@ -3,7 +3,7 @@ import type { Space, Thread, ThreadSummary } from "../../shared/types.ts";
 import { api, spaceQuery } from "../api/client.ts";
 import { useData } from "../state.ts";
 import { InboxList } from "../components/InboxList.tsx";
-import { ThreadView } from "../components/ThreadView.tsx";
+import { ThreadCrashGuard, ThreadView } from "../components/ThreadView.tsx";
 
 export function InboxView({
   spaceId,
@@ -40,8 +40,12 @@ export function InboxView({
     onSelect(id);
     const t = visible.find((x) => x.id === id);
     if (t?.unread) {
-      await api.post(`/api/threads/${id}/read`, {});
-      list.reload();
+      try {
+        await api.post(`/api/threads/${id}/read`, {});
+        list.reload();
+      } catch {
+        /* mark-read is best-effort; opening the thread still works */
+      }
     }
   };
 
@@ -58,16 +62,20 @@ export function InboxView({
         onSelect={select}
         loading={list.loading && !list.data}
       />
-      <ThreadView
-        thread={selected}
-        prefill={prefill && prefill.threadId === selectedId ? prefill.body : null}
-        onPrefillConsumed={onPrefillConsumed}
-        onSend={async (threadId, body) => {
-          await api.post(`/api/threads/${threadId}/reply`, { body });
-          thread.reload();
-          list.reload();
-        }}
-      />
+      <ThreadCrashGuard resetKey={selectedId}>
+        <ThreadView
+          thread={selected}
+          loading={!!selectedId && thread.loading && !selected}
+          error={selectedId ? thread.error : null}
+          prefill={prefill && prefill.threadId === selectedId ? prefill.body : null}
+          onPrefillConsumed={onPrefillConsumed}
+          onSend={async (threadId, body) => {
+            await api.post(`/api/threads/${threadId}/reply`, { body });
+            thread.reload();
+            list.reload();
+          }}
+        />
+      </ThreadCrashGuard>
     </div>
   );
 }

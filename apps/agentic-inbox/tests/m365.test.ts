@@ -441,3 +441,38 @@ describe("M365 connector (fixture-driven sync)", () => {
     expect(row?.joinUrl).toContain("cal-only");
   });
 });
+
+describe("M365 skips Graph delta shells that are not real mail", () => {
+  test("name-only sender + blank body + no subject is not stored", async () => {
+    openMemoryDb();
+    bootstrap();
+    for (const a of accounts.all()) accounts.remove(a.id);
+    accounts.insert(account, null);
+    const ghost: GraphLike = {
+      async request<T = any>() {
+        return { id: "u-me", mail: account.email, displayName: "You" } as T;
+      },
+      async collect<T = any>(url: string) {
+        if (String(url).includes("mailFolders/inbox")) {
+          return {
+            items: [
+              {
+                id: "ghost-1",
+                conversationId: "CONV-GHOST",
+                subject: "",
+                from: { emailAddress: { name: "Microsoft Exchange" } },
+                body: { contentType: "text", content: "\u00a0" },
+                receivedDateTime: "2026-09-14T08:00:00Z",
+                isRead: true,
+              },
+            ] as T[],
+            deltaLink: null,
+          };
+        }
+        return { items: [] as T[], deltaLink: null };
+      },
+    };
+    await new M365Connector(() => ghost).sync(account, {});
+    expect(threads.list(WORK_SPACE_ID)).toHaveLength(0);
+  });
+});

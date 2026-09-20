@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Account } from "../shared/types.ts";
+import { senderEmail, senderName } from "../shared/types.ts";
 import { openMemoryDb } from "../server/db/index.ts";
 import { bootstrap, PERSONAL_SPACE_ID, WORK_SPACE_ID } from "../server/bootstrap.ts";
 import { accounts, commitments, threads } from "../server/db/repo.ts";
 import { cookieHeader, makeSessionCookie } from "../server/auth/session.ts";
 import { routes } from "../server/api/routes.ts";
+import { runTool } from "../server/agent/tools.ts";
 
 const savedEnv = { ...process.env };
 function restoreEnv() {
@@ -37,6 +39,56 @@ async function json(path: string, account: Account) {
   return { status: res.status, body: await res.json() };
 }
 
+function seedAdaBob() {
+  const ada = user("acc_ada", "ada@conforcus.com");
+  const bob = user("acc_bob", "bob@conforcus.com");
+  accounts.insert(ada, null);
+  accounts.insert(bob, null);
+  threads.upsert({
+    id: "th_ada",
+    spaceId: WORK_SPACE_ID,
+    accountId: ada.id,
+    subject: "Ada secret",
+    category: "project",
+    labels: [],
+    unread: true,
+    lastAt: Date.now(),
+    participants: ["Ada <ada@conforcus.com>"],
+  });
+  threads.upsertMessage({
+    id: "msg_ada",
+    threadId: "th_ada",
+    from: "Ada <ada@conforcus.com>",
+    to: [],
+    cc: [],
+    body: "only ada",
+    at: Date.now(),
+    isMine: true,
+  });
+  threads.upsert({
+    id: "th_bob",
+    spaceId: WORK_SPACE_ID,
+    accountId: bob.id,
+    subject: "Bob secret",
+    category: "project",
+    labels: [],
+    unread: true,
+    lastAt: Date.now(),
+    participants: ["Bob <bob@conforcus.com>"],
+  });
+  threads.upsertMessage({
+    id: "msg_bob",
+    threadId: "th_bob",
+    from: "Bob <bob@conforcus.com>",
+    to: [],
+    cc: [],
+    body: "only bob",
+    at: Date.now(),
+    isMine: true,
+  });
+  return { ada, bob };
+}
+
 describe("multi-user data wall", () => {
   beforeEach(() => {
     openMemoryDb();
@@ -46,54 +98,7 @@ describe("multi-user data wall", () => {
   afterEach(() => restoreEnv());
 
   test("Ada does not see Bob's mail; both see Work commitments", async () => {
-    const ada = user("acc_ada", "ada@conforcus.com");
-    const bob = user("acc_bob", "bob@conforcus.com");
-    accounts.insert(ada, null);
-    accounts.insert(bob, null);
-
-    threads.upsert({
-      id: "th_ada",
-      spaceId: WORK_SPACE_ID,
-      accountId: ada.id,
-      subject: "Ada secret",
-      category: "project",
-      labels: [],
-      unread: true,
-      lastAt: Date.now(),
-      participants: ["Ada <ada@conforcus.com>"],
-    });
-    threads.upsertMessage({
-      id: "msg_ada",
-      threadId: "th_ada",
-      from: "Ada <ada@conforcus.com>",
-      to: [],
-      cc: [],
-      body: "only ada",
-      at: Date.now(),
-      isMine: true,
-    });
-    threads.upsert({
-      id: "th_bob",
-      spaceId: WORK_SPACE_ID,
-      accountId: bob.id,
-      subject: "Bob secret",
-      category: "project",
-      labels: [],
-      unread: true,
-      lastAt: Date.now(),
-      participants: ["Bob <bob@conforcus.com>"],
-    });
-    threads.upsertMessage({
-      id: "msg_bob",
-      threadId: "th_bob",
-      from: "Bob <bob@conforcus.com>",
-      to: [],
-      cc: [],
-      body: "only bob",
-      at: Date.now(),
-      isMine: true,
-    });
-
+    const { ada } = seedAdaBob();
     commitments.insertUnique({
       spaceId: WORK_SPACE_ID,
       direction: "owed_by_me",
@@ -134,5 +139,52 @@ describe("multi-user data wall", () => {
     const adaPersonal = await json("/api/commitments?space=space_personal", ada);
     const personalTexts = (adaPersonal.body as { text: string }[]).map((c) => c.text);
     expect(personalTexts).not.toContain("Bob personal dentist");
+  });
+
+  test("Ada cannot open or reply to Bob's thread", async () => {
+    const { ada } = seedAdaBob();
+    const cookie = cookieHeader(makeSessionCookie(ada, false));
+    const getReq = Object.assign(new Request("http://local/api/threads/th_bob", { headers: { Cookie: cookie } }), {
+      params: { id: "th_bob" },
+    });
+    const got = await (routes["/api/threads/:id"] as (req: Request) => Promise<Response>)(getReq);
+    expect(got.status).toBe(404);
+
+    const replyReq = Object.assign(
+      new Request("http://local/api/threads/th_bob/reply", {
+        method: "POST",
+        headers: { Cookie: cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ body: "hi from ada" }),
+      }),
+      { params: { id: "th_bob" } },
+    );
+    const reply = await (routes["/api/threads/:id/reply"] as { POST: (req: Request) => Promise<Response> }).POST(replyReq);
+    expect(reply.status).toBe(404);
+  });
+
+  test("agent tools do not list another user's mail", async () => {
+    seedAdaBob();
+    const result = await runTool("list_threads", { limit: 20 }, {
+      spaceId: WORK_SPACE_ID,
+      selectedThreadId: null,
+      selectedChatId: null,
+      selectedEventId: null,
+      accountIds: ["acc_ada"],
+    });
+    expect(result.output).toContain("Ada secret");
+    expect(result.output).not.toContain("Bob secret");
+  });
+
+  test("debug audit and scheduler HTTP endpoints are not registered", () => {
+    expect(routes["/api/audit" as keyof typeof routes]).toBeUndefined();
+    expect(routes["/api/scheduler" as keyof typeof routes]).toBeUndefined();
+  });
+});
+
+describe("address helpers", () => {
+  test("senderName / senderEmail tolerate null leftover Graph payloads", () => {
+    expect(senderName(null)).toBe("");
+    expect(senderEmail(undefined)).toBe("");
+    expect(senderName("Priya Raman <priya@northwindops.com>")).toBe("Priya Raman");
   });
 });

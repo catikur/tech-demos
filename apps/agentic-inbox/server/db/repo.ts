@@ -26,6 +26,7 @@ import type {
   SourceRef,
 } from "../../shared/types.ts";
 import { senderEmail, senderName } from "../../shared/types.ts";
+import { isBlankText } from "../sync/normalize.ts";
 import { getDb, json, newId } from "./index.ts";
 
 type Row = Record<string, any>;
@@ -275,7 +276,7 @@ function rowToMessage(raw: unknown): EmailMessage {
   return {
     id: r.id,
     threadId: r.thread_id,
-    from: r.from_addr,
+    from: r.from_addr ?? "",
     to: json.parse<string[]>(r.to_addrs, []),
     cc: json.parse<string[]>(r.cc_addrs, []),
     body: r.body,
@@ -320,7 +321,13 @@ export const threads = {
            (SELECT body FROM messages m WHERE m.thread_id = t.id ORDER BY at DESC LIMIT 1) AS snippet,
            (SELECT from_addr FROM messages m WHERE m.thread_id = t.id ORDER BY at DESC LIMIT 1) AS last_from,
            (SELECT COUNT(*) FROM messages m WHERE m.thread_id = t.id) AS message_count
-         FROM threads t WHERE ${where} ORDER BY t.last_at DESC LIMIT ?`,
+         FROM threads t WHERE ${where}
+           AND EXISTS (SELECT 1 FROM messages mx WHERE mx.thread_id = t.id)
+           AND NOT (
+             (TRIM(t.subject) = '' OR t.subject = '(no subject)')
+             AND TRIM(IFNULL((SELECT body FROM messages m WHERE m.thread_id = t.id ORDER BY at DESC LIMIT 1), '')) = ''
+           )
+         ORDER BY t.last_at DESC LIMIT ?`,
       )
       .all(...params) as Row[];
     return rows.map((r) => ({
@@ -367,20 +374,27 @@ export const threads = {
       );
   },
   upsertMessage(m: EmailMessage & { externalId?: string | null }): void {
+    const body = isBlankText(m.body) ? "" : m.body;
     getDb()
       .query(
         `INSERT INTO messages (id, thread_id, external_id, from_addr, to_addrs, cc_addrs, body, at, is_mine)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET body=excluded.body, at=excluded.at`,
+         ON CONFLICT(id) DO UPDATE SET
+           from_addr=CASE WHEN TRIM(IFNULL(excluded.from_addr, '')) = '' THEN messages.from_addr ELSE excluded.from_addr END,
+           to_addrs=excluded.to_addrs,
+           cc_addrs=excluded.cc_addrs,
+           body=CASE WHEN TRIM(excluded.body) = '' THEN messages.body ELSE excluded.body END,
+           at=excluded.at,
+           is_mine=excluded.is_mine`,
       )
       .run(
         m.id,
         m.threadId,
         m.externalId ?? null,
-        m.from,
+        m.from ?? "",
         json.stringify(m.to),
         json.stringify(m.cc),
-        m.body,
+        body,
         m.at,
         m.isMine ? 1 : 0,
       );
@@ -409,7 +423,34 @@ export const threads = {
   },
   deleteByExternalMessageId(accountId: string, externalId: string): void {
     const id = threads.messageIdByExternal(accountId, externalId);
-    if (id) getDb().query("DELETE FROM messages WHERE id = ?").run(id);
+    if (!id) return;
+    const row = getDb().query("SELECT thread_id FROM messages WHERE id = ?").get(id) as Row | null;
+    getDb().query("DELETE FROM messages WHERE id = ?").run(id);
+    if (row?.thread_id) threads.dropIfEmpty(row.thread_id);
+  },
+  dropIfEmpty(threadId: string): void {
+    const n = (getDb().query("SELECT COUNT(*) AS n FROM messages WHERE thread_id = ?").get(threadId) as Row | null)?.n ?? 0;
+    if (n > 0) return;
+    getDb().query("DELETE FROM threads WHERE id = ?").run(threadId);
+  },
+  /** Graph delta can leave message-less / blank-subject shells. Returns how many threads were removed. */
+  pruneEmpty(): number {
+    const db = getDb();
+    const rows = db
+      .query(
+        `SELECT t.id FROM threads t
+         WHERE NOT EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = t.id)
+            OR (
+              (TRIM(t.subject) = '' OR t.subject = '(no subject)')
+              AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = t.id AND TRIM(m.body) != '')
+            )`,
+      )
+      .all() as Row[];
+    for (const r of rows) {
+      db.query("DELETE FROM messages WHERE thread_id = ?").run(r.id);
+      db.query("DELETE FROM threads WHERE id = ?").run(r.id);
+    }
+    return rows.length;
   },
   messagesSince(spaceId: string | null, since: number, accountIds?: string[] | null): (EmailMessage & { subject: string; spaceId: string })[] {
     const s = scope(spaceId, "t.space_id");

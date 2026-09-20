@@ -38,8 +38,10 @@ export function InboxList({
         {loading && <li className="list-empty">{t("common.loading")}</li>}
         {!loading && threads.length === 0 && <li className="list-empty">{query ? t("inbox.emptyMatch") : t("inbox.empty")}</li>}
         {threads.map((thread) => {
-          const name = senderName(thread.lastFrom);
+          const name = senderName(thread.lastFrom) || t("inbox.unknownSender");
           const color = CATEGORY_COLORS[thread.category] ?? CATEGORY_COLORS.other;
+          const subject =
+            thread.subject.trim() && thread.subject !== "(no subject)" ? thread.subject : t("inbox.noSubject");
           return (
             <li key={thread.id}>
               <button
@@ -54,7 +56,7 @@ export function InboxList({
                     <span className="thread-sender">{name}</span>
                     <span className="thread-time">{ago(thread.lastAt)}</span>
                   </span>
-                  <span className="thread-subject">{thread.subject}</span>
+                  <span className="thread-subject">{subject}</span>
                   <span className="thread-snippet">{thread.snippet}</span>
                   <span className="thread-labels">
                     <span className="label" style={{ borderColor: `${color}66`, color }}>

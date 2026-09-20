@@ -13,12 +13,11 @@ import { parseDue } from "../features/text.ts";
 import { produceDigest } from "../features/digests.ts";
 import { buildMorningBriefing } from "../features/briefing.ts";
 import { produceOvernightDrafts } from "../features/overnight-drafts.ts";
-import { schedulerState, tick } from "../sync/scheduler.ts";
 import { digests } from "../db/repo.ts";
 import { sendNewMail } from "../services/messaging.ts";
 import { broadcast } from "./events.ts";
 import { badRequest, h, notFound, num, ok, query, readJson, spaceParam } from "./util.ts";
-import { ensureVisibleAccount, viewerEmail, visibleAccountIds } from "../auth/scope.ts";
+import { ensureVisibleAccount, contactEmails, viewerEmail, visibleAccountIds } from "../auth/scope.ts";
 
 type P<T extends string> = BunRequest<T>;
 
@@ -119,12 +118,14 @@ export const featureRoutes = {
     }),
     POST: h(async (req: P<"/api/meetings/:id/followup">) => {
       const m = meetings.get(req.params.id) ?? notFound("Meeting not found");
+      ensureVisibleAccount(req, m.accountId);
       return ok({ ...(await buildFollowUp(m, { refresh: true })), recipients: followUpRecipients(m) });
     }),
   },
   "/api/meetings/:id/followup/send": {
     POST: h(async (req: P<"/api/meetings/:id/followup/send">) => {
       const m = meetings.get(req.params.id) ?? notFound("Meeting not found");
+      ensureVisibleAccount(req, m.accountId);
       const body = await readJson<{ body: string; subject?: string; actor?: "user" | "agent" }>(req);
       if (!body.body?.trim()) badRequest("Empty body");
       const to = followUpRecipients(m);
@@ -195,7 +196,7 @@ export const featureRoutes = {
     }),
   },
 
-  /* ---------- digests & scheduler ---------- */
+  /* ---------- digests ---------- */
   "/api/digests": h((req) => ok(digests.list(spaceParam(req)))),
   "/api/digests/run": {
     POST: h(async (req) => {
@@ -208,26 +209,30 @@ export const featureRoutes = {
       return ok(out);
     }),
   },
-  "/api/scheduler": {
-    GET: h(() => ok(schedulerState)),
-    POST: h(async () => {
-      await tick();
-      return ok(schedulerState);
-    }),
-  },
 
   /* ---------- radar ---------- */
   "/api/radar": h((req) => ok(computeRadar(spaceParam(req), visibleAccountIds(req)))),
 
   /* ---------- people ---------- */
   "/api/people/by-email": h((req) => {
-    const email = query(req).get("email") ?? badRequest("email required");
-    const p = people.byEmail(spaceParam(req), email);
+    const email = (query(req).get("email") ?? badRequest("email required")).toLowerCase();
+    const spaceId = spaceParam(req);
+    const allowed = contactEmails(spaceId, visibleAccountIds(req));
+    if (allowed && !allowed.has(email)) return ok(null);
+    const p = people.byEmail(spaceId, email);
     return ok(p ? personProfile(p) : null);
   }),
   "/api/people/:id": {
-    GET: h((req: P<"/api/people/:id">) => ok(personProfile(people.get(req.params.id) ?? notFound("Person not found")))),
+    GET: h((req: P<"/api/people/:id">) => {
+      const p = people.get(req.params.id) ?? notFound("Person not found");
+      const allowed = contactEmails(p.spaceId, visibleAccountIds(req));
+      if (allowed && !allowed.has(p.email.toLowerCase())) notFound("Person not found");
+      return ok(personProfile(p));
+    }),
     PATCH: h(async (req: P<"/api/people/:id">) => {
+      const current = people.get(req.params.id) ?? notFound("Person not found");
+      const allowed = contactEmails(current.spaceId, visibleAccountIds(req));
+      if (allowed && !allowed.has(current.email.toLowerCase())) notFound("Person not found");
       const patch = await readJson<{ vip?: boolean; notes?: string; name?: string }>(req);
       people.update(req.params.id, patch);
       broadcast({ type: "data", entity: "people", spaceId: null });

@@ -4,7 +4,7 @@ import { senderName } from "../../shared/types.ts";
 import { accounts, chats, events, spaces, threads } from "../db/repo.ts";
 import { hybridSearch } from "../features/embed.ts";
 import { templateDraft } from "./drafts.ts";
-import { inScope, outOfScopeMessage } from "./policy.ts";
+import { inScope, inAccountScope, outOfScopeMessage } from "./policy.ts";
 
 /**
  * The agent's tool belt. Every tool is scoped by `ctx.spaceId`; when it is
@@ -96,7 +96,7 @@ registerTool({
     limit: z.number().int().min(1).max(50).optional(),
   }),
   async run(input, ctx) {
-    let list = threads.list(ctx.spaceId, { limit: input.limit ?? 20 });
+    let list = threads.list(ctx.spaceId, { limit: input.limit ?? 20, accountIds: ctx.accountIds });
     if (input.unreadOnly) list = list.filter((t) => t.unread);
     return {
       output: list.length
@@ -112,13 +112,13 @@ registerTool({
   schema: z.object({ query: z.string().min(1) }),
   async run(input, ctx) {
     // Exact (LIKE) matches first, newest first; semantic-only hits follow by score.
-    const like = threads.list(ctx.spaceId, { query: input.query, limit: 15 });
+    const like = threads.list(ctx.spaceId, { query: input.query, limit: 15, accountIds: ctx.accountIds });
     const hybrid = await hybridSearch(ctx.spaceId, input.query, { sourceKind: "thread", limit: 15 });
     const byId = new Map(like.map((t) => [t.id, t]));
     for (const hit of hybrid) {
       if (byId.has(hit.sourceId) || byId.size >= 15) continue;
       const t = threads.get(hit.sourceId);
-      if (!t || (ctx.spaceId && t.spaceId !== ctx.spaceId)) continue;
+      if (!t || (ctx.spaceId && t.spaceId !== ctx.spaceId) || !inAccountScope(ctx, t.accountId)) continue;
       const last = t.messages.at(-1);
       byId.set(t.id, {
         id: t.id,
@@ -150,7 +150,7 @@ registerTool({
   schema: z.object({ threadId: z.string() }),
   async run(input, ctx) {
     const t = threads.get(input.threadId);
-    if (!t) return { output: `Thread ${input.threadId} not found.` };
+    if (!t || !inAccountScope(ctx, t.accountId)) return { output: `Thread ${input.threadId} not found.` };
     if (!inScope(ctx, t.spaceId)) return { output: outOfScopeMessage(ctx) };
     const body = t.messages
       .map((m) => `From: ${m.from}\nAt: ${when(m.at)}\n${m.body}`)
@@ -169,7 +169,7 @@ registerTool({
   }),
   async run(input, ctx) {
     const t = threads.get(input.threadId);
-    if (!t) return { output: `Thread ${input.threadId} not found.` };
+    if (!t || !inAccountScope(ctx, t.accountId)) return { output: `Thread ${input.threadId} not found.` };
     if (!inScope(ctx, t.spaceId)) return { output: outOfScopeMessage(ctx) };
     const account = accounts.get(t.accountId);
     const space = spaces.get(t.spaceId);
@@ -193,7 +193,7 @@ registerTool({
     const now = Date.now();
     const from = input.fromMs ?? (input.includePast ? now - 7 * 86_400_000 : now - 3_600_000);
     const to = input.toMs ?? now + 7 * 86_400_000;
-    const list = events.list(ctx.spaceId, from, to);
+    const list = events.list(ctx.spaceId, from, to, ctx.accountIds);
     return {
       output: list.length
         ? list
@@ -212,7 +212,7 @@ registerTool({
   description: "List Teams chats and channels in the active space with unread counts.",
   schema: z.object({}),
   async run(_input, ctx) {
-    const list = chats.list(ctx.spaceId);
+    const list = chats.list(ctx.spaceId, undefined, ctx.accountIds);
     return {
       output: list.length
         ? list
@@ -228,13 +228,13 @@ registerTool({
   description: "Search Teams chat and channel messages in the active space (keyword + semantic).",
   schema: z.object({ query: z.string().min(1) }),
   async run(input, ctx) {
-    const list = chats.list(ctx.spaceId, input.query);
+    const list = chats.list(ctx.spaceId, input.query, ctx.accountIds);
     const hybrid = await hybridSearch(ctx.spaceId, input.query, { sourceKind: "chat", limit: 15 });
     const byId = new Map(list.map((c) => [c.id, c]));
     for (const hit of hybrid) {
       if (byId.has(hit.sourceId)) continue;
       const c = chats.get(hit.sourceId);
-      if (c && (!ctx.spaceId || c.spaceId === ctx.spaceId)) byId.set(c.id, c);
+      if (c && (!ctx.spaceId || c.spaceId === ctx.spaceId) && inAccountScope(ctx, c.accountId)) byId.set(c.id, c);
     }
     if (byId.size === 0) return { output: `No chats match "${input.query}".` };
     const q = input.query.toLowerCase();
@@ -256,7 +256,7 @@ registerTool({
   schema: z.object({ chatId: z.string(), limit: z.number().int().min(1).max(100).optional() }),
   async run(input, ctx) {
     const c = chats.get(input.chatId);
-    if (!c) return { output: `Chat ${input.chatId} not found.` };
+    if (!c || !inAccountScope(ctx, c.accountId)) return { output: `Chat ${input.chatId} not found.` };
     if (!inScope(ctx, c.spaceId)) return { output: outOfScopeMessage(ctx) };
     const msgs = chats.messages(c.id).slice(-(input.limit ?? 30));
     return {
@@ -273,7 +273,7 @@ registerTool({
   schema: z.object({ chatId: z.string(), body: z.string().min(1) }),
   async run(input, ctx) {
     const c = chats.get(input.chatId);
-    if (!c) return { output: `Chat ${input.chatId} not found.` };
+    if (!c || !inAccountScope(ctx, c.accountId)) return { output: `Chat ${input.chatId} not found.` };
     if (!inScope(ctx, c.spaceId)) return { output: outOfScopeMessage(ctx) };
     return {
       output: `Chat message drafted for "${c.title}". Awaiting user confirmation.`,
