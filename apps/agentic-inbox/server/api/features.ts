@@ -15,7 +15,7 @@ import { buildMorningBriefing } from "../features/briefing.ts";
 import { postMorningBriefing } from "../features/briefing-teams.ts";
 import { orgSettingsView, patchOrgConfig, savePlaud } from "../features/org-config.ts";
 import { syncSharePointVault } from "../features/vault.ts";
-import { probePlaud } from "../features/plaud.ts";
+import { probePlaud, transcribeMeetingRecording } from "../features/plaud.ts";
 import { buildMeetingMinutes } from "../features/minutes.ts";
 import { produceOvernightDrafts } from "../features/overnight-drafts.ts";
 import { digests } from "../db/repo.ts";
@@ -207,6 +207,16 @@ export const featureRoutes = {
   },
   "/api/org/plaud/probe": {
     POST: h(async () => ok(await probePlaud())),
+  },
+  "/api/meetings/:id/plaud": {
+    POST: h(async (req: P<"/api/meetings/:id/plaud">) => {
+      const m = meetings.get(req.params.id) ?? notFound("Meeting not found");
+      ensureVisibleAccount(req, m.accountId);
+      const result = await transcribeMeetingRecording(m.id);
+      if (!result.ok) badRequest(result.message);
+      broadcast({ type: "data", entity: "meetings", spaceId: m.spaceId });
+      return ok(result);
+    }),
   },
 
   "/api/meetings/:id/minutes": {

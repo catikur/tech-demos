@@ -23,6 +23,7 @@ interface OrgView {
   vaultError: string | null;
   plaud: {
     configured: boolean;
+    canTranscribe: boolean;
     clientIdMasked: string | null;
     hasSecret: boolean;
     hasApiKey: boolean;
@@ -201,11 +202,21 @@ export function OrgSettings({ onChanged }: { onChanged: () => void }) {
 
       <h3>{t("org.plaud")}</h3>
       <p className="muted small">{t("org.plaudHint")}</p>
+      <ul className="muted small org-plaud-points">
+        <li>{t("org.plaudCan1")}</li>
+        <li>{t("org.plaudCan2")}</li>
+        <li>{t("org.plaudCan3")}</li>
+      </ul>
       <p className="small" style={{ margin: "0 0 8px" }}>
-        {data.plaud.configured ? (
+        {data.plaud.canTranscribe ? (
           <span className="pill pill-ok">
-            {t("org.plaudSaved")}
+            {t("org.plaudReady")}
             {data.plaud.clientIdMasked ? ` · ${data.plaud.clientIdMasked}` : ""}
+          </span>
+        ) : data.plaud.configured ? (
+          <span className="pill pill-warn">
+            {t("org.plaudPartial")}
+            {data.plaud.hasSecret ? ` · ${t("org.plaudHasSecret")}` : ""}
             {data.plaud.hasApiKey ? ` · ${t("org.plaudHasKey")}` : ""}
           </span>
         ) : (

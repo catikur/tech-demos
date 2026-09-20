@@ -73,6 +73,37 @@ export function BriefingView({
       {briefing.loading && !data && <p className="muted" style={{ padding: 16 }}>{t("common.loading")}</p>}
       {data && (
         <div className="briefing-grid">
+          <section className="card briefing-lead">
+            <div className="card-top">
+              <strong>{t("briefing.doNow")}</strong>
+            </div>
+            <p className="briefing-summary">
+              {t("briefing.summaryLine", {
+                events: data.events.length,
+                actions: data.dueCommitments.filter((c) => c.direction === "owed_by_me").length + data.waitingOnMe.length,
+                unread: data.unread.length,
+                drafts: data.drafts.length,
+              })}
+            </p>
+            {data.waitingOnMe.slice(0, 5).map((r) => (
+              <button key={r.id} className="briefing-item" onClick={() => onOpenSource(r.source)}>
+                <span>{r.source.label}</span>
+                <span className="muted small">{senderName(r.counterpart)} · {r.excerpt}</span>
+              </button>
+            ))}
+            {data.dueCommitments
+              .filter((c) => c.direction === "owed_by_me")
+              .slice(0, 5)
+              .map((c) => (
+                <div key={c.id} className="briefing-item is-static">
+                  <span>{c.text}</span>
+                  <span className="muted small">{c.counterpartName ?? senderName(c.counterpart)}</span>
+                </div>
+              ))}
+            {data.waitingOnMe.length === 0 && data.dueCommitments.every((c) => c.direction !== "owed_by_me") && (
+              <p className="muted small">{t("briefing.noActions")}</p>
+            )}
+          </section>
           <section className="card">
             <div className="card-top">
               <strong>{t("briefing.today")}</strong>

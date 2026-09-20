@@ -5,6 +5,7 @@ import { tryComplete } from "../agent/llm.ts";
 import { hybridSearch } from "./embed.ts";
 import { BUILTIN_TEMPLATE_PATH, listedTemplates, readOrgConfig } from "./org-config.ts";
 import { templateByPath } from "./vault.ts";
+import { localRecordingPath, transcribeMeetingRecording } from "./plaud.ts";
 
 export function fillPlaceholders(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key: string) => vars[key] ?? "");
@@ -29,7 +30,11 @@ export async function buildMeetingMinutes(
   const templates = listedTemplates();
   const wanted = opts.templatePath || (cfg.templateFolder && templates.find((t) => t.path.startsWith(cfg.templateFolder) && t.path !== BUILTIN_TEMPLATE_PATH)?.path) || BUILTIN_TEMPLATE_PATH;
   const tpl = templateByPath(wanted) ?? templates[0];
-  const transcript = meetings.transcript(meeting.id);
+  let transcript = meetings.transcript(meeting.id);
+  if (!transcript?.lines.length && (await Bun.file(localRecordingPath(meeting.id)).exists())) {
+    const pulled = await transcribeMeetingRecording(meeting.id);
+    if (pulled.ok && pulled.lines.length) transcript = { meetingId: meeting.id, lines: pulled.lines };
+  }
   const lines = transcript?.lines ?? [];
   const rawTranscript = transcriptText(lines);
   const kbHits = await hybridSearch(meeting.spaceId, meeting.title, { sourceKind: "kb", limit: 6 });

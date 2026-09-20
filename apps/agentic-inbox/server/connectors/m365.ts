@@ -567,7 +567,11 @@ export class M365Connector implements Connector {
     const external = chatExternalId(input.chatId);
     const parentExternal = input.replyToMessageId ? chats.messageExternalId(input.replyToMessageId) : null;
     const path = graphChatSendPath(external, parentExternal);
-    const res = await g.request<any>(path, { method: "POST", body: JSON.stringify({ body: { contentType: "text", content: input.body } }) });
+    const contentType = input.contentType === "html" ? "html" : "text";
+    const res = await g.request<any>(path, {
+      method: "POST",
+      body: JSON.stringify({ body: { contentType, content: input.body } }),
+    });
     return { externalId: res?.id ?? null };
   }
 }

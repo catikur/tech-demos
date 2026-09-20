@@ -133,7 +133,8 @@ describe("org assistant", () => {
     patchOrgConfig({ briefChannelTitle: "Yonetim › Butler" });
     const result = await postMorningBriefing(WORK_SPACE_ID, { force: true });
     expect(result.posted).toBe(true);
-    expect(result.preview).toContain("sabah brifingi");
+    expect(result.preview).toContain("Butler ·");
+    expect(result.preview).toContain("Özet:");
     const msgs = chats.messages("ch_butler");
     expect(msgs.at(-1)?.body).toContain("Butler");
     const again = await postMorningBriefing(WORK_SPACE_ID);
@@ -141,12 +142,14 @@ describe("org assistant", () => {
     expect(again.skipped).toMatch(/already posted/i);
   });
 
-  test("formatTeamsBriefing lists calendar and unread counts", () => {
+  test("formatTeamsBriefing leads with a summary and actions, not an unread dump", () => {
     const brief = buildMorningBriefing(WORK_SPACE_ID, { now: Date.now(), ownerEmail: "you@lumenlabs.io" });
     const text = formatTeamsBriefing(brief, "Yonetim › Butler");
-    expect(text).toContain("Takvim");
-    expect(text).toContain("Okunmamış");
-    expect(text).toContain("Yonetim › Butler");
+    expect(text).toContain("Özet:");
+    expect(text).toContain("Butler ·");
+    expect(text).not.toContain("Okunmamış (");
+    expect(text).not.toContain("Kanal:");
+    expect(text.indexOf("Özet:")).toBeLessThan(text.indexOf("Bugün") === -1 ? text.length : text.indexOf("Bugün"));
   });
 
   test("indexes vault markdown (wikilinks) and search_vault finds it", async () => {

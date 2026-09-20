@@ -99,6 +99,7 @@ export async function sendChat(
   body: string,
   actor: "user" | "agent",
   replyToId?: string | null,
+  opts?: { contentType?: "text" | "html"; providerBody?: string },
 ): Promise<ChatMessage> {
   const chat = chats.get(chatId);
   if (!chat) throw new Error("Chat not found");
@@ -106,7 +107,12 @@ export async function sendChat(
   if (!account) throw new Error("Account not found");
   const connector = connectorFor(account);
   if (!connector.sendChatMessage) throw new Error(`${account.provider} cannot send chat messages`);
-  const result = await connector.sendChatMessage(account, { chatId, body, replyToMessageId: replyToId ?? null });
+  const result = await connector.sendChatMessage(account, {
+    chatId,
+    body: opts?.providerBody ?? body,
+    replyToMessageId: replyToId ?? null,
+    contentType: opts?.contentType ?? "text",
+  });
   const message: ChatMessage & { externalId: string | null } = {
     id: newId("cm"),
     externalId: result.externalId,
