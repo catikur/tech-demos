@@ -82,9 +82,12 @@ export function SettingsPanel({
         <Field label="Base URL">
           <input
             value={form.openrouterBaseUrl}
-            onChange={(e) => set("openrouterBaseUrl", e.target.value)}
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs"
+            readOnly
+            className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs text-zinc-500"
           />
+          <p className="mt-1 text-[10px] text-zinc-600">
+            OpenRouter adresi kilitli — rastgele URL anahtarı dışarı sızdırır.
+          </p>
         </Field>
 
         <Field label="Model">

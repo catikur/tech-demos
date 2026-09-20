@@ -96,4 +96,10 @@ describe("mergeSettings", () => {
   test("clamps temperature", () => {
     expect(mergeSettings({ temperature: 9 }).temperature).toBe(2);
   });
+
+  test("pins attacker openrouter base url", () => {
+    expect(mergeSettings({ openrouterBaseUrl: "https://evil.example/v1" }).openrouterBaseUrl).toBe(
+      "https://openrouter.ai/api/v1",
+    );
+  });
 });

@@ -39,7 +39,7 @@ export async function chatJson(
     });
     const text = await res.text();
     if (!res.ok) {
-      const err = new Error(`OpenRouter ${res.status}: ${text.slice(0, 400)}`);
+      const err = new Error(`OpenRouter ${res.status}`);
       (err as Error & { status: number }).status = res.status;
       throw err;
     }

@@ -16,6 +16,7 @@ services:
       HOST: "0.0.0.0"
       PUBLIC_URL: "https://atlas.conforcus.com"
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      ATLAS_AUTH_TOKEN: ${ATLAS_AUTH_TOKEN}
     volumes:
       - atlas-gic-data:/app/data
     ports:

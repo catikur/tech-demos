@@ -1,5 +1,6 @@
 import { croCapForRegime, regimeFromVix } from "../src/shared/engine";
 import type { Briefing, Headline, Settings } from "../src/shared/types";
+import { sanitizeTicker } from "./security";
 
 const UA = "Mozilla/5.0 (compatible; atlas-gic-paper-desk/0.2; +https://github.com/catikur/tech-demos)";
 
@@ -43,7 +44,9 @@ export async function fetchQuote(ticker: string): Promise<{
   dayLow: number;
   currency: string;
 }> {
-  const symbol = yahooSymbol(ticker);
+  const clean = sanitizeTicker(ticker);
+  if (!clean) throw new Error("Invalid ticker");
+  const symbol = yahooSymbol(clean);
   const meta = await yahooChart(symbol);
   const price = Number(meta.regularMarketPrice);
   if (!Number.isFinite(price) || price <= 0) throw new Error(`No last price for ${symbol}`);
@@ -60,10 +63,12 @@ export async function fetchQuote(ticker: string): Promise<{
 }
 
 export async function fetchBriefing(ticker: string, settings: Settings): Promise<Briefing> {
+  const clean = sanitizeTicker(ticker);
+  if (!clean) throw new Error("Invalid ticker");
   const [quote, vixMeta, headlines] = await Promise.all([
-    fetchQuote(ticker),
+    fetchQuote(clean),
     yahooChart("^VIX"),
-    yahooSearch(ticker),
+    yahooSearch(clean),
   ]);
   const vix = Number(vixMeta.regularMarketPrice);
   const vixChangePct = Number(vixMeta.regularMarketChangePercent ?? 0);

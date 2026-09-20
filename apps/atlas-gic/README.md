@@ -16,11 +16,13 @@ Source bookmark: [x.com/tom_doerr/status/2048618137830969438](https://x.com/tom_
 
 No mock takes. No API key → the desk refuses to debate.
 
+Production (`NODE_ENV=production`) **requires** `ATLAS_AUTH_TOKEN`. Without a session cookie (or `Authorization: Bearer`), `/api/*` other than health/login/logout returns 401. The OpenRouter key never leaves the server; OpenRouter base URL is pinned to `openrouter.ai`.
+
 ## Run
 
 ```bash
 cd apps/atlas-gic
-cp .env.example .env   # set OPENROUTER_API_KEY, or paste it in Ayarlar
+cp .env.example .env   # set OPENROUTER_API_KEY; production also needs ATLAS_AUTH_TOKEN
 bun install
 bun run dev
 ```

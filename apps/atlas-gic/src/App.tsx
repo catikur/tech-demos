@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AutoresearchDrawer, type Resolution } from "./AutoresearchDrawer";
-import { api, readSse } from "./api";
+import { api, readSse, ApiError } from "./api";
 import {
   AgentCard,
   CommitLog,
@@ -85,9 +85,13 @@ export default function App() {
   const [proposal, setProposal] = useState<AutoresearchProposal | null>(null);
   const [resolution, setResolution] = useState<Resolution | null>(null);
   const [booked, setBooked] = useState(false);
+  const [needsLogin, setNeedsLogin] = useState<boolean | null>(null);
+  const [password, setPassword] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
 
   const loadState = useCallback(async () => {
     const s = await api<StateResp>("/api/state");
+    setNeedsLogin(false);
     setSettings(s.settings);
     setKeyConfigured(s.keyConfigured);
     setKeyMasked(s.keyMasked);
@@ -129,8 +133,36 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    loadState().catch((e) => setError(e.message));
+    loadState().catch((e) => {
+      if (e instanceof ApiError && e.status === 401) {
+        setNeedsLogin(true);
+        return;
+      }
+      setNeedsLogin(false);
+      setError(e instanceof Error ? e.message : String(e));
+    });
   }, [loadState]);
+
+  async function login(e: FormEvent) {
+    e.preventDefault();
+    setLoginBusy(true);
+    setError(null);
+    try {
+      await api("/api/login", { method: "POST", body: JSON.stringify({ password }) });
+      setPassword("");
+      await loadState();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
+  async function logout() {
+    await api("/api/logout", { method: "POST" }).catch(() => undefined);
+    setNeedsLogin(true);
+    setPassword("");
+  }
 
   async function loadBriefing(symbol = ticker) {
     setError(null);
@@ -276,6 +308,48 @@ export default function App() {
   const takeOf = (id: string) => takes.find((t) => t.agentId === id);
   const flaggedId = proposal && resolution === null ? proposal.agentId : null;
 
+  if (needsLogin !== false) {
+    if (needsLogin === null) {
+      return <div className="min-h-screen bg-zinc-950" />;
+    }
+    return (
+      <div className="mx-auto flex min-h-screen max-w-md items-center px-4">
+        <form
+          onSubmit={login}
+          className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur"
+        >
+          <div className="mb-4 flex items-center gap-2">
+            <span className="text-2xl">🏛️</span>
+            <div>
+              <div className="font-mono text-sm font-black tracking-widest text-zinc-100">
+                ATLAS<span className="text-sky-400">-GIC</span>
+              </div>
+              <div className="text-[10px] text-zinc-500">kâğıt araştırma masası · giriş gerekli</div>
+            </div>
+          </div>
+          <label className="block">
+            <div className="mb-1 font-mono text-[10px] tracking-widest text-zinc-500">KAPI ŞİFRESİ</div>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm"
+            />
+          </label>
+          {error && <p className="mt-3 text-xs text-rose-400">{error}</p>}
+          <button
+            type="submit"
+            disabled={loginBusy || !password}
+            className="mt-4 w-full rounded-xl border border-sky-500/50 bg-sky-500/15 px-4 py-2 font-mono text-xs font-bold text-sky-300 disabled:opacity-40"
+          >
+            {loginBusy ? "…" : "Giriş"}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
       <header className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 backdrop-blur">
@@ -295,13 +369,19 @@ export default function App() {
             <span
               className={`font-mono text-[10px] ${keyConfigured ? "text-emerald-400" : "text-rose-400"}`}
             >
-              {keyConfigured ? `OpenRouter ${keyMasked}` : "API key yok"}
+              {keyConfigured ? "OpenRouter tanımlı" : "API key yok"}
             </span>
             <button
               onClick={() => setSettingsOpen(true)}
               className="rounded-lg border border-zinc-700 px-3 py-1.5 font-mono text-[10px] text-zinc-300 hover:bg-zinc-800"
             >
               Ayarlar
+            </button>
+            <button
+              onClick={() => void logout()}
+              className="rounded-lg border border-zinc-700 px-3 py-1.5 font-mono text-[10px] text-zinc-500 hover:bg-zinc-800"
+            >
+              Çıkış
             </button>
           </div>
         </div>

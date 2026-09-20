@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join, normalize } from "node:path";
+import { join } from "node:path";
 import { LAYER_ORDER } from "../src/shared/agents";
 import { layerMap, synthesize } from "../src/shared/engine";
 import type { AgentTake, AutoresearchProposal, CroResult } from "../src/shared/types";
@@ -9,7 +9,6 @@ import {
   listAgents,
   listCommits,
   latestDebate,
-  maskKey,
   resetBook,
   resolveApiKey,
   saveSettings,
@@ -20,13 +19,34 @@ import { fetchBriefing } from "./market";
 import { listModels } from "./openrouter";
 import { bookDebate, closePos, snapshotBook } from "./paper";
 import { markSession, proposeAutoresearch, resolveAutoresearch } from "./scoring";
+import {
+  clientIp,
+  isAuthed,
+  maskKeyPublic,
+  publicErrorMessage,
+  rateLimit,
+  readJsonLimit,
+  safeStaticPath,
+  sanitizeTicker,
+  securityHeaders,
+  sessionClearCookie,
+  sessionSetCookie,
+  timingSafeEqual,
+} from "./security";
 
 const PORT = Number(process.env.PORT || process.env.ATLAS_API_PORT || 5200);
 const HOST = process.env.HOST || "0.0.0.0";
 const DIST = join(import.meta.dir, "..", "dist");
 const SERVE_WEB = existsSync(join(DIST, "index.html"));
+const AUTH_TOKEN = process.env.ATLAS_AUTH_TOKEN?.trim() || null;
+
+if (process.env.NODE_ENV === "production" && !AUTH_TOKEN) {
+  console.error("ATLAS_AUTH_TOKEN is required in production");
+  process.exit(1);
+}
 
 let pendingProposal: AutoresearchProposal | null = null;
+let debateBusy = false;
 
 function mime(path: string): string {
   if (path.endsWith(".html")) return "text/html; charset=utf-8";
@@ -41,26 +61,28 @@ function mime(path: string): string {
   return "application/octet-stream";
 }
 
-async function serveStatic(pathname: string): Promise<Response | null> {
-  if (!SERVE_WEB) return null;
-  const rel = pathname === "/" ? "/index.html" : pathname;
-  const filePath = normalize(join(DIST, decodeURIComponent(rel)));
-  if (!filePath.startsWith(DIST)) return new Response("Forbidden", { status: 403 });
-  const file = Bun.file(filePath);
-  if (await file.exists()) {
-    return new Response(file, { headers: { "Content-Type": mime(filePath) } });
-  }
-  const index = Bun.file(join(DIST, "index.html"));
-  return new Response(index, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+function headers(extra?: Record<string, string>, json = false) {
+  return { ...securityHeaders(json), ...extra };
 }
 
-function json(data: unknown, status = 200) {
+async function serveStatic(pathname: string): Promise<Response | null> {
+  if (!SERVE_WEB) return null;
+  const filePath = safeStaticPath(DIST, pathname);
+  if (!filePath) return new Response("Forbidden", { status: 403, headers: headers() });
+  const file = Bun.file(filePath);
+  if (await file.exists()) {
+    return new Response(file, { headers: headers({ "Content-Type": mime(filePath) }) });
+  }
+  const indexPath = safeStaticPath(DIST, "/");
+  if (!indexPath) return new Response("Forbidden", { status: 403, headers: headers() });
+  const index = Bun.file(indexPath);
+  return new Response(index, { headers: headers({ "Content-Type": "text/html; charset=utf-8" }) });
+}
+
+function json(data: unknown, status = 200, extra?: Record<string, string>) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-    },
+    headers: headers(extra, true),
   });
 }
 
@@ -70,8 +92,21 @@ function fail(message: string, status = 400) {
 
 async function readBody(req: Request): Promise<Record<string, unknown>> {
   const text = await req.text();
-  if (!text) return {};
-  return JSON.parse(text) as Record<string, unknown>;
+  return readJsonLimit(text);
+}
+
+function cookieSecure(req: Request): boolean {
+  const pub = process.env.PUBLIC_URL || "";
+  if (pub.startsWith("https:")) return true;
+  return req.headers.get("x-forwarded-proto") === "https";
+}
+
+function gate(req: Request, pathname: string): Response | null {
+  if (!AUTH_TOKEN) return null;
+  if (pathname === "/api/health" || pathname === "/api/login" || pathname === "/api/logout") return null;
+  if (!pathname.startsWith("/api/")) return null;
+  if (isAuthed(req, AUTH_TOKEN)) return null;
+  return fail("Unauthorized", 401);
 }
 
 function sse(send: (emit: (event: string, data: unknown) => void) => Promise<void>) {
@@ -84,19 +119,18 @@ function sse(send: (emit: (event: string, data: unknown) => void) => Promise<voi
       try {
         await send(emit);
       } catch (err) {
-        emit("error", { message: err instanceof Error ? err.message : String(err) });
+        emit("error", { message: publicErrorMessage(err) });
       } finally {
         controller.close();
       }
     },
   });
   return new Response(stream, {
-    headers: {
+    headers: headers({
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
-      "Access-Control-Allow-Origin": "*",
-    },
+    }),
   });
 }
 
@@ -106,7 +140,7 @@ async function statePayload() {
   return {
     settings,
     keyConfigured: Boolean(resolveApiKey()),
-    keyMasked: maskKey(resolveApiKey()),
+    keyMasked: maskKeyPublic(resolveApiKey()),
     agents: listAgents(),
     weights: getWeights(),
     commits: listCommits(),
@@ -122,19 +156,26 @@ const server = Bun.serve({
   idleTimeout: 255,
   async fetch(req) {
     const url = new URL(req.url);
-    if (req.method === "OPTIONS") {
-      return new Response(null, {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
-      });
-    }
+    const blocked = gate(req, url.pathname);
+    if (blocked) return blocked;
 
     try {
       if (url.pathname === "/api/health") {
-        return json({ ok: true, keyConfigured: Boolean(resolveApiKey()) });
+        return json({ ok: true });
+      }
+
+      if (url.pathname === "/api/login" && req.method === "POST") {
+        if (!AUTH_TOKEN) return json({ ok: true, auth: false });
+        const ip = clientIp(req);
+        if (!rateLimit(`login:${ip}`, 10, 15 * 60 * 1000)) return fail("Too many login attempts", 429);
+        const body = await readBody(req);
+        const submitted = String(body.token ?? body.password ?? "");
+        if (!submitted || !timingSafeEqual(submitted, AUTH_TOKEN)) return fail("Unauthorized", 401);
+        return json({ ok: true }, 200, { "Set-Cookie": sessionSetCookie(AUTH_TOKEN, cookieSecure(req)) });
+      }
+
+      if (url.pathname === "/api/logout" && req.method === "POST") {
+        return json({ ok: true }, 200, { "Set-Cookie": sessionClearCookie(cookieSecure(req)) });
       }
 
       if (url.pathname === "/api/state" && req.method === "GET") {
@@ -145,66 +186,83 @@ const server = Bun.serve({
         return json({
           settings: getSettings(),
           keyConfigured: Boolean(resolveApiKey()),
-          keyMasked: maskKey(resolveApiKey()),
+          keyMasked: maskKeyPublic(resolveApiKey()),
         });
       }
 
       if (url.pathname === "/api/settings" && req.method === "PUT") {
         const body = await readBody(req);
+        delete body.openrouterBaseUrl;
         if (typeof body.apiKey === "string") {
           setApiKeyOverride(body.apiKey.trim() || null);
           delete body.apiKey;
         }
         const settings = saveSettings(body);
-        return json({ settings, keyConfigured: Boolean(resolveApiKey()), keyMasked: maskKey(resolveApiKey()) });
+        return json({
+          settings,
+          keyConfigured: Boolean(resolveApiKey()),
+          keyMasked: maskKeyPublic(resolveApiKey()),
+        });
       }
 
       if (url.pathname === "/api/models" && req.method === "GET") {
         const key = resolveApiKey();
-        if (!key) return fail("OPENROUTER_API_KEY missing", 401);
+        if (!key) return fail("OPENROUTER_API_KEY missing", 400);
+        const ip = clientIp(req);
+        if (!rateLimit(`models:${ip}`, 30, 60 * 60 * 1000)) return fail("Too many requests", 429);
         return json({ models: await listModels(getSettings(), key) });
       }
 
       if (url.pathname === "/api/briefing" && req.method === "GET") {
-        const ticker = String(url.searchParams.get("ticker") ?? "").trim();
-        if (!ticker) return fail("ticker required");
+        const ticker = sanitizeTicker(String(url.searchParams.get("ticker") ?? ""));
+        if (!ticker) return fail("Invalid ticker");
+        const ip = clientIp(req);
+        if (!rateLimit(`briefing:${ip}`, 60, 60 * 60 * 1000)) return fail("Too many requests", 429);
         const briefing = await fetchBriefing(ticker, getSettings());
         return json({ briefing, cap: briefing.regime });
       }
 
       if (url.pathname === "/api/debate" && req.method === "POST") {
         const key = resolveApiKey();
-        if (!key) return fail("OPENROUTER_API_KEY missing — set it in Settings or the environment", 401);
+        if (!key) return fail("OPENROUTER_API_KEY missing — set it in Settings or the environment", 400);
+        const ip = clientIp(req);
+        if (!rateLimit(`debate:${ip}`, 8, 60 * 60 * 1000)) return fail("Too many requests", 429);
+        if (debateBusy) return fail("A debate is already running", 429);
         const body = await readBody(req);
-        const ticker = String(body.ticker ?? "").trim();
-        if (!ticker) return fail("ticker required");
+        const ticker = sanitizeTicker(String(body.ticker ?? ""));
+        if (!ticker) return fail("Invalid ticker");
         const settings = getSettings();
         const weights = getWeights();
+        debateBusy = true;
 
         return sse(async (emit) => {
-          const briefing = await fetchBriefing(ticker, settings);
-          emit("briefing", briefing);
-          const takes: AgentTake[] = [];
-          for (const layer of LAYER_ORDER) {
-            const batch = await runLayer(settings, key, briefing, weights, layer, takes);
-            takes.push(...batch);
-            emit("layer", { layer, takes: batch });
+          try {
+            const briefing = await fetchBriefing(ticker, settings);
+            emit("briefing", briefing);
+            const takes: AgentTake[] = [];
+            for (const layer of LAYER_ORDER) {
+              const batch = await runLayer(settings, key, briefing, weights, layer, takes);
+              takes.push(...batch);
+              emit("layer", { layer, takes: batch });
+            }
+            const cro: CroResult = await runCro(settings, key, briefing, takes);
+            emit("cro", cro);
+            const synthesis = synthesize(takes, weights, cro.veto ? 0 : cro.capPct, layerMap());
+            const bullets = await runCio(
+              settings,
+              key,
+              briefing,
+              takes,
+              cro,
+              synthesis.direction,
+              synthesis.sizePct,
+            );
+            const { debateId } = persistDebate({ briefing, takes, cro, bullets, weights });
+            emit("cio", { debateId, synthesis, bullets, cro, takes, briefing });
+            emit("done", { debateId });
+          } finally {
+            debateBusy = false;
           }
-          const cro: CroResult = await runCro(settings, key, briefing, takes);
-          emit("cro", cro);
-          const synthesis = synthesize(takes, weights, cro.veto ? 0 : cro.capPct, layerMap());
-          const bullets = await runCio(
-            settings,
-            key,
-            briefing,
-            takes,
-            cro,
-            synthesis.direction,
-            synthesis.sizePct,
-          );
-          const { debateId } = persistDebate({ briefing, takes, cro, bullets, weights });
-          emit("cio", { debateId, synthesis, bullets, cro, takes, briefing });
-          emit("done", { debateId });
         });
       }
 
@@ -234,7 +292,9 @@ const server = Bun.serve({
 
       if (url.pathname === "/api/autoresearch" && req.method === "POST") {
         const key = resolveApiKey();
-        if (!key) return fail("OPENROUTER_API_KEY missing", 401);
+        if (!key) return fail("OPENROUTER_API_KEY missing", 400);
+        const ip = clientIp(req);
+        if (!rateLimit(`auto:${ip}`, 4, 60 * 60 * 1000)) return fail("Too many requests", 429);
         pendingProposal = await proposeAutoresearch(getSettings(), key);
         return json({ proposal: pendingProposal });
       }
@@ -252,14 +312,11 @@ const server = Bun.serve({
       if (web) return web;
       return fail("not found", 404);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      const client =
-        /required|missing|not found|Already booked|STAND DOWN|Need at least|disabled|quantity is 0|Not enough cash|Could not identify|incomplete patch/i.test(
-          message,
-        );
+      const message = publicErrorMessage(err);
+      const client = message !== "Request failed" && message !== "Upstream model request failed";
       return fail(message, client ? 400 : 500);
     }
   },
 });
 
-console.log(`atlas-gic ${SERVE_WEB ? "web+api" : "api"} http://${HOST}:${server.port}`);
+console.log(`atlas-gic ${SERVE_WEB ? "web+api" : "api"} http://${HOST}:${server.port}${AUTH_TOKEN ? " (gated)" : ""}`);

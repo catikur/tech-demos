@@ -1,13 +1,23 @@
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
       ...(init?.headers ?? {}),
     },
   });
   const data = (await res.json()) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error || `${res.status} ${path}`);
+  if (res.status === 401) throw new ApiError(data.error || "Giriş gerekli", 401);
+  if (!res.ok) throw new ApiError(data.error || `${res.status} ${path}`, res.status);
   return data;
 }
 
@@ -18,6 +28,7 @@ export async function readSse(
 ): Promise<void> {
   const res = await fetch(path, {
     method: "POST",
+    credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -29,7 +40,7 @@ export async function readSse(
     } catch {
       message = await res.text();
     }
-    throw new Error(message);
+    throw new ApiError(message, res.status);
   }
   if (!res.body) throw new Error("No stream");
   const reader = res.body.getReader();

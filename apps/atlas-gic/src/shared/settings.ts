@@ -22,6 +22,18 @@ export const DEFAULT_SETTINGS: Settings = {
   autoresearchLookback: 10,
 };
 
+export const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
+
+export function pinOpenRouterBase(raw: string): string {
+  try {
+    const u = new URL(raw);
+    if (u.protocol === "https:" && u.hostname === "openrouter.ai") return OPENROUTER_BASE;
+  } catch {
+    /* ignore */
+  }
+  return OPENROUTER_BASE;
+}
+
 const NUM = (v: unknown, fallback: number) => {
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : fallback;
@@ -39,8 +51,8 @@ export function mergeSettings(raw: Record<string, unknown> | null | undefined): 
   const r = raw ?? {};
   const language = r.language === "en" ? "en" : "tr";
   const s: Settings = {
-    openrouterBaseUrl: String(r.openrouterBaseUrl ?? d.openrouterBaseUrl).replace(/\/$/, ""),
-    model: String(r.model ?? d.model).trim() || d.model,
+    openrouterBaseUrl: pinOpenRouterBase(String(r.openrouterBaseUrl ?? d.openrouterBaseUrl)),
+    model: String(r.model ?? d.model).trim().slice(0, 80) || d.model,
     temperature: clamp(NUM(r.temperature, d.temperature), 0, 2),
     maxTokens: Math.round(clamp(NUM(r.maxTokens, d.maxTokens), 256, 8000)),
     language,
