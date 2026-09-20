@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { AGENTS } from "./data";
-import { MAX_WEIGHT, fmtWeight, type Synthesis, type Weights } from "./engine";
-import type { Agent, AgentTake, Commit, Scenario, Stance } from "./types";
+import { AGENTS } from "./shared/agents";
+import { fmtWeight } from "./shared/engine";
+import { DEFAULT_SETTINGS } from "./shared/settings";
+import type { Agent, AgentTake, Commit, CroResult, Regime, Stance, Synthesis, Weights } from "./shared/types";
 
 const STANCE_STYLE: Record<Stance, string> = {
   LONG: "bg-emerald-500/15 text-emerald-400 border-emerald-500/40",
@@ -9,13 +10,13 @@ const STANCE_STYLE: Record<Stance, string> = {
   FLAT: "bg-zinc-500/15 text-zinc-400 border-zinc-500/40",
 };
 
-const REGIME_STYLE: Record<Scenario["regime"], string> = {
+const REGIME_STYLE: Record<Regime, string> = {
   "RISK-ON": "bg-emerald-500/15 text-emerald-400 border-emerald-500/40",
   "RISK-OFF": "bg-rose-500/15 text-rose-400 border-rose-500/40",
   CHOP: "bg-amber-500/15 text-amber-400 border-amber-500/40",
 };
 
-export function RegimeBadge({ regime }: { regime: Scenario["regime"] }) {
+export function RegimeBadge({ regime }: { regime: Regime }) {
   return (
     <span
       className={`rounded-md border px-2.5 py-1 font-mono text-xs font-bold tracking-widest ${REGIME_STYLE[regime]}`}
@@ -42,7 +43,7 @@ export function WeightBar({
   weight: number;
   highlight?: boolean;
 }) {
-  const pct = Math.round((weight / MAX_WEIGHT) * 100);
+  const pct = Math.round((weight / DEFAULT_SETTINGS.weightMax) * 100);
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
@@ -145,14 +146,14 @@ export function Leaderboard({
       </h3>
       <ol className="space-y-2.5">
         {rows.map((a, i) => {
-          const delta = weights[a.id] - a.baseWeight;
+          const delta = (weights[a.id] ?? a.baseWeight) - a.baseWeight;
           return (
             <li key={a.id} className="flex items-center gap-2">
               <span className="w-4 font-mono text-[11px] text-zinc-600">{i + 1}</span>
               <span className="text-sm">{a.emoji}</span>
               <span className="w-32 truncate text-xs text-zinc-300">{a.name}</span>
               <div className="flex-1">
-                <WeightBar weight={weights[a.id]} highlight={a.id === flaggedId} />
+                <WeightBar weight={weights[a.id] ?? a.baseWeight} highlight={a.id === flaggedId} />
               </div>
               {Math.abs(delta) > 0.001 && (
                 <span
@@ -177,11 +178,13 @@ export function Leaderboard({
 }
 
 export function DecisionPanel({
-  scenario,
+  cro,
   synthesis,
+  bullets,
 }: {
-  scenario: Scenario;
+  cro: CroResult;
   synthesis: Synthesis;
+  bullets: string[];
 }) {
   const dirStyle =
     synthesis.direction === "LONG"
@@ -205,10 +208,10 @@ export function DecisionPanel({
           <span className="text-xl">🛡️</span>
           <span className="text-sm font-semibold text-zinc-100">CRO — Risk Officer</span>
           <span className="ml-auto rounded border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-sky-400">
-            CAP {scenario.croCapPct.toFixed(1)}%
+            CAP {cro.capPct.toFixed(1)}%
           </span>
         </div>
-        <p className="text-[13px] leading-relaxed text-zinc-300">{scenario.croNote}</p>
+        <p className="text-[13px] leading-relaxed text-zinc-300">{cro.note}</p>
       </div>
 
       <div className="rounded-xl border border-sky-500/30 bg-gradient-to-b from-sky-950/40 to-zinc-900/70 p-5">
@@ -265,7 +268,7 @@ export function DecisionPanel({
           </div>
         </div>
         <ul className="mt-6 space-y-1.5">
-          {scenario.cioBullets.map((b, i) => (
+          {bullets.map((b, i) => (
             <li key={i} className="flex gap-2 text-[13px] leading-relaxed text-zinc-300">
               <span className="text-sky-500">▸</span>
               {b}
