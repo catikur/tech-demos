@@ -42,6 +42,8 @@ const en: Dict = {
   "nav.topics": "Topics",
   "nav.people": "People",
   "nav.settings": "Settings",
+  "nav.more": "More",
+  "nav.catchupShort": "Catch-up",
 
   "space.all": "All",
   "space.work": "Work",
@@ -54,12 +56,19 @@ const en: Dict = {
 
   "brand.agent": "agent: {provider}",
   "brand.agentTitle": "Agent (OpenRouter)",
-  "brand.toggleAgent": "Toggle agent panel",
+  "brand.toggleAgent": "Ask Butler",
+
+  "shell.back": "Back",
+  "shell.close": "Close",
+  "shell.nav": "Main",
+  "shell.askButler": "Ask Butler",
 
   "empty.accounts": "No accounts connected yet. Sign in with Microsoft 365, then optionally connect Gmail in Settings.",
   "empty.accountsCta": "Open Settings",
 
   "login.title": "Butler",
+  "login.kicker": "Conforcus",
+  "login.tagline": "Mail, meetings and open work — one calm cockpit.",
   "login.hint": "Sign in with your @{domain} Microsoft 365 account. Other domains are refused.",
   "login.withM365": "Sign in with Microsoft 365",
   "login.denied": "That account is not on @{domain}. Sign in with a company Microsoft 365 mailbox.",
@@ -533,6 +542,8 @@ const tr: Dict = {
   "nav.topics": "Konular",
   "nav.people": "Kişiler",
   "nav.settings": "Ayarlar",
+  "nav.more": "Daha",
+  "nav.catchupShort": "Kaçırdım",
 
   "space.all": "Tümü",
   "space.work": "İş",
@@ -545,12 +556,19 @@ const tr: Dict = {
 
   "brand.agent": "ajan: {provider}",
   "brand.agentTitle": "Ajan (OpenRouter)",
-  "brand.toggleAgent": "Ajan panelini aç/kapat",
+  "brand.toggleAgent": "Butler’a sor",
+
+  "shell.back": "Geri",
+  "shell.close": "Kapat",
+  "shell.nav": "Ana menü",
+  "shell.askButler": "Butler’a sor",
 
   "empty.accounts": "Henüz hesap bağlı değil. Microsoft 365 ile giriş yapın; Gmail’i Ayarlar’dan ekleyebilirsiniz.",
   "empty.accountsCta": "Ayarlar’ı aç",
 
   "login.title": "Butler",
+  "login.kicker": "Conforcus",
+  "login.tagline": "Posta, toplantı ve açık iş — tek sakin kokpit.",
   "login.hint": "@{domain} Microsoft 365 hesabınızla giriş yapın. Diğer etki alanları reddedilir.",
   "login.withM365": "Microsoft 365 ile giriş",
   "login.denied": "Bu hesap @{domain} üzerinde değil. Şirket Microsoft 365 kutusuyla girin.",

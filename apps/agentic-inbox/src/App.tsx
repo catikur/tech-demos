@@ -21,22 +21,37 @@ import { PeopleView } from "./views/PeopleView.tsx";
 import { BriefingView } from "./views/BriefingView.tsx";
 import { LoginView, type SessionView } from "./components/LoginView.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
+import { Icon, type IconName } from "./components/Icon.tsx";
 
-export type ViewId = "briefing" | "inbox" | "calendar" | "chats" | "meetings" | "catchup" | "commitments" | "radar" | "topics" | "people" | "settings";
+export type ViewId =
+  | "briefing"
+  | "inbox"
+  | "calendar"
+  | "chats"
+  | "meetings"
+  | "catchup"
+  | "commitments"
+  | "radar"
+  | "topics"
+  | "people"
+  | "settings";
 
-const NAV: { id: ViewId; labelKey: string; icon: string }[] = [
-  { id: "briefing", labelKey: "nav.briefing", icon: "☀" },
-  { id: "inbox", labelKey: "nav.inbox", icon: "✉" },
-  { id: "calendar", labelKey: "nav.calendar", icon: "▦" },
-  { id: "chats", labelKey: "nav.chats", icon: "◫" },
-  { id: "meetings", labelKey: "nav.meetings", icon: "◉" },
-  { id: "catchup", labelKey: "nav.catchup", icon: "⟳" },
-  { id: "commitments", labelKey: "nav.commitments", icon: "✓" },
-  { id: "radar", labelKey: "nav.radar", icon: "◎" },
-  { id: "topics", labelKey: "nav.topics", icon: "#" },
-  { id: "people", labelKey: "nav.people", icon: "☺" },
-  { id: "settings", labelKey: "nav.settings", icon: "⚙" },
+const NAV: { id: ViewId; labelKey: string; icon: IconName }[] = [
+  { id: "briefing", labelKey: "nav.briefing", icon: "sun" },
+  { id: "inbox", labelKey: "nav.inbox", icon: "inbox" },
+  { id: "calendar", labelKey: "nav.calendar", icon: "calendar" },
+  { id: "chats", labelKey: "nav.chats", icon: "chat" },
+  { id: "meetings", labelKey: "nav.meetings", icon: "video" },
+  { id: "catchup", labelKey: "nav.catchup", icon: "catchup" },
+  { id: "commitments", labelKey: "nav.commitments", icon: "board" },
+  { id: "radar", labelKey: "nav.radar", icon: "radar" },
+  { id: "topics", labelKey: "nav.topics", icon: "hash" },
+  { id: "people", labelKey: "nav.people", icon: "people" },
+  { id: "settings", labelKey: "nav.settings", icon: "settings" },
 ];
+
+const PRIMARY: ViewId[] = ["briefing", "inbox", "calendar", "commitments"];
+const MORE_IDS = new Set<ViewId>(["chats", "meetings", "catchup", "radar", "topics", "people", "settings"]);
 
 export interface Selection {
   threadId: string | null;
@@ -45,14 +60,17 @@ export interface Selection {
   meetingId: string | null;
 }
 
+const emptySelection: Selection = { threadId: null, chatId: null, eventId: null, meetingId: null };
+
 export function App() {
   const session = useData<SessionView>(() => api.get("/api/session"), []);
   const status = useStatus();
   const [spaceId, setSpaceId] = useActiveSpace();
   const [view, setView] = useState<ViewId>("briefing");
-  const [selection, setSelection] = useState<Selection>({ threadId: null, chatId: null, eventId: null, meetingId: null });
+  const [selection, setSelection] = useState<Selection>(emptySelection);
   const [composerPrefill, setComposerPrefill] = useState<{ threadId: string; body: string } | null>(null);
-  const [agentOpen, setAgentOpen] = useState(true);
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [focusDigestId, setFocusDigestId] = useState<string | null>(null);
 
   const spaces: Space[] = status.data?.spaces ?? [];
@@ -63,6 +81,17 @@ export function App() {
     if (spaceId && spaces.length > 0 && !activeSpace) setSpaceId(null);
   }, [spaceId, spaces.length, activeSpace, setSpaceId]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setAgentOpen(false);
+        setMoreOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const agentContext: AgentContext = {
     spaceId,
     selectedThreadId: selection.threadId,
@@ -71,6 +100,15 @@ export function App() {
   };
 
   const select = useCallback((patch: Partial<Selection>) => setSelection((s) => ({ ...s, ...patch })), []);
+
+  const go = useCallback(
+    (id: ViewId) => {
+      if (id === view) setSelection(emptySelection);
+      setView(id);
+      setMoreOpen(false);
+    },
+    [view],
+  );
 
   /** Jump to any record from feature views, optionally pre-filling the reply composer. */
   const openSource = useCallback(
@@ -94,6 +132,7 @@ export function App() {
           select({ eventId: ref.id });
           break;
       }
+      setMoreOpen(false);
     },
     [select],
   );
@@ -128,11 +167,32 @@ export function App() {
     return <LoginView session={session.data} onConfigured={session.reload} />;
   }
 
+  const moreActive = MORE_IDS.has(view);
+  const navButton = (n: (typeof NAV)[number], compact = false) => {
+    const label = t(n.labelKey);
+    return (
+      <button
+        key={n.id}
+        type="button"
+        className={`nav-item ${view === n.id ? "is-active" : ""}`}
+        onClick={() => go(n.id)}
+        title={label}
+      >
+        <Icon name={n.icon} className="nav-icon" />
+        <span className="nav-label">{compact && n.id === "catchup" ? t("nav.catchupShort") : label}</span>
+      </button>
+    );
+  };
+
+  const hasDetail = Boolean(selection.threadId || selection.chatId || selection.eventId || selection.meetingId);
+
   return (
-    <div className="app">
+    <div className={`app ${agentOpen ? "agent-open" : ""} ${moreOpen ? "more-open" : ""} ${hasDetail ? "has-detail" : ""}`}>
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark">📬</span>
+          <span className="brand-mark" aria-hidden>
+            B
+          </span>
           <span className="brand-name">Butler</span>
         </div>
         <SpaceSwitcher spaces={spaces} activeId={spaceId} onChange={setSpaceId} />
@@ -149,35 +209,32 @@ export function App() {
             </span>
           )}
           {session.data?.loginRequired && (
-            <button className="btn btn-small btn-ghost" onClick={() => void signOut()}>
-              {t("login.signOut")}
+            <button className="icon-btn desktop-only" title={t("login.signOut")} onClick={() => void signOut()}>
+              <Icon name="logout" />
             </button>
           )}
           <NotificationBell spaceId={spaceId} spaces={spaces} onOpenLink={openLink} />
-          <button className="icon-btn" title={t("brand.toggleAgent")} onClick={() => setAgentOpen((o) => !o)}>
-            {agentOpen ? "⇥" : "⇤"}
+          <button
+            type="button"
+            className={`icon-btn agent-toggle ${agentOpen ? "is-active" : ""}`}
+            title={t("brand.toggleAgent")}
+            onClick={() => setAgentOpen((o) => !o)}
+          >
+            <Icon name="spark" />
           </button>
         </div>
       </header>
 
-      <div className={`body ${agentOpen ? "" : "agent-collapsed"}`}>
-        <nav className="nav">
-          {NAV.map((n) => {
-            const label = t(n.labelKey);
-            return (
-              <button key={n.id} className={`nav-item ${view === n.id ? "is-active" : ""}`} onClick={() => setView(n.id)} title={label}>
-                <span className="nav-icon">{n.icon}</span>
-                <span className="nav-label">{label}</span>
-              </button>
-            );
-          })}
+      <div className="body">
+        <nav className="nav rail" aria-label={t("shell.nav")}>
+          {NAV.map((n) => navButton(n))}
         </nav>
 
-        <main className="main" style={{ "--space-color": activeSpace?.color ?? "#94a3b8" } as React.CSSProperties}>
+        <main className="main" style={{ "--space-color": activeSpace?.color ?? "#f6821f" } as React.CSSProperties}>
           {noAccounts && (
             <div className="accounts-banner">
               <span>{t("empty.accounts")}</span>
-              <button className="link-btn" type="button" onClick={() => setView("settings")}>
+              <button className="link-btn" type="button" onClick={() => go("settings")}>
                 {t("empty.accountsCta")}
               </button>
             </div>
@@ -231,24 +288,77 @@ export function App() {
           {view === "people" && <PeopleView {...viewProps} />}
           {view === "settings" && <SettingsView status={status.data} onChanged={status.reload} />}
         </main>
+      </div>
 
-        {agentOpen && (
+      <nav className="bottom-nav" aria-label={t("shell.nav")}>
+        {NAV.filter((n) => PRIMARY.includes(n.id)).map((n) => navButton(n, true))}
+        <button
+          type="button"
+          className={`nav-item ${moreActive || moreOpen ? "is-active" : ""}`}
+          onClick={() => setMoreOpen((o) => !o)}
+          title={t("nav.more")}
+        >
+          <Icon name="more" className="nav-icon" />
+          <span className="nav-label">{t("nav.more")}</span>
+        </button>
+      </nav>
+
+      {moreOpen && (
+        <>
+          <button type="button" className="sheet-backdrop" aria-label={t("shell.close")} onClick={() => setMoreOpen(false)} />
+          <div className="more-sheet" role="dialog" aria-label={t("nav.more")}>
+            <div className="sheet-handle" />
+            <header className="sheet-head">
+              <h2>{t("nav.more")}</h2>
+              <button type="button" className="icon-btn" onClick={() => setMoreOpen(false)} aria-label={t("shell.close")}>
+                <Icon name="close" />
+              </button>
+            </header>
+            <div className="more-grid">
+              {NAV.filter((n) => MORE_IDS.has(n.id)).map((n) => (
+                <button key={n.id} type="button" className={`more-tile ${view === n.id ? "is-active" : ""}`} onClick={() => go(n.id)}>
+                  <Icon name={n.icon} />
+                  <span>{t(n.labelKey)}</span>
+                </button>
+              ))}
+            </div>
+            {session.data?.loginRequired && (
+              <button type="button" className="btn btn-ghost more-signout" onClick={() => void signOut()}>
+                <Icon name="logout" /> {t("login.signOut")}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {!agentOpen && (
+        <button type="button" className="agent-fab" onClick={() => setAgentOpen(true)}>
+          <Icon name="spark" />
+          <span>{t("shell.askButler")}</span>
+        </button>
+      )}
+
+      {agentOpen && (
+        <>
+          <button type="button" className="sheet-backdrop agent-backdrop" aria-label={t("shell.close")} onClick={() => setAgentOpen(false)} />
           <AgentPanel
             context={agentContext}
             activeSpace={activeSpace}
+            onClose={() => setAgentOpen(false)}
             onConfirmSend={async (target, body) => {
               if (target.kind === "thread") await api.post(`/api/threads/${target.id}/reply`, { body, actor: "agent" });
               else if (target.kind === "chat") await api.post(`/api/chats/${target.id}/send`, { body, actor: "agent" });
               else await api.post(`/api/meetings/${target.id}/followup/send`, { body, actor: "agent" });
             }}
             onEditInComposer={(target, body) => {
+              setAgentOpen(false);
               if (target.kind === "thread") openSource({ kind: "thread", id: target.id, label: "" }, body);
               else if (target.kind === "chat") openSource({ kind: "chat", id: target.id, label: "" });
               else openSource({ kind: "meeting", id: target.id, label: "" });
             }}
           />
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }

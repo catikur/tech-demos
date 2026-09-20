@@ -47,6 +47,7 @@ Both OAuth flows are auth-code + PKCE implemented with plain `fetch`; tokens are
 ## What's inside
 
 ### Views
+- **Shell** — mobile-first cockpit: bottom tabs + more sheet on phone, icon rail on desktop. Agent is an overlay (“Ask Butler”), not a permanent third column. List/detail stacks on small screens with a Back control.
 - **Inbox** — unified threads; mail bodies render as sanitized HTML (lists, bold, links), not a pre dump.
 - **Calendar** — full event description HTML when Graph/Google send it; overlap warnings; meeting brief panel.
 - **Chats** — Teams HTML (mentions, lists) sanitized in the bubble.

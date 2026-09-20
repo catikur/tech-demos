@@ -5,6 +5,7 @@ import { api, spaceQuery } from "../api/client.ts";
 import { t } from "../i18n.ts";
 import { ago, fmtDateTime, initials, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
+import { BackButton } from "../components/BackButton.tsx";
 
 export function PeopleView({
   spaceId,
@@ -37,7 +38,7 @@ export function PeopleView({
   };
 
   return (
-    <div className="split split-2">
+    <div className={`split split-2 ${selectedId ? "has-selection" : ""}`}>
       <section className="pane pane-list">
         <div className="pane-header">
           <h2>{t("people.title")}</h2>
@@ -78,6 +79,9 @@ export function PeopleView({
           </div>
         ) : (
           <div className="detail scroll">
+            <div className="pane-header">
+              <BackButton onBack={() => setSelectedId(null)} />
+            </div>
             <div className="person-head">
               <span className="avatar avatar-agent avatar-large">{initials(p.name)}</span>
               <div>

@@ -4,6 +4,7 @@ import { api, spaceQuery } from "../api/client.ts";
 import { t } from "../i18n.ts";
 import { ago, useData } from "../state.ts";
 import { SpaceBadge } from "./SpaceSwitcher.tsx";
+import { Icon } from "./Icon.tsx";
 
 const KIND_ICON: Record<Notification["kind"], string> = {
   brief: "◉",
@@ -37,10 +38,13 @@ export function NotificationBell({ spaceId, spaces, onOpenLink }: { spaceId: str
   return (
     <div className="bell-wrap">
       <button className={`icon-btn ${unread ? "has-unread" : ""}`} title={t("notif.title")} onClick={() => setOpen((o) => !o)}>
-        🔔{unread > 0 && <span className="bell-count">{unread}</span>}
+        <Icon name="bell" />
+        {unread > 0 && <span className="bell-count">{unread > 9 ? "9+" : unread}</span>}
       </button>
       {open && (
-        <div className="drawer">
+        <>
+          <button type="button" className="sheet-backdrop mobile-only" aria-label={t("shell.close")} onClick={() => setOpen(false)} />
+          <div className="drawer">
           <div className="drawer-head">
             <strong>{t("notif.title")}</strong>
             <button
@@ -70,6 +74,7 @@ export function NotificationBell({ spaceId, spaces, onOpenLink }: { spaceId: str
             ))}
           </div>
         </div>
+        </>
       )}
     </div>
   );

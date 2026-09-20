@@ -4,6 +4,7 @@ import { api, spaceQuery } from "../api/client.ts";
 import { sourceLabel, t } from "../i18n.ts";
 import { ago, fmtDateTime, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
+import { BackButton } from "../components/BackButton.tsx";
 
 const KIND_ICON: Record<SourceRef["kind"], string> = { thread: "✉", chat: "◫", meeting: "◉", event: "▦", manual: "✎" };
 
@@ -24,7 +25,7 @@ export function TopicsView({
     (ev) => ev.type === "sync" || (ev.type === "data" && ev.entity === "topics"),
   );
   const topics = list.data ?? [];
-  const selected = topics.find((topic) => topic.id === selectedId) ?? topics[0] ?? null;
+  const selected = topics.find((topic) => topic.id === selectedId) ?? null;
 
   const rebuild = async () => {
     setBusy(true);
@@ -44,7 +45,7 @@ export function TopicsView({
           {busy ? t("topics.rebuilding") : t("topics.rebuild")}
         </button>
       </div>
-      <div className="split split-2">
+      <div className={`split split-2 ${selectedId ? "has-selection" : ""}`}>
         <section className="pane pane-list">
           <div className="pane-header">
             <h2>{t("topics.title")}</h2>
@@ -84,7 +85,10 @@ export function TopicsView({
             </div>
           ) : (
             <div className="detail scroll">
-              <h2 className="detail-title">{selected.name}</h2>
+              <div className="pane-header">
+                <BackButton onBack={() => setSelectedId(null)} />
+                <h2 className="detail-title">{selected.name}</h2>
+              </div>
               <div className="detail-meta">
                 <div>{selected.summary}</div>
                 <div>

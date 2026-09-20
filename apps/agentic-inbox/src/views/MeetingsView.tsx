@@ -4,6 +4,7 @@ import { api, spaceQuery } from "../api/client.ts";
 import { t } from "../i18n.ts";
 import { fmtDateTime, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
+import { BackButton } from "../components/BackButton.tsx";
 
 function offset(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -38,7 +39,7 @@ export function MeetingsView({
   const meeting = detail.data && detail.data.id === selectedId ? detail.data : null;
 
   return (
-    <div className="split split-2">
+    <div className={`split split-2 ${selectedId ? "has-selection" : ""}`}>
       <section className="pane pane-list">
         <div className="pane-header">
           <h2>{t("meetings.title")}</h2>
@@ -80,7 +81,10 @@ export function MeetingsView({
           </p>
         ) : (
           <div className="detail scroll">
-            <h2 className="detail-title">{meeting.title}</h2>
+            <div className="pane-header">
+              <BackButton onBack={() => setSelectedId(null)} />
+              <h2 className="detail-title">{meeting.title}</h2>
+            </div>
             <div className="detail-meta">
               <div>{fmtDateTime(meeting.start)}</div>
               <div>{meeting.attendees.map(senderName).join(", ")}</div>

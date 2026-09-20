@@ -51,8 +51,12 @@ export function LoginView({ session, onConfigured }: { session: SessionView; onC
   return (
     <div className="login-screen">
       <div className="login-card">
-        <div className="login-mark">📬</div>
+        <div className="login-mark" aria-hidden>
+          B
+        </div>
+        <p className="login-kicker">{t("login.kicker")}</p>
         <h1>{t("login.title")}</h1>
+        <p className="login-tagline">{t("login.tagline")}</p>
         <p className="muted">{t("login.hint", { domain: session.allowedDomain })}</p>
         {denied && (
           <div className="error-note">

@@ -5,6 +5,7 @@ import { dateLocale, t } from "../i18n.ts";
 import { fmtDateTime, untilLabel, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
 import { RichBody } from "../components/RichBody.tsx";
+import { BackButton } from "../components/BackButton.tsx";
 
 function dayKey(at: number): string {
   return new Date(at).toLocaleDateString(dateLocale, { weekday: "long", day: "2-digit", month: "long" });
@@ -57,7 +58,7 @@ export function CalendarView({
   }
 
   return (
-    <div className="split split-2">
+    <div className={`split split-2 ${selectedId ? "has-selection" : ""}`}>
       <section className="pane pane-list pane-wide">
         <div className="pane-header">
           <h2>{t("calendar.title")}</h2>
@@ -102,7 +103,10 @@ export function CalendarView({
           </div>
         ) : (
           <div className="detail scroll">
-            <h2 className="detail-title">{selected.title}</h2>
+            <div className="pane-header">
+              <BackButton onBack={() => onSelect(null)} />
+              <h2 className="detail-title">{selected.title}</h2>
+            </div>
             <div className="detail-meta">
               <div>
                 {fmtDateTime(selected.start)} → {clock(selected.end)}
