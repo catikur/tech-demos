@@ -850,6 +850,28 @@ code {
   opacity: 0.55;
 }
 
+.kanban-move {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+}
+
+.kanban-lane-select {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+.kanban-card .card-actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .kanban-dropped {
   padding: 8px 12px 16px;
 }

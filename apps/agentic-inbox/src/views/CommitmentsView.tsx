@@ -108,6 +108,11 @@ export function CommitmentsView({
         className={`card kanban-card ${dragging === c.id ? "is-dragging" : ""}`}
         draggable
         onDragStart={(e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest("button, select, a, input, textarea")) {
+            e.preventDefault();
+            return;
+          }
           e.dataTransfer.setData("text/plain", c.id);
           e.dataTransfer.effectAllowed = "move";
           setDragging(c.id);
@@ -131,6 +136,23 @@ export function CommitmentsView({
           {c.dueAt && <span className="muted small">{fmtDateTime(c.dueAt)}</span>}
         </div>
         <div className="card-actions">
+          <label className="kanban-move">
+            <span className="muted small">{t("commitments.moveLane")}</span>
+            <select
+              className="kanban-lane-select"
+              value={laneOf(c)}
+              aria-label={t("commitments.moveLane")}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onChange={(e) => void setLane(c.id, e.target.value as BoardLane)}
+            >
+              {LANES.map((lane) => (
+                <option key={lane} value={lane}>
+                  {t(`commitments.lane.${lane}`)}
+                </option>
+              ))}
+            </select>
+          </label>
           {c.status === "open" ? (
             <>
               <button className="btn btn-small" onClick={() => void setState(c, "done")}>

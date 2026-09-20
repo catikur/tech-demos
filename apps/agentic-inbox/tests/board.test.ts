@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { commitments } from "../server/db/repo.ts";
 import { applyBoardLane, defaultBoardLane } from "../server/features/board.ts";
+import { extractForSpace } from "../server/features/commitments.ts";
 import { PERSONAL_SPACE_ID, WORK_SPACE_ID, seededDb } from "./helpers.ts";
 
 const savedEnv = { ...process.env };
@@ -28,12 +29,24 @@ describe("Kanban lanes", () => {
     expect(applyBoardLane("done")).toEqual({ status: "done", boardLane: "done" });
   });
 
-  test("insertUnique stores a lane and setLane moves the card", () => {
-    const mine = commitments.list(WORK_SPACE_ID, { status: "open" }).find((c) => c.direction === "owed_by_me");
+  test("insertUnique stores a lane and setLane moves the card", async () => {
+    const added = commitments.insertUnique({
+      spaceId: WORK_SPACE_ID,
+      direction: "owed_by_me",
+      counterpart: "marcus@lumenlabs.io",
+      text: "Send the kanban lane fixture",
+      dueAt: null,
+      status: "open",
+      source: { kind: "thread", id: "t-lane", label: "Lane fixture" },
+      confidence: 0.9,
+    });
+    expect(added).toBe(true);
+    const mine = commitments.list(WORK_SPACE_ID).find((c) => c.text === "Send the kanban lane fixture");
+    expect(mine?.boardLane).toBe("todo");
+
+    await extractForSpace(WORK_SPACE_ID);
     const theirs = commitments.list(WORK_SPACE_ID, { status: "open" }).find((c) => c.direction === "owed_to_me");
-    expect(mine).toBeTruthy();
     expect(theirs).toBeTruthy();
-    expect(mine!.boardLane).toBe("todo");
     expect(theirs!.boardLane).toBe("waiting");
 
     commitments.setLane(mine!.id, "doing");
