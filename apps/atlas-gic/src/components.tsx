@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { fmtWeight } from "./shared/engine";
+import { usesSurface } from "./shared/screen";
 import { DEFAULT_SETTINGS } from "./shared/settings";
 import type { Agent, AgentTake, Commit, CroResult, Regime, Stance, Synthesis, Weights } from "./shared/types";
 
@@ -138,7 +139,7 @@ export function Leaderboard({
   agents: Agent[];
 }) {
   const rows = agents
-    .filter((a) => a.layer !== "decision" && a.enabled !== false)
+    .filter((a) => usesSurface(a, "debate") && a.layer !== "decision")
     .sort((a, b) => (weights[b.id] ?? b.baseWeight) - (weights[a.id] ?? a.baseWeight));
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">

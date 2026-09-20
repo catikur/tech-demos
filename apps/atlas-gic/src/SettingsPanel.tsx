@@ -321,7 +321,7 @@ function KadroEditor({ agents, onSaved }: { agents: Agent[]; onSaved: () => void
     <div className="mb-4">
       <h3 className="mb-2 font-mono text-[10px] tracking-widest text-zinc-500">KADRO</h3>
       {err && <p className="mb-2 text-xs text-rose-400">{err}</p>}
-      <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-zinc-800 p-2">
+      <div className="max-h-96 space-y-2 overflow-y-auto rounded-lg border border-zinc-800 p-2">
         {drafts.map((a) => (
           <div key={a.id} className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-2">
             <div className="mb-1 flex flex-wrap items-center gap-2">

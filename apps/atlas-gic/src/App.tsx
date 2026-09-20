@@ -176,6 +176,14 @@ export default function App() {
     setBusy("briefing");
     try {
       const r = await api<{ briefing: Briefing }>(`/api/briefing?ticker=${encodeURIComponent(symbol)}`);
+      if (briefing && r.briefing.ticker !== briefing.ticker) {
+        setTakes([]);
+        setCro(null);
+        setSynthesis(null);
+        setBullets([]);
+        setDebateId(null);
+        setBooked(false);
+      }
       setBriefing(r.briefing);
       setTicker(r.briefing.ticker);
     } catch (e) {
