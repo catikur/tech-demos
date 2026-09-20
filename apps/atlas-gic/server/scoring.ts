@@ -1,4 +1,3 @@
-import { AGENTS } from "../src/shared/agents";
 import { applyDarwin, contribution } from "../src/shared/engine";
 import type { AutoresearchProposal, Settings } from "../src/shared/types";
 import {
@@ -30,7 +29,7 @@ export async function markSession(settings: Settings) {
     const returnPct = ((quote.price - d.price) / d.price) * 100;
     const takes = listTakes(d.id);
     for (const t of takes) {
-      const agent = AGENTS.find((a) => a.id === t.agentId);
+      const agent = getAgent(t.agentId);
       if (!agent || agent.layer === "decision") continue;
       const c = contribution(t.stance, t.conviction, returnPct);
       rows.push({ debateId: d.id, agentId: t.agentId, contribution: c, returnPct });

@@ -10,9 +10,12 @@ import {
   RegimeBadge,
 } from "./components";
 import { SettingsPanel } from "./SettingsPanel";
+import { ScreenerDrawer } from "./ScreenerDrawer";
 import { AGENTS } from "./shared/agents";
+import { usesSurface } from "./shared/screen";
 import { DEFAULT_SETTINGS } from "./shared/settings";
 import type {
+  Agent,
   AgentTake,
   AutoresearchProposal,
   BookSnapshot,
@@ -42,6 +45,7 @@ type StateResp = {
   commits: Commit[];
   book: BookSnapshot;
   pendingProposal: AutoresearchProposal | null;
+  agents: Agent[];
   latest: {
     debate: {
       id: number;
@@ -81,6 +85,8 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [screenOpen, setScreenOpen] = useState(false);
+  const [roster, setRoster] = useState<Agent[]>(AGENTS);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [proposal, setProposal] = useState<AutoresearchProposal | null>(null);
   const [resolution, setResolution] = useState<Resolution | null>(null);
@@ -98,6 +104,7 @@ export default function App() {
     setWeights(s.weights);
     setCommits(s.commits);
     setBook(s.book);
+    if (s.agents) setRoster(s.agents);
     if (s.pendingProposal) setProposal(s.pendingProposal);
     if (s.latest) {
       const d = s.latest.debate;
@@ -372,6 +379,12 @@ export default function App() {
               {keyConfigured ? "OpenRouter tanımlı" : "API key yok"}
             </span>
             <button
+              onClick={() => setScreenOpen(true)}
+              className="rounded-lg border border-zinc-700 px-3 py-1.5 font-mono text-[10px] text-zinc-300 hover:bg-zinc-800"
+            >
+              Screener
+            </button>
+            <button
               onClick={() => setSettingsOpen(true)}
               className="rounded-lg border border-zinc-700 px-3 py-1.5 font-mono text-[10px] text-zinc-300 hover:bg-zinc-800"
             >
@@ -459,7 +472,7 @@ export default function App() {
           )}
 
           {LAYER_META.map((meta) => {
-            const agents = AGENTS.filter((a) => a.layer === meta.id);
+            const agents = roster.filter((a) => a.layer === meta.id && usesSurface(a, "debate"));
             const ready = agents.every((a) => takeOf(a.id));
             if (!ready && !running) return null;
             if (!ready && running && !agents.some((a) => takeOf(a.id))) {
@@ -518,7 +531,7 @@ export default function App() {
 
         <aside className="space-y-4">
           <BookPanel book={book} onMark={mark} onClose={closePos} onReset={resetBook} busy={busy} />
-          <Leaderboard weights={weights} flaggedId={flaggedId} />
+          <Leaderboard weights={weights} flaggedId={flaggedId} agents={roster} />
           <CommitLog commits={commits} />
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 text-[10px] leading-relaxed text-zinc-600">
             Kâğıt defter + araştırma masası. Canlı broker yok. Gecikmeli Yahoo fiyat. Yatırım tavsiyesi değildir.
@@ -536,8 +549,20 @@ export default function App() {
           settings={settings}
           keyMasked={keyMasked}
           keyConfigured={keyConfigured}
+          agents={roster}
           onClose={() => setSettingsOpen(false)}
           onSaved={() => loadState()}
+        />
+      )}
+      {screenOpen && (
+        <ScreenerDrawer
+          settings={settings}
+          onClose={() => setScreenOpen(false)}
+          onPick={(symbol) => {
+            setScreenOpen(false);
+            setTicker(symbol);
+            void loadBriefing(symbol);
+          }}
         />
       )}
       {drawerOpen && proposal && (

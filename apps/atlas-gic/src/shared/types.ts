@@ -1,6 +1,9 @@
 export type Stance = "LONG" | "SHORT" | "FLAT";
 export type LayerId = "macro" | "sector" | "superinvestor" | "decision";
 export type Regime = "RISK-ON" | "RISK-OFF" | "CHOP";
+export type AgentKind = "tape" | "technical" | "fundamental" | "macro" | "superinvestor" | "risk";
+export type AgentSurface = "debate" | "screen" | "both";
+export type ScreenUniverse = "sp100" | "ndx100" | "watchlist";
 
 export interface Agent {
   id: string;
@@ -10,6 +13,10 @@ export interface Agent {
   emoji: string;
   baseWeight: number;
   prompt: string;
+  kind: AgentKind;
+  surfaces: AgentSurface;
+  enabled: boolean;
+  weight?: number;
 }
 
 export interface AgentTake {
@@ -47,6 +54,39 @@ export interface Settings {
   vixRiskOnBelow: number;
   vixRiskOffAbove: number;
   autoresearchLookback: number;
+  screenUniverse: ScreenUniverse;
+  screenWatchlist: string;
+  screenSize: number;
+  screenMinPrice: number;
+  screenMinVolume: number;
+  screenWMomentum: number;
+  screenWVolume: number;
+  screenWRange: number;
+  screenWRegime: number;
+  screenScoutEnabled: boolean;
+  screenScoutMaxNames: number;
+}
+
+export interface ScreenScoutTake {
+  agentId: string;
+  agentName: string;
+  stance: Stance;
+  conviction: number;
+  take: string;
+}
+
+export interface ScreenHit {
+  ticker: string;
+  company: string;
+  price: number;
+  changePct: number;
+  volume: number;
+  dayHigh: number;
+  dayLow: number;
+  currency: string;
+  tapeScore: number;
+  score: number;
+  scouts: ScreenScoutTake[];
 }
 
 export type Weights = Record<string, number>;

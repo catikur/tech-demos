@@ -1,18 +1,20 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "./api";
 import { DEFAULT_SETTINGS } from "./shared/settings";
-import type { ModelOption, Settings } from "./shared/types";
+import type { Agent, ModelOption, Settings } from "./shared/types";
 
 export function SettingsPanel({
   settings,
   keyMasked,
   keyConfigured,
+  agents,
   onClose,
   onSaved,
 }: {
   settings: Settings;
   keyMasked: string | null;
   keyConfigured: boolean;
+  agents: Agent[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -139,6 +141,48 @@ export function SettingsPanel({
           />
         </div>
 
+        <h3 className="mt-5 mb-2 font-mono text-[10px] tracking-widest text-zinc-500">SCREENER</h3>
+        <div className="mb-3 grid grid-cols-2 gap-3">
+          <label className="mb-2 block">
+            <div className="mb-1 font-mono text-[10px] tracking-widest text-zinc-500 uppercase">Universe</div>
+            <select
+              value={form.screenUniverse}
+              onChange={(e) => set("screenUniverse", e.target.value as Settings["screenUniverse"])}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs"
+            >
+              <option value="sp100">S&P 100</option>
+              <option value="ndx100">Nasdaq-100</option>
+              <option value="watchlist">İzleme listesi</option>
+            </select>
+          </label>
+          <Num label="Top N" value={form.screenSize} step={1} onChange={(v) => set("screenSize", v)} />
+          <Num label="Min fiyat" value={form.screenMinPrice} step={1} onChange={(v) => set("screenMinPrice", v)} />
+          <Num label="Min hacim" value={form.screenMinVolume} step={100000} onChange={(v) => set("screenMinVolume", v)} />
+          <Num label="W momentum" value={form.screenWMomentum} step={0.1} onChange={(v) => set("screenWMomentum", v)} />
+          <Num label="W hacim" value={form.screenWVolume} step={0.1} onChange={(v) => set("screenWVolume", v)} />
+          <Num label="W aralık" value={form.screenWRange} step={0.1} onChange={(v) => set("screenWRange", v)} />
+          <Num label="W rejim" value={form.screenWRegime} step={0.1} onChange={(v) => set("screenWRegime", v)} />
+          <Num label="Scout max" value={form.screenScoutMaxNames} step={1} onChange={(v) => set("screenScoutMaxNames", v)} />
+        </div>
+        <Field label="İzleme listesi">
+          <textarea
+            value={form.screenWatchlist}
+            onChange={(e) => set("screenWatchlist", e.target.value)}
+            rows={2}
+            className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs"
+          />
+        </Field>
+        <label className="mb-4 flex items-center gap-2 text-xs text-zinc-400">
+          <input
+            type="checkbox"
+            checked={form.screenScoutEnabled}
+            onChange={(e) => set("screenScoutEnabled", e.target.checked)}
+          />
+          Screen personaları ile tek tur scout
+        </label>
+
+        <KadroEditor agents={agents} onSaved={onSaved} />
+
         <div className="mt-3 flex flex-wrap gap-4 text-xs text-zinc-400">
           <label className="flex items-center gap-2">
             <input
@@ -219,5 +263,145 @@ function Num({
         className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs"
       />
     </label>
+  );
+}
+
+function KadroEditor({ agents, onSaved }: { agents: Agent[]; onSaved: () => void }) {
+  const [drafts, setDrafts] = useState<Agent[]>(agents);
+  const [nid, setNid] = useState("custom-ta");
+  const [nname, setNname] = useState("Yeni teknikçi");
+  const [nprompt, setNprompt] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => setDrafts(agents), [agents]);
+
+  async function saveOne(a: Agent) {
+    setBusy(a.id);
+    setErr(null);
+    try {
+      await api("/api/agents", { method: "PUT", body: JSON.stringify(a) });
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function create() {
+    setBusy("new");
+    setErr(null);
+    try {
+      await api("/api/agents", {
+        method: "PUT",
+        body: JSON.stringify({
+          id: nid,
+          name: nname,
+          role: "custom",
+          layer: "sector",
+          kind: "technical",
+          surfaces: "both",
+          enabled: true,
+          emoji: "🧪",
+          prompt: nprompt || "You are a custom scout. Stay close to the tape. FLAT if thin.",
+          baseWeight: 1,
+        }),
+      });
+      setNprompt("");
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="mb-4">
+      <h3 className="mb-2 font-mono text-[10px] tracking-widest text-zinc-500">KADRO</h3>
+      {err && <p className="mb-2 text-xs text-rose-400">{err}</p>}
+      <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-zinc-800 p-2">
+        {drafts.map((a) => (
+          <div key={a.id} className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-2">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <span className="text-sm">{a.emoji}</span>
+              <span className="font-mono text-[11px] text-zinc-200">{a.name}</span>
+              <select
+                value={a.kind}
+                onChange={(e) => setDrafts((ds) => ds.map((d) => (d.id === a.id ? { ...d, kind: e.target.value as Agent["kind"] } : d)))}
+                className="rounded border border-zinc-800 bg-zinc-950 px-1 py-0.5 font-mono text-[10px]"
+              >
+                {["tape", "technical", "fundamental", "macro", "superinvestor", "risk"].map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={a.surfaces}
+                onChange={(e) =>
+                  setDrafts((ds) => ds.map((d) => (d.id === a.id ? { ...d, surfaces: e.target.value as Agent["surfaces"] } : d)))
+                }
+                className="rounded border border-zinc-800 bg-zinc-950 px-1 py-0.5 font-mono text-[10px]"
+              >
+                <option value="debate">debate</option>
+                <option value="screen">screen</option>
+                <option value="both">both</option>
+              </select>
+              <label className="flex items-center gap-1 font-mono text-[10px] text-zinc-400">
+                <input
+                  type="checkbox"
+                  checked={a.enabled}
+                  onChange={(e) => setDrafts((ds) => ds.map((d) => (d.id === a.id ? { ...d, enabled: e.target.checked } : d)))}
+                />
+                açık
+              </label>
+              <button
+                onClick={() => void saveOne(a)}
+                disabled={busy === a.id}
+                className="ml-auto font-mono text-[10px] text-sky-400"
+              >
+                {busy === a.id ? "…" : "kaydet"}
+              </button>
+            </div>
+            <textarea
+              value={a.prompt}
+              onChange={(e) => setDrafts((ds) => ds.map((d) => (d.id === a.id ? { ...d, prompt: e.target.value } : d)))}
+              rows={2}
+              className="w-full rounded border border-zinc-800 bg-zinc-950 px-2 py-1 font-mono text-[10px] text-zinc-400"
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <input
+          value={nid}
+          onChange={(e) => setNid(e.target.value)}
+          placeholder="id (custom-ta)"
+          className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono text-[10px]"
+        />
+        <input
+          value={nname}
+          onChange={(e) => setNname(e.target.value)}
+          placeholder="ad"
+          className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono text-[10px]"
+        />
+      </div>
+      <textarea
+        value={nprompt}
+        onChange={(e) => setNprompt(e.target.value)}
+        placeholder="Yeni persona charter"
+        rows={2}
+        className="mt-2 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono text-[10px]"
+      />
+      <button
+        onClick={() => void create()}
+        disabled={busy === "new"}
+        className="mt-2 rounded-lg border border-zinc-700 px-3 py-1 font-mono text-[10px] text-zinc-300"
+      >
+        {busy === "new" ? "…" : "+ Persona ekle"}
+      </button>
+    </div>
   );
 }

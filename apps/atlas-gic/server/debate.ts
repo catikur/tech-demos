@@ -1,7 +1,8 @@
-import { AGENTS, LAYER_ORDER } from "../src/shared/agents";
+import { LAYER_ORDER } from "../src/shared/agents";
+import { usesSurface } from "../src/shared/screen";
 import { croCapForRegime, layerMap, synthesize } from "../src/shared/engine";
-import type { AgentTake, Briefing, CroResult, Settings, Stance, Weights } from "../src/shared/types";
-import { insertDebate, insertTakes } from "./db";
+import type { Agent, AgentTake, Briefing, CroResult, Settings, Stance, Weights } from "../src/shared/types";
+import { getAgent, insertDebate, insertTakes, listAgents } from "./db";
 import { chatJson } from "./openrouter";
 
 const STANCES: Stance[] = ["LONG", "SHORT", "FLAT"];
@@ -24,11 +25,16 @@ Headlines:
 ${news}`;
 }
 
+function debateRoster(): Agent[] {
+  return listAgents().filter((a) => usesSurface(a, "debate") && a.layer !== "decision");
+}
+
 function priorTakes(takes: AgentTake[]): string {
   if (!takes.length) return "(none yet)";
+  const roster = listAgents();
   return takes
     .map((t) => {
-      const a = AGENTS.find((x) => x.id === t.agentId);
+      const a = roster.find((x) => x.id === t.agentId);
       return `- ${a?.name ?? t.agentId} [${t.stance} conv ${t.conviction}]: ${t.take}`;
     })
     .join("\n");
@@ -57,7 +63,8 @@ export async function runLayer(
   layer: (typeof LAYER_ORDER)[number],
   prior: AgentTake[],
 ): Promise<AgentTake[]> {
-  const roster = AGENTS.filter((a) => a.layer === layer);
+  const roster = debateRoster().filter((a) => a.layer === layer);
+  if (!roster.length) return [];
   const system = `You are a trading-debate orchestrator. ${lang(settings)}
 Return ONLY JSON: {"takes":[{"agentId":"...","stance":"LONG|SHORT|FLAT","conviction":0-1,"take":"2-5 sentences"}]}
 One object per requested agent. Do not invent prices or quotes absent from the briefing.
@@ -90,7 +97,8 @@ export async function runCro(
   takes: AgentTake[],
 ): Promise<CroResult> {
   const cap = croCapForRegime(briefing.regime, settings);
-  const cro = AGENTS.find((a) => a.id === "cro")!;
+  const cro = getAgent("cro");
+  if (!cro) throw new Error("CRO agent missing");
   const system = `You are the CRO. ${lang(settings)} ${cro.prompt}
 Return ONLY JSON: {"note":"...","tightenCapPct": number or null,"veto": boolean}
 tightenCapPct must be <= ${cap} if set. You may not loosen the cap.`;
@@ -124,7 +132,8 @@ export async function runCio(
   direction: string,
   sizePct: number,
 ): Promise<string[]> {
-  const cio = AGENTS.find((a) => a.id === "cio")!;
+  const cio = getAgent("cio");
+  if (!cio) throw new Error("CIO agent missing");
   const system = `You are the CIO. ${lang(settings)} ${cio.prompt}
 Return ONLY JSON: {"bullets":["...","...","..."]} exactly 3 bullets.
 Computed call is ${direction} ${sizePct.toFixed(1)}% of book. Do not contradict it.`;
@@ -149,7 +158,7 @@ export function persistDebate(args: {
   weights: Weights;
 }): { debateId: number; synthesis: ReturnType<typeof synthesize> } {
   const { briefing: b, takes, cro, bullets, weights } = args;
-  const synthesis = synthesize(takes, weights, cro.veto ? 0 : cro.capPct, layerMap());
+  const synthesis = synthesize(takes, weights, cro.veto ? 0 : cro.capPct, layerMap(listAgents()));
   const headline = b.headlines[0]?.title ?? `${b.ticker} ${b.changePct.toFixed(2)}%`;
   const debateId = insertDebate({
     ticker: b.ticker,

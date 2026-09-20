@@ -9,10 +9,11 @@ Source bookmark: [x.com/tom_doerr/status/2048618137830969438](https://x.com/tom_
 ## What it does
 
 1. Type a ticker. Pull delayed Yahoo quote, headlines, and a VIX regime.
-2. **Run debate** — real OpenRouter calls, batched by layer (Macro → Sector → Superinvestor → CRO → CIO).
-3. Direction and size are computed from Darwinian weights × conviction, then CRO-capped.
-4. **Book to paper** (explicit by default). Mark the session to score agents on the ticker's subsequent return.
-5. **Autoresearch** after ≥3 debates: worst agent by rolling contribution gets a real prompt patch; Keep / Revert writes SQLite history.
+2. **Screener** — scan S&P 100 / Nasdaq-100 / a watchlist (or a theme box). Tape score first; optional one-shot OpenRouter scout from `screen`/`both` personas. **Masaya al** fills the ticker. No auto-debate.
+3. **Run debate** — real OpenRouter calls, batched by layer (Macro → Sector → Superinvestor → CRO → CIO). Roster is parametric: kind + surfaces (`debate` | `screen` | `both`) in Ayarlar.
+4. Direction and size are computed from Darwinian weights × conviction, then CRO-capped.
+5. **Book to paper** (explicit by default). Mark the session to score agents on the ticker's subsequent return.
+6. **Autoresearch** after ≥3 debates: worst agent by rolling contribution gets a real prompt patch; Keep / Revert writes SQLite history.
 
 No mock takes. No API key → the desk refuses to debate.
 
@@ -56,7 +57,8 @@ All knobs live in **Ayarlar** and SQLite (`data/atlas.sqlite`, gitignored):
 
 OpenRouter base URL, **model** (live catalog), temperature, max tokens, agent language (tr/en),
 starting cash, confirm-to-book, allow short, slippage bps, CRO caps per regime, Darwin
-multipliers + weight clamp, VIX thresholds, autoresearch lookback.
+multipliers + weight clamp, VIX thresholds, autoresearch lookback, screener universe / weights /
+scout toggle, and the agent kadro (kind, surfaces, charter).
 
 Default model: `anthropic/claude-sonnet-5`. Change it any time.
 

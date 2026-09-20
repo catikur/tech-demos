@@ -13,12 +13,14 @@ import {
   resolveApiKey,
   saveSettings,
   setApiKeyOverride,
+  upsertAgent,
 } from "./db";
 import { persistDebate, runCio, runCro, runLayer } from "./debate";
 import { fetchBriefing } from "./market";
 import { listModels } from "./openrouter";
 import { bookDebate, closePos, snapshotBook } from "./paper";
 import { markSession, proposeAutoresearch, resolveAutoresearch } from "./scoring";
+import { runScreen } from "./screen";
 import {
   clientIp,
   isAuthed,
@@ -222,6 +224,34 @@ const server = Bun.serve({
         return json({ briefing, cap: briefing.regime });
       }
 
+      if (url.pathname === "/api/screen" && req.method === "POST") {
+        const ip = clientIp(req);
+        if (!rateLimit(`screen:${ip}`, 12, 60 * 60 * 1000)) return fail("Too many requests", 429);
+        const body = await readBody(req);
+        const theme = String(body.theme ?? "").trim();
+        const key = resolveApiKey();
+        return json(await runScreen(getSettings(), key, theme));
+      }
+
+      if (url.pathname === "/api/agents" && req.method === "PUT") {
+        const ip = clientIp(req);
+        if (!rateLimit(`agents:${ip}`, 40, 60 * 60 * 1000)) return fail("Too many requests", 429);
+        const body = await readBody(req);
+        const agent = upsertAgent({
+          id: String(body.id ?? ""),
+          name: typeof body.name === "string" ? body.name : undefined,
+          role: typeof body.role === "string" ? body.role : undefined,
+          layer: typeof body.layer === "string" ? body.layer : undefined,
+          emoji: typeof body.emoji === "string" ? body.emoji : undefined,
+          prompt: typeof body.prompt === "string" ? body.prompt : undefined,
+          kind: typeof body.kind === "string" ? body.kind : undefined,
+          surfaces: typeof body.surfaces === "string" ? body.surfaces : undefined,
+          enabled: typeof body.enabled === "boolean" ? body.enabled : undefined,
+          baseWeight: typeof body.baseWeight === "number" ? body.baseWeight : undefined,
+        });
+        return json({ agent, agents: listAgents() });
+      }
+
       if (url.pathname === "/api/debate" && req.method === "POST") {
         const key = resolveApiKey();
         if (!key) return fail("OPENROUTER_API_KEY missing — set it in Settings or the environment", 400);
@@ -247,7 +277,7 @@ const server = Bun.serve({
             }
             const cro: CroResult = await runCro(settings, key, briefing, takes);
             emit("cro", cro);
-            const synthesis = synthesize(takes, weights, cro.veto ? 0 : cro.capPct, layerMap());
+            const synthesis = synthesize(takes, weights, cro.veto ? 0 : cro.capPct, layerMap(listAgents()));
             const bullets = await runCio(
               settings,
               key,

@@ -1,18 +1,14 @@
 import { createHmac, timingSafeEqual as tse } from "node:crypto";
 import { join, normalize } from "node:path";
 import { pinOpenRouterBase } from "../src/shared/settings";
+import { sanitizeTicker } from "../src/shared/ticker";
+
+export { sanitizeTicker };
 
 export const AUTH_COOKIE = "atlas_session";
 export const allowedOpenRouterBase = pinOpenRouterBase;
 
 const hits = new Map<string, number[]>();
-
-export function sanitizeTicker(raw: string): string | null {
-  const t = raw.trim().toUpperCase();
-  if (!t || t.includes("\0") || t.length > 16) return null;
-  if (!/^\^?[A-Z0-9][A-Z0-9.\-]{0,14}$/.test(t)) return null;
-  return t;
-}
 
 export function safeStaticPath(dist: string, pathname: string): string | null {
   let rel = pathname === "/" || pathname === "" ? "index.html" : pathname;
@@ -37,7 +33,7 @@ export function publicErrorMessage(err: unknown): string {
     return "Upstream model request failed";
   }
   const client =
-    /required|missing|not found|Already booked|STAND DOWN|Need at least|disabled|quantity is 0|Not enough cash|Could not identify|incomplete patch|Unauthorized|Too many|Invalid ticker|No pending/i.test(
+    /required|missing|not found|Already booked|STAND DOWN|Need at least|disabled|quantity is 0|Not enough cash|Could not identify|incomplete patch|Unauthorized|Too many|Invalid ticker|Invalid agent|No pending|Theme returned|CRO\/CIO/i.test(
       message,
     );
   if (client && message.length <= 180) return message;

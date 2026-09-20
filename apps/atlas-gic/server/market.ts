@@ -10,7 +10,7 @@ function yahooSymbol(ticker: string): string {
 
 async function yahooChart(symbol: string) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
+  const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(12_000) });
   if (!res.ok) throw new Error(`Yahoo ${symbol} ${res.status}`);
   const data = (await res.json()) as {
     chart?: { result?: Array<Record<string, unknown>>; error?: { description?: string } };
@@ -25,7 +25,7 @@ async function yahooChart(symbol: string) {
 
 async function yahooSearch(q: string): Promise<Headline[]> {
   const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}`;
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
+  const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(12_000) });
   if (!res.ok) return [];
   const data = (await res.json()) as { news?: Array<{ title?: string; publisher?: string }> };
   return (data.news ?? [])
@@ -51,7 +51,7 @@ export async function fetchQuote(ticker: string): Promise<{
   const price = Number(meta.regularMarketPrice);
   if (!Number.isFinite(price) || price <= 0) throw new Error(`No last price for ${symbol}`);
   return {
-    ticker: String(meta.symbol ?? symbol),
+    ticker: clean,
     company: String(meta.longName || meta.shortName || symbol),
     price,
     changePct: Number(meta.regularMarketChangePercent ?? 0),
@@ -60,6 +60,91 @@ export async function fetchQuote(ticker: string): Promise<{
     dayLow: Number(meta.regularMarketDayLow ?? price),
     currency: String(meta.currency ?? "USD"),
   };
+}
+
+export async function fetchQuotes(tickers: string[]): Promise<Array<{
+  ticker: string;
+  company: string;
+  price: number;
+  changePct: number;
+  volume: number;
+  dayHigh: number;
+  dayLow: number;
+  currency: string;
+}>> {
+  const seen = new Set<string>();
+  const clean: string[] = [];
+  for (const t of tickers) {
+    const s = sanitizeTicker(t);
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    clean.push(s);
+  }
+  const out: Array<{
+    ticker: string;
+    company: string;
+    price: number;
+    changePct: number;
+    volume: number;
+    dayHigh: number;
+    dayLow: number;
+    currency: string;
+  }> = [];
+  for (let i = 0; i < clean.length; i += 20) {
+    const chunk = clean.slice(i, i + 20);
+    try {
+      out.push(...(await yahooQuoteBatch(chunk)));
+    } catch {
+      for (const t of chunk) {
+        try {
+          out.push(await fetchQuote(t));
+        } catch {
+          /* skip dead symbols */
+        }
+      }
+    }
+  }
+  return out;
+}
+
+async function yahooQuoteBatch(tickers: string[]) {
+  const symbols = tickers.map(yahooSymbol).join(",");
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols)}`;
+  const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) throw new Error(`Yahoo batch ${res.status}`);
+  const data = (await res.json()) as {
+    quoteResponse?: {
+      result?: Array<Record<string, unknown>>;
+    };
+  };
+  const rows = data.quoteResponse?.result ?? [];
+  const mapped = rows
+    .map((meta) => {
+      const price = Number(meta.regularMarketPrice);
+      if (!Number.isFinite(price) || price <= 0) return null;
+      const symbol = String(meta.symbol ?? "");
+      return {
+        ticker: symbol.replace(/-/g, "."),
+        company: String(meta.longName || meta.shortName || symbol),
+        price,
+        changePct: Number(meta.regularMarketChangePercent ?? 0),
+        volume: Number(meta.regularMarketVolume ?? 0),
+        dayHigh: Number(meta.regularMarketDayHigh ?? price),
+        dayLow: Number(meta.regularMarketDayLow ?? price),
+        currency: String(meta.currency ?? "USD"),
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => Boolean(r));
+  if (!mapped.length) throw new Error("Yahoo batch empty");
+  return mapped;
+}
+
+export async function fetchVix(settings: Settings) {
+  const meta = await yahooChart("^VIX");
+  const vix = Number(meta.regularMarketPrice);
+  const vixChangePct = Number(meta.regularMarketChangePercent ?? 0);
+  if (!Number.isFinite(vix)) throw new Error("Could not read VIX");
+  return { vix, vixChangePct, regime: regimeFromVix(vix, settings) };
 }
 
 export async function fetchBriefing(ticker: string, settings: Settings): Promise<Briefing> {

@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { AGENTS } from "./shared/agents";
 import { fmtWeight } from "./shared/engine";
 import { DEFAULT_SETTINGS } from "./shared/settings";
 import type { Agent, AgentTake, Commit, CroResult, Regime, Stance, Synthesis, Weights } from "./shared/types";
@@ -132,13 +131,15 @@ export function LayerSection({
 export function Leaderboard({
   weights,
   flaggedId,
+  agents,
 }: {
   weights: Weights;
   flaggedId: string | null;
+  agents: Agent[];
 }) {
-  const rows = AGENTS.filter((a) => a.layer !== "decision").sort(
-    (a, b) => weights[b.id] - weights[a.id],
-  );
+  const rows = agents
+    .filter((a) => a.layer !== "decision" && a.enabled !== false)
+    .sort((a, b) => (weights[b.id] ?? b.baseWeight) - (weights[a.id] ?? a.baseWeight));
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
       <h3 className="mb-3 font-mono text-xs font-bold tracking-[0.2em] text-zinc-400 uppercase">

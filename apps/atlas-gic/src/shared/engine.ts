@@ -113,8 +113,8 @@ function clamp01(x: number): number {
   return Math.min(1, Math.max(0, x));
 }
 
-export function layerMap(): Record<string, LayerId> {
+export function layerMap(agents: Array<{ id: string; layer: LayerId }> = AGENTS): Record<string, LayerId> {
   const m: Record<string, LayerId> = {};
-  for (const a of AGENTS) m[a.id] = a.layer;
+  for (const a of agents) m[a.id] = a.layer;
   return m;
 }

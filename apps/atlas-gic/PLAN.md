@@ -1,5 +1,22 @@
-# PLAN — atlas-gic
+# PLAN — atlas-gic screener + parametric roster
 
-See `SPEC.md` for the product spec (paper research desk + ledger).
+## Goal
 
-Original demo slice shipped first; the app is now A+B: live OpenRouter debate, Yahoo briefing, SQLite paper book, Darwin mark, Keep/Revert autoresearch. Live broker (C) is out of scope.
+Daily Yahoo tape scan over a parametric universe, optional screen-persona scout (one LLM batch), click-through to the existing debate desk. Agent roster is editable: `kind` + `surfaces` (`debate` | `screen` | `both`).
+
+## In
+
+- Universes: S&P 100 / NDX / watchlist
+- Numeric score (momentum, volume, range, regime fit) — knobs in Ayarlar
+- Top N; `screen`/`both` agents one OpenRouter pass
+- Theme box: one LLM ticker list, Yahoo-validated, same pipe
+- `Masaya al` fills ticker + briefing (no auto-debate)
+- Two default scouts (technical, fundamental); kadro editor in Ayarlar
+
+## Out
+
+Live broker, auto-debate on every hit, paid fundamentals (PE/options).
+
+## UX
+
+Header **Screener** drawer: universe, theme, Tara, ranked table. Settings: screen knobs + persona rows.

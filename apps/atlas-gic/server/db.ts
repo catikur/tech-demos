@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { AGENTS } from "../src/shared/agents";
 import { fakeHash } from "../src/shared/engine";
 import { DEFAULT_SETTINGS, mergeSettings } from "../src/shared/settings";
-import type { AgentTake, DebateRecord, Position, Settings, Weights } from "../src/shared/types";
+import type { Agent, AgentKind, AgentSurface, AgentTake, DebateRecord, LayerId, Position, Settings, Weights } from "../src/shared/types";
 
 const DB_PATH = join(import.meta.dir, "..", "data", "atlas.sqlite");
 
@@ -18,6 +18,66 @@ export function getDb(): Database {
   db.exec("PRAGMA foreign_keys = ON;");
   migrate(db);
   return db;
+}
+
+function tableCols(database: Database, table: string): Set<string> {
+  return new Set(
+    (database.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name),
+  );
+}
+
+function ensureAgentRoster(database: Database) {
+  const names = tableCols(database, "agents");
+  if (!names.has("kind")) database.exec("ALTER TABLE agents ADD COLUMN kind TEXT NOT NULL DEFAULT 'tape'");
+  if (!names.has("surfaces")) database.exec("ALTER TABLE agents ADD COLUMN surfaces TEXT NOT NULL DEFAULT 'debate'");
+  if (!names.has("enabled")) database.exec("ALTER TABLE agents ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1");
+  const insertAgent = database.prepare(
+    `INSERT INTO agents (id, name, role, layer, emoji, base_weight, prompt, weight, kind, surfaces, enabled)
+     VALUES ($id, $name, $role, $layer, $emoji, $base, $prompt, $weight, $kind, $surfaces, $enabled)`,
+  );
+  const insertVer = database.prepare(
+    `INSERT INTO prompt_versions (agent_id, prompt, kind, hash, message, created_at)
+     VALUES ($agent, $prompt, 'init', $hash, $message, $at)`,
+  );
+  const now = new Date().toISOString();
+  for (const a of AGENTS) {
+    const exists = database.query("SELECT id FROM agents WHERE id = $id").get({ $id: a.id }) as
+      | { id: string }
+      | undefined;
+    if (exists) continue;
+    insertAgent.run({
+      $id: a.id,
+      $name: a.name,
+      $role: a.role,
+      $layer: a.layer,
+      $emoji: a.emoji,
+      $base: a.baseWeight,
+      $prompt: a.prompt,
+      $weight: a.baseWeight,
+      $kind: a.kind,
+      $surfaces: a.surfaces,
+      $enabled: a.enabled ? 1 : 0,
+    });
+    insertVer.run({
+      $agent: a.id,
+      $prompt: a.prompt,
+      $hash: fakeHash(`init-${a.id}`),
+      $message: `init: ${a.name} charter`,
+      $at: now,
+    });
+  }
+  const meta = database.query("SELECT value FROM meta WHERE key = 'agent_meta_v2'").get() as
+    | { value: string }
+    | undefined;
+  if (!meta) {
+    const upd = database.prepare("UPDATE agents SET kind = $k, surfaces = $s WHERE id = $id");
+    database.transaction(() => {
+      for (const a of AGENTS) {
+        upd.run({ $k: a.kind, $s: a.surfaces, $id: a.id });
+      }
+      database.run("INSERT INTO meta (key, value) VALUES ('agent_meta_v2', '1')");
+    })();
+  }
 }
 
 function migrate(database: Database) {
@@ -34,7 +94,10 @@ function migrate(database: Database) {
       emoji TEXT NOT NULL,
       base_weight REAL NOT NULL,
       prompt TEXT NOT NULL,
-      weight REAL NOT NULL
+      weight REAL NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'tape',
+      surfaces TEXT NOT NULL DEFAULT 'debate',
+      enabled INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE IF NOT EXISTS prompt_versions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,8 +166,8 @@ function migrate(database: Database) {
     | undefined;
   if (!seeded) {
     const insertAgent = database.prepare(
-      `INSERT INTO agents (id, name, role, layer, emoji, base_weight, prompt, weight)
-       VALUES ($id, $name, $role, $layer, $emoji, $base, $prompt, $weight)`,
+      `INSERT INTO agents (id, name, role, layer, emoji, base_weight, prompt, weight, kind, surfaces, enabled)
+       VALUES ($id, $name, $role, $layer, $emoji, $base, $prompt, $weight, $kind, $surfaces, $enabled)`,
     );
     const insertVer = database.prepare(
       `INSERT INTO prompt_versions (agent_id, prompt, kind, hash, message, created_at)
@@ -122,6 +185,9 @@ function migrate(database: Database) {
           $base: a.baseWeight,
           $prompt: a.prompt,
           $weight: a.baseWeight,
+          $kind: a.kind,
+          $surfaces: a.surfaces,
+          $enabled: a.enabled ? 1 : 0,
         });
         insertVer.run({
           $agent: a.id,
@@ -142,8 +208,10 @@ function migrate(database: Database) {
         $c: String(DEFAULT_SETTINGS.startingCash),
       });
       database.run("INSERT INTO meta (key, value) VALUES ('seeded', '1')");
+      database.run("INSERT INTO meta (key, value) VALUES ('agent_meta_v2', '1')");
     })();
   }
+  ensureAgentRoster(database);
 }
 
 export function getSettings(): Settings {
@@ -241,19 +309,121 @@ export function setWeights(weights: Weights) {
   })();
 }
 
-export function listAgents() {
-  return getDb()
-    .query("SELECT id, name, role, layer, emoji, base_weight as baseWeight, prompt, weight FROM agents")
+export function listAgents(): Agent[] {
+  const rows = getDb()
+    .query(
+      `SELECT id, name, role, layer, emoji, base_weight as baseWeight, prompt, weight,
+              kind, surfaces, enabled
+       FROM agents`,
+    )
     .all() as Array<{
     id: string;
     name: string;
     role: string;
-    layer: string;
+    layer: LayerId;
     emoji: string;
     baseWeight: number;
     prompt: string;
     weight: number;
+    kind?: string;
+    surfaces?: string;
+    enabled?: number;
   }>;
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    role: r.role,
+    layer: r.layer,
+    emoji: r.emoji,
+    baseWeight: r.baseWeight,
+    prompt: r.prompt,
+    weight: r.weight,
+    kind: parseKind(r.kind),
+    surfaces: parseSurface(r.surfaces),
+    enabled: r.enabled !== 0,
+  }));
+}
+
+function parseKind(raw: string | undefined): AgentKind {
+  const k = String(raw ?? "tape");
+  if (
+    k === "tape" ||
+    k === "technical" ||
+    k === "fundamental" ||
+    k === "macro" ||
+    k === "superinvestor" ||
+    k === "risk"
+  ) {
+    return k;
+  }
+  return "tape";
+}
+
+function parseSurface(raw: string | undefined): AgentSurface {
+  const s = String(raw ?? "debate");
+  if (s === "debate" || s === "screen" || s === "both") return s;
+  return "debate";
+}
+
+const LAYERS: LayerId[] = ["macro", "sector", "superinvestor", "decision"];
+
+export function upsertAgent(patch: {
+  id: string;
+  name?: string;
+  role?: string;
+  layer?: string;
+  emoji?: string;
+  prompt?: string;
+  kind?: string;
+  surfaces?: string;
+  enabled?: boolean;
+  baseWeight?: number;
+}): Agent {
+  const id = patch.id.trim().toLowerCase();
+  if (!/^[a-z][a-z0-9-]{1,39}$/.test(id)) throw new Error("Invalid agent id");
+  const existing = getAgent(id);
+  if (!existing && (!patch.name || !patch.prompt)) throw new Error("name and prompt required");
+  const layer = LAYERS.includes(patch.layer as LayerId)
+    ? (patch.layer as LayerId)
+    : (existing?.layer ?? "sector");
+  if ((id === "cro" || id === "cio") && layer !== "decision") throw new Error("CRO/CIO stay on decision layer");
+  const name = String(patch.name ?? existing?.name ?? id).slice(0, 80);
+  const role = String(patch.role ?? existing?.role ?? "").slice(0, 120);
+  const emoji = String(patch.emoji ?? existing?.emoji ?? "🤖").slice(0, 8);
+  const prompt = String(patch.prompt ?? existing?.prompt ?? "").slice(0, 4000);
+  if (!prompt.trim()) throw new Error("prompt required");
+  const kind = parseKind(patch.kind ?? existing?.kind);
+  const surfaces = parseSurface(patch.surfaces ?? existing?.surfaces);
+  const enabled = patch.enabled ?? existing?.enabled ?? true;
+  const base = Number(patch.baseWeight ?? existing?.baseWeight ?? 1);
+  const weight = existing?.weight ?? base;
+  const creating = !existing;
+  getDb().run(
+    `INSERT INTO agents (id, name, role, layer, emoji, base_weight, prompt, weight, kind, surfaces, enabled)
+     VALUES ($id, $name, $role, $layer, $emoji, $base, $prompt, $weight, $kind, $surfaces, $enabled)
+     ON CONFLICT(id) DO UPDATE SET
+       name = $name, role = $role, layer = $layer, emoji = $emoji, prompt = $prompt,
+       kind = $kind, surfaces = $surfaces, enabled = $enabled, base_weight = $base`,
+    {
+      $id: id,
+      $name: name,
+      $role: role,
+      $layer: layer,
+      $emoji: emoji,
+      $base: base,
+      $prompt: prompt,
+      $weight: weight,
+      $kind: kind,
+      $surfaces: surfaces,
+      $enabled: enabled ? 1 : 0,
+    },
+  );
+  const saved = getAgent(id);
+  if (!saved) throw new Error("agent write failed");
+  if (creating) {
+    addCommit({ agentId: id, prompt, kind: "init", message: `init: ${name} charter` });
+  }
+  return saved;
 }
 
 export function getAgent(id: string) {

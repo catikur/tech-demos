@@ -45,13 +45,14 @@ Layer LLM calls are **batched per layer** (one JSON object of takes), sequential
 | `server/openrouter.ts` | Chat completions, JSON parse, model list |
 | `server/market.ts` | Quote, VIX, headlines |
 | `server/debate.ts` | Orchestrate briefing + 5 LLM calls + persist |
+| `server/screen.ts` | Universe/theme tape scan + optional one-shot scout |
 | `server/paper.ts` | Book / mark / close |
 | `server/scoring.ts` | Contributions + weight update + autoresearch |
-| `src/App.tsx` | Desk UI: ticker, stream, book, mark, settings |
+| `src/App.tsx` | Desk UI: ticker, screener, stream, book, mark, settings / kadro |
 
 ## Data
 
-SQLite tables: `settings`, `agents`, `prompt_versions`, `debates`, `takes`, `positions`, `marks`.
+SQLite tables: `settings`, `agents` (kind, surfaces, enabled), `prompt_versions`, `debates`, `takes`, `positions`, `marks`.
 
 Paper math: `equity = cash + Σ MTM`. Long open debit cash; short open credit cash. Close realizes into cash. Slippage in bps applied on fill.
 

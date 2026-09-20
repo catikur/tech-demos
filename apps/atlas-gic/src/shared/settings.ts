@@ -20,6 +20,17 @@ export const DEFAULT_SETTINGS: Settings = {
   vixRiskOnBelow: 16,
   vixRiskOffAbove: 25,
   autoresearchLookback: 10,
+  screenUniverse: "sp100",
+  screenWatchlist: "NVDA, AAPL, MSFT, AMZN, META, GOOGL, AVGO, TSLA",
+  screenSize: 8,
+  screenMinPrice: 5,
+  screenMinVolume: 1_000_000,
+  screenWMomentum: 1,
+  screenWVolume: 0.6,
+  screenWRange: 0.5,
+  screenWRegime: 0.8,
+  screenScoutEnabled: true,
+  screenScoutMaxNames: 8,
 };
 
 export const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
@@ -70,6 +81,18 @@ export function mergeSettings(raw: Record<string, unknown> | null | undefined): 
     vixRiskOnBelow: clamp(NUM(r.vixRiskOnBelow, d.vixRiskOnBelow), 5, 40),
     vixRiskOffAbove: clamp(NUM(r.vixRiskOffAbove, d.vixRiskOffAbove), 10, 80),
     autoresearchLookback: Math.round(clamp(NUM(r.autoresearchLookback, d.autoresearchLookback), 3, 50)),
+    screenUniverse:
+      r.screenUniverse === "ndx100" || r.screenUniverse === "watchlist" ? r.screenUniverse : "sp100",
+    screenWatchlist: String(r.screenWatchlist ?? d.screenWatchlist).slice(0, 2000),
+    screenSize: Math.round(clamp(NUM(r.screenSize, d.screenSize), 3, 20)),
+    screenMinPrice: clamp(NUM(r.screenMinPrice, d.screenMinPrice), 0, 10_000),
+    screenMinVolume: clamp(NUM(r.screenMinVolume, d.screenMinVolume), 0, 1e12),
+    screenWMomentum: clamp(NUM(r.screenWMomentum, d.screenWMomentum), 0, 5),
+    screenWVolume: clamp(NUM(r.screenWVolume, d.screenWVolume), 0, 5),
+    screenWRange: clamp(NUM(r.screenWRange, d.screenWRange), 0, 5),
+    screenWRegime: clamp(NUM(r.screenWRegime, d.screenWRegime), 0, 5),
+    screenScoutEnabled: BOOL(r.screenScoutEnabled, d.screenScoutEnabled),
+    screenScoutMaxNames: Math.round(clamp(NUM(r.screenScoutMaxNames, d.screenScoutMaxNames), 3, 20)),
   };
   if (s.vixRiskOnBelow >= s.vixRiskOffAbove) {
     s.vixRiskOnBelow = d.vixRiskOnBelow;
