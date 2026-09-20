@@ -29,6 +29,8 @@ export interface SendChatInput {
   body: string;
   /** Local chat message id to reply to (Teams channel threads). */
   replyToMessageId?: string | null;
+  /** Graph chat body type. Local Butler copy may still store plain text. */
+  contentType?: "text" | "html";
 }
 
 /**

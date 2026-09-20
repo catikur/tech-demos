@@ -1,5 +1,6 @@
 import type { MorningBriefing } from "../../shared/types.ts";
 import { commitments, events, meetings, proposedDrafts, threads } from "../db/repo.ts";
+import { computeRadar } from "./radar.ts";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -22,6 +23,7 @@ export function buildMorningBriefing(
   const fromAt = startOfLocalDay(now);
   const toAt = fromAt + DAY;
   const owner = opts.ownerEmail ?? null;
+  const radar = computeRadar(spaceId, opts.accountIds);
   return {
     generatedAt: now,
     fromAt,
@@ -38,5 +40,7 @@ export function buildMorningBriefing(
     recentMeetings: meetings
       .list(spaceId, 20, opts.accountIds)
       .filter((m) => m.end >= now - 7 * DAY && m.end <= now + DAY),
+    waitingOnMe: radar.filter((r) => r.direction === "waiting_on_me").slice(0, 8),
+    waitingOnThem: radar.filter((r) => r.direction === "waiting_on_them").slice(0, 5),
   };
 }

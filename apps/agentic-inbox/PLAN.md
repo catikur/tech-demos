@@ -8,9 +8,9 @@ recordings) + Gmail (+ Google Calendar), hard-walled spaces, a real tool-calling
 productivity features — all local (Bun + SQLite), zero credentials required for the demo.
 
 This slice turns Butler into Conforcus’s **daily corporate assistant**: morning briefing posted to the
-**Yonetim / Butler** Teams channel, the **Conforcus Vault** SharePoint library indexed as knowledge,
-meeting notes filled from a vault template folder (picked in Settings), and a **Plaud** credentials
-slot for later transcript pull.
+**Yonetim / Butler** Teams channel (action-first HTML: Şimdi yap / Bugün / Beklediklerin), the
+**Conforcus Vault** SharePoint library indexed as knowledge, meeting notes filled from a vault
+template folder, and **Plaud Embedded ASR** for mp4 files Butler already downloaded.
 
 Source bookmark (viral list): https://x.com/shanyanggm/status/2098941338297458746
 Upstream: https://github.com/cloudflare/agentic-inbox
@@ -28,11 +28,12 @@ Upstream: https://github.com/cloudflare/agentic-inbox
 | 6 | Scheduler (sync, T-15 briefs, daily/weekly digests, reminders), notification center | done |
 | 8 | Morning briefing, overnight drafts, calendar meeting stubs, Graph 423 → Teams link, Google “one client / two Library APIs” copy, multi-user owner wall + shared Work commitments | done |
 | 9 | Inbox hygiene (Graph ghosts, empty-thread freeze, leftover debug APIs) | done |
-| 10 | Org assistant: Teams briefing channel, SharePoint vault KB, template folder picker, Plaud settings | this PR |
+| 10 | Org assistant: Teams briefing channel, SharePoint vault KB, template folder picker, Plaud settings | done |
+| 11 | Action-first Teams brief HTML + Plaud Embedded ASR for local recordings | this PR |
 
 ## Out of scope (for now)
 - Hosted multi-tenant SaaS beyond @conforcus.com on one SQLite
-- Plaud live MCP inside the VPS (credentials stored; pull lands when the fields work)
+- Plaud Note library / Cursor MCP on the VPS (browser OAuth; VPS cannot sign in)
 - Unlocking Graph 423 Teams recordings
 - Hostinger MCP deploy (API still times out; SSH remains the VPS path)
 - Changes outside `apps/agentic-inbox/`; new GitHub repository

@@ -53,6 +53,7 @@ export interface OrgSettingsView {
   vaultError: string | null;
   plaud: {
     configured: boolean;
+    canTranscribe: boolean;
     clientIdMasked: string | null;
     hasSecret: boolean;
     hasApiKey: boolean;
@@ -278,6 +279,7 @@ export function orgSettingsView(spaceId: string | null): OrgSettingsView {
     vaultError: cache.error,
     plaud: {
       configured: !!(plaud && (plaud.clientId || plaud.apiKey)),
+      canTranscribe: !!(plaud?.clientId && plaud.clientSecret && plaud.apiKey),
       clientIdMasked: plaud?.clientId ? maskId(plaud.clientId) : null,
       hasSecret: !!plaud?.clientSecret,
       hasApiKey: !!plaud?.apiKey,

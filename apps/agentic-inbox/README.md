@@ -50,12 +50,12 @@ Both OAuth flows are auth-code + PKCE implemented with plain `fetch`; tokens are
 - **Inbox** — unified threads across *your* accounts (space-filtered), search, composer, and a
   **person chip** under every thread showing last contact, open commitments and the next
   meeting with that person.
-- **Morning briefing** — today’s calendar, overnight unread mail, due commitments (Work is
-  shared across @conforcus.com), pending draft replies, and recent meetings even without a transcript.
+- **Morning briefing** — action-first: what you owe, today’s meetings, what you are waiting on,
+  Butler drafts to approve. Teams post is HTML (`Şimdi yap` / `Bugün` / `Beklediklerin`), not an unread dump.
 - **Calendar** — day-grouped events, cross-space overlap warnings, join links, and the
   **Meeting brief** panel.
 - **Chats** — Teams 1:1, group and channel messages (including channel thread replies), mention highlighting; send after confirm.
-- **Meetings** — calendar stubs + transcripts when Graph allows them; if recording download is **423 Locked**, the row still appears with an Open in Teams link.
+- **Meetings** — calendar stubs + transcripts when Graph allows them; **Plaud Embedded** transcribes a local mp4 (`Toplantılar → Plaud ile çözümle`). Graph **423 Locked** stays a Teams link — those keys cannot pull Note-cloud files.
 - **Catch-up**, **Commitments** (push to Microsoft To Do; Work ledger is shared), **Radar**, **Topics**, **People** — the seven features (below).
 - **Settings** — space rules, accounts, connectors, **corporate assistant** (Teams briefing channel, SharePoint vault URL + template folder, Plaud credentials), OpenRouter status.
 - **Notification bell** — briefs, digests, commitment reminders and radar nudges from the scheduler.

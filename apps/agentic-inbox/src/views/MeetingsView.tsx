@@ -32,7 +32,7 @@ export function MeetingsView({
   const detail = useData<(Meeting & { transcript: TranscriptLine[] | null }) | null>(
     () => (selectedId ? api.get(`/api/meetings/${selectedId}`) : Promise.resolve(null)),
     [selectedId],
-    () => false,
+    (ev) => ev.type === "sync" || (ev.type === "data" && ev.entity === "meetings"),
   );
   const meetings = list.data ?? [];
   const meeting = detail.data && detail.data.id === selectedId ? detail.data : null;

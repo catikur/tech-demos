@@ -520,4 +520,36 @@ describe("M365 skips Graph delta shells that are not real mail", () => {
     expect(result.externalId).toBe("msg-posted");
     expect(posted).toEqual([`POST /teams/${team}/channels/${encodeURIComponent(channel)}/messages`]);
   });
+
+  test("sendChatMessage can post HTML briefing bodies", async () => {
+    chats.upsert({
+      id: "ch_html",
+      externalId: "19:chatHtml",
+      spaceId: WORK_SPACE_ID,
+      accountId: account.id,
+      kind: "group",
+      title: "html",
+      members: [],
+      lastAt: Date.now(),
+      unreadCount: 0,
+    });
+    let body = "";
+    const client: GraphLike = {
+      async request(_url, init) {
+        body = String(init?.body ?? "");
+        return { id: "html-1" } as never;
+      },
+      async collect() {
+        return { items: [], deltaLink: null };
+      },
+    };
+    await new M365Connector(() => client).sendChatMessage(account, {
+      chatId: "ch_html",
+      body: "<p><b>Özet:</b> 1 aksiyon</p>",
+      contentType: "html",
+      replyToMessageId: null,
+    });
+    expect(body).toContain('"contentType":"html"');
+    expect(body).toContain("Özet:");
+  });
 });

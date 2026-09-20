@@ -372,6 +372,8 @@ export interface MorningBriefing {
   dueCommitments: Commitment[];
   drafts: ProposedDraft[];
   recentMeetings: Meeting[];
+  waitingOnMe: RadarItem[];
+  waitingOnThem: RadarItem[];
 }
 
 export interface MeetingBrief {

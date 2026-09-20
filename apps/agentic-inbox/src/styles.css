@@ -1442,13 +1442,20 @@ code {
   grid-template-columns: 1fr 1fr;
 }
 
-.briefing-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  padding: 12px 16px 20px;
-  overflow: auto;
-  align-content: start;
+.briefing-lead {
+  grid-column: 1 / -1;
+}
+
+.briefing-summary {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.org-plaud-points {
+  margin: 0 0 12px;
+  padding-left: 1.2rem;
+  max-width: 44rem;
 }
 
 .briefing-item {
