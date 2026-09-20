@@ -10,8 +10,9 @@ productivity features — all local (Bun + SQLite), zero credentials required fo
 This slice turns Butler into Conforcus’s **daily corporate assistant**: morning briefing posted to the
 **Yonetim / Butler** Teams channel (action-first HTML: Şimdi yap / Bugün / Beklediklerin), the
 **Conforcus Vault** SharePoint library indexed as knowledge, meeting notes filled from a vault
-template folder, and **Plaud Embedded ASR** for mp4 files Butler already downloaded. Mail, Teams
-and calendar bodies render as sanitized HTML (lists, bold, links) instead of a flattened pre dump.
+template folder, and **Plaud Embedded ASR** for mp4 files Butler already downloaded. The cockpit is
+mobile-first: bottom tabs + sheets on phone, icon rail on desktop, agent as an overlay
+(not a permanent third column). Mail, Teams and calendar bodies render as sanitized HTML.
 Open work is a drag-and-drop **Kanban** (Yapılacak / Yapılıyor / Beklemede / Bitti).
 
 Source bookmark (viral list): https://x.com/shanyanggm/status/2098941338297458746
@@ -32,7 +33,8 @@ Upstream: https://github.com/cloudflare/agentic-inbox
 | 9 | Inbox hygiene (Graph ghosts, empty-thread freeze, leftover debug APIs) | done |
 | 10 | Org assistant: Teams briefing channel, SharePoint vault KB, template folder picker, Plaud settings | done |
 | 11 | Action-first Teams brief HTML + Plaud Embedded ASR for local recordings | done |
-| 12 | Readable mail/meeting HTML bodies + Kanban board for open work | this PR |
+| 12 | Readable mail/meeting HTML bodies + Kanban board for open work | done |
+| 13 | Mobile-first cockpit shell: overlay agent, bottom nav, adaptive splits, new visual system | this PR |
 
 ## Out of scope (for now)
 - Hosted multi-tenant SaaS beyond @conforcus.com on one SQLite

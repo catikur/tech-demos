@@ -6,6 +6,7 @@ import { t } from "../i18n.ts";
 import { ago, fmtTime, initials, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
 import { RichBody } from "../components/RichBody.tsx";
+import { BackButton } from "../components/BackButton.tsx";
 
 function kindLabel(kind: Chat["kind"]): string {
   return t(`chats.kind.${kind}`);
@@ -67,7 +68,7 @@ export function ChatsView({
   const threadRoot = (m: ChatMessage) => m.replyToId ?? m.id;
 
   return (
-    <div className="split split-2">
+    <div className={`split split-2 ${selectedId ? "has-selection" : ""}`}>
       <section className="pane pane-list">
         <div className="pane-header">
           <h2>{t("chats.title")}</h2>
@@ -106,6 +107,7 @@ export function ChatsView({
         ) : (
           <>
             <div className="pane-header">
+              <BackButton onBack={() => onSelect(null)} />
               <h2 className="detail-title">{chat.title}</h2>
               <span className="badge badge-soft">{kindLabel(chat.kind)}</span>
             </div>

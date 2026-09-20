@@ -5,6 +5,7 @@ import { t } from "../i18n.ts";
 import { fmtDateTime } from "../state.ts";
 import { PersonChip } from "./PersonChip.tsx";
 import { RichBody } from "./RichBody.tsx";
+import { BackButton } from "./BackButton.tsx";
 
 export function ThreadCrashGuard({ resetKey, children }: { resetKey: string | null; children: ReactNode }) {
   return <ThreadCrashGuardInner resetKey={resetKey}>{children}</ThreadCrashGuardInner>;
@@ -43,6 +44,7 @@ export function ThreadView({
   thread,
   loading,
   error,
+  onBack,
   prefill,
   onPrefillConsumed,
   onSend,
@@ -50,6 +52,7 @@ export function ThreadView({
   thread: Thread | null;
   loading?: boolean;
   error?: string | null;
+  onBack?: () => void;
   prefill: string | null;
   onPrefillConsumed: () => void;
   onSend: (threadId: string, body: string) => Promise<void>;
@@ -80,6 +83,9 @@ export function ThreadView({
   if (loading) {
     return (
       <section className="pane pane-detail pane-empty">
+        <div className="pane-header">
+          <BackButton onBack={onBack} />
+        </div>
         <div className="empty-state">
           <p>{t("common.loading")}</p>
         </div>
@@ -90,6 +96,9 @@ export function ThreadView({
   if (error) {
     return (
       <section className="pane pane-detail">
+        <div className="pane-header">
+          <BackButton onBack={onBack} />
+        </div>
         <p className="muted" style={{ padding: 16 }}>
           {t("inbox.loadError")}
         </p>
@@ -129,6 +138,7 @@ export function ThreadView({
     return (
       <section className="pane pane-detail">
         <div className="pane-header">
+          <BackButton onBack={onBack} />
           <h2 className="detail-title">{thread.subject.trim() && thread.subject !== "(no subject)" ? thread.subject : t("inbox.noSubject")}</h2>
         </div>
         <p className="muted" style={{ padding: 16 }}>
@@ -143,6 +153,7 @@ export function ThreadView({
   return (
     <section className="pane pane-detail">
       <div className="pane-header">
+        <BackButton onBack={onBack} />
         <h2 className="detail-title">{thread.subject.trim() && thread.subject !== "(no subject)" ? thread.subject : t("inbox.noSubject")}</h2>
         <span className="badge badge-soft">{t("inbox.participants", { n: thread.participants.length })}</span>
       </div>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentContext, AgentEvent, Space } from "../../shared/types.ts";
 import { askAgent } from "../api/client.ts";
 import { spaceLabel, t } from "../i18n.ts";
+import { Icon } from "./Icon.tsx";
 
 type DraftTarget = { kind: "thread" | "chat" | "followup"; id: string };
 
@@ -26,11 +27,13 @@ const uid = () => `c${++nextId}`;
 export function AgentPanel({
   context,
   activeSpace,
+  onClose,
   onConfirmSend,
   onEditInComposer,
 }: {
   context: AgentContext;
   activeSpace: Space | null;
+  onClose?: () => void;
   onConfirmSend: (target: DraftTarget, body: string) => Promise<void>;
   onEditInComposer: (target: DraftTarget, body: string) => void;
 }) {
@@ -107,6 +110,11 @@ export function AgentPanel({
         <span className="badge badge-soft" style={activeSpace ? { color: activeSpace.color, borderColor: `${activeSpace.color}66` } : undefined}>
           {activeSpace ? t("agent.scopeSpace", { name: spaceLabel(activeSpace.kind) }) : t("agent.scopeAll")}
         </span>
+        {onClose && (
+          <button type="button" className="icon-btn" onClick={onClose} aria-label={t("shell.close")}>
+            <Icon name="close" />
+          </button>
+        )}
       </div>
       <div className="chat" ref={scrollRef}>
         {items.map((item) => {

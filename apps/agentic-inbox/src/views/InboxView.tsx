@@ -50,7 +50,7 @@ export function InboxView({
   };
 
   return (
-    <div className="split split-3">
+    <div className={`split split-3 ${selectedId ? "has-selection" : ""}`}>
       <InboxList
         threads={visible}
         spaces={spaces}
@@ -67,6 +67,7 @@ export function InboxView({
           thread={selected}
           loading={!!selectedId && thread.loading && !selected}
           error={selectedId ? thread.error : null}
+          onBack={() => onSelect(null)}
           prefill={prefill && prefill.threadId === selectedId ? prefill.body : null}
           onPrefillConsumed={onPrefillConsumed}
           onSend={async (threadId, body) => {
