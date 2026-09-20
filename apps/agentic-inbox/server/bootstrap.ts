@@ -1,7 +1,7 @@
 import type { Space } from "../shared/types.ts";
 import { env } from "./env.ts";
 import { demoAccounts } from "./connectors/demo.ts";
-import { accounts, settings, spaces, wipeDerivedData } from "./db/repo.ts";
+import { accounts, settings, spaces, threads, wipeDerivedData } from "./db/repo.ts";
 
 export const WORK_SPACE_ID = "space_work";
 export const PERSONAL_SPACE_ID = "space_personal";
@@ -55,6 +55,7 @@ export function bootstrap(opts?: { seedDemo?: boolean }): { seededDemo: boolean 
   }
   if (accounts.all().length === 0) wipeDerivedData();
   if (accounts.all().every((a) => a.provider !== "demo")) settings.set("demo_removed", "1");
+  threads.pruneEmpty();
   return { seededDemo: false };
 }
 

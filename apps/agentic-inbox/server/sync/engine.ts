@@ -21,6 +21,7 @@ export async function syncAccount(account: Account, opts: { full?: boolean } = {
   try {
     const connector = connectorFor(account);
     const stats = await connector.sync(account, opts);
+    threads.pruneEmpty();
     indexPeople(account);
     accounts.markSync(account.id, null);
     for (const hook of hooks) {

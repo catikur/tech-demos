@@ -47,4 +47,20 @@ describe("bootstrap (no demo seed)", () => {
     expect(again.seededDemo).toBe(false);
     expect(accounts.all()).toHaveLength(2);
   });
+
+  test("SEED_DEMO env is ignored when NODE_ENV=production", () => {
+    const prev = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    process.env.SEED_DEMO = "1";
+    try {
+      openMemoryDb();
+      const result = bootstrap();
+      expect(result.seededDemo).toBe(false);
+      expect(accounts.all()).toEqual([]);
+    } finally {
+      delete process.env.SEED_DEMO;
+      if (prev === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = prev;
+    }
+  });
 });

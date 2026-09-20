@@ -18,7 +18,9 @@ export const env = {
   port: num("PORT", 3000),
   baseUrl: (process.env.APP_BASE_URL ?? `http://localhost:${num("PORT", 3000)}`).replace(/\/$/, ""),
   dataDir: resolve(process.env.DATA_DIR ?? "./data"),
-  production: process.env.NODE_ENV === "production",
+  get production() {
+    return process.env.NODE_ENV === "production";
+  },
 
   tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? null,
   /** Graph subscription clientState. Generated and persisted in settings when omitted. */
@@ -70,9 +72,9 @@ export const env = {
     digestEmailToSelf: bool("DIGEST_EMAIL_TO_SELF", false),
     schedulerEnabled: bool("SCHEDULER_ENABLED", true),
   },
-  /** Local playground only. Production must stay off — never seed demo mailboxes on the VPS. */
+  /** Local playground only. Ignored in production so a stray env var cannot seed fake mailboxes. */
   get seedDemo() {
-    return bool("SEED_DEMO", false);
+    return !this.production && bool("SEED_DEMO", false);
   },
 };
 

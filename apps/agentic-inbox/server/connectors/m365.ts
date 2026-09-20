@@ -158,7 +158,9 @@ export class M365Connector implements Connector {
     const body = m.body?.contentType === "html" ? htmlToText(bodyRaw) : bodyRaw;
     const at = ts(m.receivedDateTime ?? m.sentDateTime);
     const existing = threads.get(threadId);
-    const subject = (m.subject ?? "(no subject)").replace(/^((re|fw|fwd|aw|wg)\s*:\s*)+/i, "").trim() || "(no subject)";
+    const subjectRaw = (m.subject ?? "").trim();
+    if (!from && !body.trim() && !subjectRaw && !existing) return;
+    const subject = (subjectRaw || "(no subject)").replace(/^((re|fw|fwd|aw|wg)\s*:\s*)+/i, "").trim() || "(no subject)";
     const participants = new Map<string, string>();
     for (const p of [...(existing?.participants ?? []), from, ...to, ...cc]) if (p) participants.set(senderEmail(p), p);
     const isMine = senderEmail(from) === me.mail;

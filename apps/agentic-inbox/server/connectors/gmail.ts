@@ -21,6 +21,10 @@ export class GoogleError extends Error {
   }
 }
 
+export function googleQuotaExceeded(body: string): boolean {
+  return /quota exceeded|userratelimitexceeded|ratelimitexceeded/i.test(body);
+}
+
 export class GoogleClient {
   constructor(private readonly accountId: string) {}
 
@@ -35,7 +39,7 @@ export class GoogleClient {
           ...((init.headers as Record<string, string>) ?? {}),
         },
       });
-      if (res.status === 429 || res.status === 503) {
+      if (res.status === 429 || res.status === 503 || (res.status === 403 && googleQuotaExceeded(await res.clone().text()))) {
         await sleep(Math.min(Number(res.headers.get("Retry-After") ?? 2 + attempt * 2), 30) * 1000);
         continue;
       }
@@ -139,8 +143,13 @@ export class GmailConnector implements Connector {
       threadIds = await this.recentThreadIds(g);
     }
     for (const id of threadIds) {
-      const t = await g.request<any>(`${GMAIL}/threads/${id}?format=full`);
-      this.upsertThread(account, me, t, stats);
+      try {
+        const t = await g.request<any>(`${GMAIL}/threads/${id}?format=full`);
+        this.upsertThread(account, me, t, stats);
+      } catch (err) {
+        if (err instanceof GoogleError && (err.status === 404 || err.status === 403 || err.status === 429)) continue;
+        throw err;
+      }
     }
     accounts.setCursor(account.id, "gmail.historyId", profile.historyId);
 

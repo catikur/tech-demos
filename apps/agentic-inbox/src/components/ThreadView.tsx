@@ -65,6 +65,18 @@ export function ThreadView({
   };
 
   const counterpart = [...thread.messages].reverse().find((m) => !m.isMine) ?? thread.messages[0];
+  if (!counterpart) {
+    return (
+      <section className="pane pane-detail">
+        <div className="pane-header">
+          <h2 className="detail-title">{thread.subject.trim() && thread.subject !== "(no subject)" ? thread.subject : t("inbox.noSubject")}</h2>
+        </div>
+        <p className="muted" style={{ padding: 16 }}>
+          {t("inbox.missingMessages")}
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section className="pane pane-detail">
@@ -72,7 +84,9 @@ export function ThreadView({
         <h2 className="detail-title">{thread.subject}</h2>
         <span className="badge badge-soft">{t("inbox.participants", { n: thread.participants.length })}</span>
       </div>
-      {!counterpart.isMine && <PersonChip spaceId={thread.spaceId} email={senderEmail(counterpart.from)} />}
+      {!counterpart.isMine && senderEmail(counterpart.from).includes("@") && (
+        <PersonChip spaceId={thread.spaceId} email={senderEmail(counterpart.from)} />
+      )}
       <div className="messages" ref={scrollRef}>
         {thread.messages.map((m) => (
           <article key={m.id} className={`message ${m.isMine ? "message-mine" : ""}`}>
