@@ -750,6 +750,8 @@ code {
   border-radius: 12px;
   padding: 8px 12px;
   color: var(--text-dim);
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .chat-msg-mine .chat-msg-body {
