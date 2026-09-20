@@ -1,10 +1,12 @@
 import { useState } from "react";
-import type { Commitment, Space, SourceRef } from "../../shared/types.ts";
+import type { BoardLane, Commitment, Space, SourceRef } from "../../shared/types.ts";
 import { senderName } from "../../shared/types.ts";
 import { api, spaceQuery } from "../api/client.ts";
 import { sourceLabel, t } from "../i18n.ts";
 import { fmtDateTime, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
+
+const LANES: BoardLane[] = ["todo", "doing", "waiting", "done"];
 
 function dueLabel(dueAt: number | null): { text: string; cls: string } {
   if (!dueAt) return { text: t("commitments.noDue"), cls: "" };
@@ -13,6 +15,12 @@ function dueLabel(dueAt: number | null): { text: string; cls: string } {
   if (diff < 0) return { text: t("commitments.overdue", { n: Math.abs(days) || 1 }), cls: "pill-danger" };
   if (days <= 1) return { text: t("commitments.dueSoon"), cls: "pill-warn" };
   return { text: t("commitments.dueIn", { n: days }), cls: "pill-ok" };
+}
+
+function laneOf(c: Commitment): BoardLane {
+  if (c.status === "done") return "done";
+  if (c.boardLane === "todo" || c.boardLane === "doing" || c.boardLane === "waiting" || c.boardLane === "done") return c.boardLane;
+  return c.direction === "owed_to_me" ? "waiting" : "todo";
 }
 
 export function CommitmentsView({
@@ -24,20 +32,32 @@ export function CommitmentsView({
   spaces: Space[];
   onOpenSource: (ref: SourceRef, prefill?: string) => void;
 }) {
-  const [status, setStatus] = useState<"open" | "done" | "dropped">("open");
   const list = useData<Commitment[]>(
-    () => api.get(`/api/commitments?${spaceQuery(spaceId)}&status=${status}`),
-    [spaceId, status],
+    () => api.get(`/api/commitments?${spaceQuery(spaceId)}`),
+    [spaceId],
     (ev) => ev.type === "sync" || (ev.type === "data" && ev.entity === "commitments"),
   );
   const [busy, setBusy] = useState(false);
   const [pushingId, setPushingId] = useState<string | null>(null);
+  const [showDropped, setShowDropped] = useState(false);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [overLane, setOverLane] = useState<BoardLane | null>(null);
+  const [draftText, setDraftText] = useState("");
+  const [draftWho, setDraftWho] = useState("");
   const items = list.data ?? [];
-  const mine = items.filter((c) => c.direction === "owed_by_me");
-  const theirs = items.filter((c) => c.direction === "owed_to_me");
+  const dropped = items.filter((c) => c.status === "dropped");
+  const byLane: Record<BoardLane, Commitment[]> = { todo: [], doing: [], waiting: [], done: [] };
+  for (const c of items) {
+    if (c.status === "dropped") continue;
+    byLane[laneOf(c)].push(c);
+  }
 
-  const setState = async (c: Commitment, next: Commitment["status"]) => {
-    await api.patch(`/api/commitments/${c.id}`, { status: next });
+  const setLane = async (id: string, boardLane: BoardLane) => {
+    await api.patch(`/api/commitments/${id}`, { boardLane });
+    list.reload();
+  };
+  const setState = async (c: Commitment, status: Commitment["status"]) => {
+    await api.patch(`/api/commitments/${c.id}`, { status });
     list.reload();
   };
   const sendToTodo = async (c: Commitment) => {
@@ -60,102 +80,158 @@ export function CommitmentsView({
       setBusy(false);
     }
   };
+  const addCard = async () => {
+    const text = draftText.trim();
+    const counterpart = draftWho.trim();
+    if (!text || !counterpart || !spaceId) return;
+    setBusy(true);
+    try {
+      await api.post(`/api/commitments?${spaceQuery(spaceId)}`, {
+        spaceId,
+        direction: "owed_by_me",
+        counterpart,
+        text,
+      });
+      setDraftText("");
+      setDraftWho("");
+      list.reload();
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  const column = (title: string, rows: Commitment[], hint: string) => (
-    <section className="pane pane-list pane-wide">
-      <div className="pane-header">
-        <h2>{title}</h2>
-        <span className="badge badge-soft">{rows.length}</span>
-      </div>
-      <div className="scroll">
-        {rows.length === 0 && <div className="list-empty">{hint}</div>}
-        {rows.map((c) => {
-          const due = dueLabel(c.dueAt);
-          return (
-            <article key={c.id} className="card">
-              <div className="card-top">
-                <strong>{c.counterpartName ?? senderName(c.counterpart)}</strong>
-                <span className={`pill ${due.cls}`}>{due.text}</span>
-                {c.msTaskId && <span className="pill pill-ok">{t("commitments.todoBadge")}</span>}
-                {spaceId === null && <SpaceBadge spaces={spaces} spaceId={c.spaceId} />}
-              </div>
-              <p className="card-text">{c.text}</p>
-              <div className="card-meta">
-                <button className="link-btn" onClick={() => onOpenSource(c.source)}>
-                  {t("commitments.from", { kind: sourceLabel(c.source.kind), label: c.source.label })}
+  const card = (c: Commitment) => {
+    const due = dueLabel(c.dueAt);
+    return (
+      <article
+        key={c.id}
+        className={`card kanban-card ${dragging === c.id ? "is-dragging" : ""}`}
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData("text/plain", c.id);
+          e.dataTransfer.effectAllowed = "move";
+          setDragging(c.id);
+        }}
+        onDragEnd={() => {
+          setDragging(null);
+          setOverLane(null);
+        }}
+      >
+        <div className="card-top">
+          <strong>{c.counterpartName ?? senderName(c.counterpart)}</strong>
+          <span className={`pill ${due.cls}`}>{due.text}</span>
+          {c.msTaskId && <span className="pill pill-ok">{t("commitments.todoBadge")}</span>}
+          {spaceId === null && <SpaceBadge spaces={spaces} spaceId={c.spaceId} />}
+        </div>
+        <p className="card-text">{c.text}</p>
+        <div className="card-meta">
+          <button className="link-btn" onClick={() => onOpenSource(c.source)}>
+            {t("commitments.from", { kind: sourceLabel(c.source.kind), label: c.source.label })}
+          </button>
+          {c.dueAt && <span className="muted small">{fmtDateTime(c.dueAt)}</span>}
+        </div>
+        <div className="card-actions">
+          {c.status === "open" ? (
+            <>
+              <button className="btn btn-small" onClick={() => void setState(c, "done")}>
+                {t("commitments.markDone")}
+              </button>
+              <button className="btn btn-small btn-ghost" onClick={() => void setState(c, "dropped")}>
+                {t("commitments.drop")}
+              </button>
+              {c.direction === "owed_by_me" && !c.msTaskId && (
+                <button className="btn btn-small" disabled={pushingId === c.id} onClick={() => void sendToTodo(c)}>
+                  {pushingId === c.id ? t("common.sending") : t("commitments.sendToTodo")}
                 </button>
-                <span className="muted small">
-                  {c.dueAt ? fmtDateTime(c.dueAt) : ""} · {t("commitments.confidence", { n: Math.round(c.confidence * 100) })}
-                </span>
-              </div>
-              <div className="card-actions">
-                {c.status === "open" ? (
-                  <>
-                    <button className="btn btn-small" onClick={() => void setState(c, "done")}>
-                      {t("commitments.markDone")}
-                    </button>
-                    <button className="btn btn-small btn-ghost" onClick={() => void setState(c, "dropped")}>
-                      {t("commitments.drop")}
-                    </button>
-                    {c.direction === "owed_by_me" && !c.msTaskId && (
-                      <button
-                        className="btn btn-small"
-                        disabled={pushingId === c.id}
-                        onClick={() => void sendToTodo(c)}
-                        title={t("commitments.sendToTodo")}
-                      >
-                        {pushingId === c.id ? t("common.sending") : t("commitments.sendToTodo")}
-                      </button>
-                    )}
-                    {c.direction === "owed_to_me" && c.source.kind === "thread" && (
-                      <button
-                        className="btn btn-small"
-                        onClick={() =>
-                          onOpenSource(
-                            c.source,
-                            t("commitments.nudgeBody", {
-                              name: (c.counterpartName ?? senderName(c.counterpart)).split(" ")[0],
-                              text: c.text,
-                            }),
-                          )
-                        }
-                      >
-                        {t("common.nudge")}
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <button className="btn btn-small btn-ghost" onClick={() => void setState(c, "open")}>
-                    {t("commitments.reopen")}
-                  </button>
-                )}
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </section>
-  );
+              )}
+              {c.direction === "owed_to_me" && c.source.kind === "thread" && (
+                <button
+                  className="btn btn-small"
+                  onClick={() =>
+                    onOpenSource(
+                      c.source,
+                      t("commitments.nudgeBody", {
+                        name: (c.counterpartName ?? senderName(c.counterpart)).split(" ")[0],
+                        text: c.text,
+                      }),
+                    )
+                  }
+                >
+                  {t("common.nudge")}
+                </button>
+              )}
+            </>
+          ) : (
+            <button className="btn btn-small btn-ghost" onClick={() => void setState(c, "open")}>
+              {t("commitments.reopen")}
+            </button>
+          )}
+        </div>
+      </article>
+    );
+  };
 
   return (
-    <div className="feature">
+    <div className="feature kanban-feature">
       <div className="feature-bar">
-        <div className="seg">
-          {(["open", "done", "dropped"] as const).map((s) => (
-            <button key={s} className={`seg-btn ${status === s ? "is-active" : ""}`} onClick={() => setStatus(s)}>
-              {t(`commitments.${s}`)}
-            </button>
-          ))}
-        </div>
-        <span className="muted small">{t("commitments.hint")}</span>
+        <h2 className="kanban-title">{t("commitments.boardTitle")}</h2>
+        <span className="muted small">{t("commitments.boardHint")}</span>
         <button className="btn btn-small" disabled={busy} onClick={() => void extract()}>
           {busy ? t("commitments.scanning") : t("commitments.rescan")}
         </button>
+        <button className={`btn btn-small ${showDropped ? "btn-primary" : ""}`} onClick={() => setShowDropped((v) => !v)}>
+          {t("commitments.dropped")} ({dropped.length})
+        </button>
       </div>
-      <div className="split split-2 split-even">
-        {column(t("commitments.iOwe"), mine, t("commitments.emptyMine"))}
-        {column(t("commitments.owedToMe"), theirs, t("commitments.emptyTheirs"))}
+      <form
+        className="kanban-add"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void addCard();
+        }}
+      >
+        <input value={draftText} onChange={(e) => setDraftText(e.target.value)} placeholder={t("commitments.addText")} />
+        <input value={draftWho} onChange={(e) => setDraftWho(e.target.value)} placeholder={t("commitments.addWho")} />
+        <button className="btn btn-small btn-primary" disabled={busy || !draftText.trim() || !draftWho.trim() || !spaceId}>
+          {t("commitments.addCard")}
+        </button>
+      </form>
+      <div className="kanban">
+        {LANES.map((lane) => (
+          <section
+            key={lane}
+            className={`kanban-col ${overLane === lane ? "is-drop" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setOverLane(lane);
+            }}
+            onDragLeave={() => setOverLane((cur) => (cur === lane ? null : cur))}
+            onDrop={(e) => {
+              e.preventDefault();
+              const id = e.dataTransfer.getData("text/plain");
+              setOverLane(null);
+              setDragging(null);
+              if (id) void setLane(id, lane);
+            }}
+          >
+            <div className="pane-header">
+              <h2>{t(`commitments.lane.${lane}`)}</h2>
+              <span className="badge badge-soft">{byLane[lane].length}</span>
+            </div>
+            <div className="kanban-cards">
+              {byLane[lane].length === 0 && <div className="list-empty">{t(`commitments.laneEmpty.${lane}`)}</div>}
+              {byLane[lane].map(card)}
+            </div>
+          </section>
+        ))}
       </div>
+      {showDropped && (
+        <section className="kanban-dropped">
+          <h3>{t("commitments.dropped")}</h3>
+          {dropped.length === 0 && <p className="muted small">{t("commitments.emptyDropped")}</p>}
+          {dropped.map(card)}
+        </section>
+      )}
     </div>
   );
 }

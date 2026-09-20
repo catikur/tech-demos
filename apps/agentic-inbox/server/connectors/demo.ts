@@ -63,7 +63,7 @@ interface SeedThread {
   category: Thread["category"];
   labels: string[];
   unread: boolean;
-  messages: { id: string; from: string; to: string[]; cc?: string[]; body: string; at: number }[];
+  messages: { id: string; from: string; to: string[]; cc?: string[]; body: string; bodyHtml?: string; at: number }[];
 }
 
 function workThreads(now: number): SeedThread[] {
@@ -110,6 +110,13 @@ Ops lead, Northwind Ops`,
 Template is in the wiki under Engineering / Postmortems.
 
 — Marcus`,
+          bodyHtml: `<p>Following up on yesterday's incident review:</p>
+<ul>
+<li>can you send me the export postmortem draft by <b>Wednesday</b>?</li>
+<li>I want to circulate it before the Q3 roadmap sync so we can size the background-job work with real numbers.</li>
+</ul>
+<p>Template is in the wiki under <a href="https://conforcus.sharepoint.com">Engineering / Postmortems</a>.</p>
+<p>— Marcus</p>`,
         },
       ],
     },
@@ -344,6 +351,7 @@ interface SeedEvent {
   location: string;
   joinUrl: string | null;
   description: string;
+  descriptionHtml?: string;
   responseStatus: CalendarEvent["responseStatus"];
 }
 
@@ -361,6 +369,8 @@ function workEvents(now: number): SeedEvent[] {
       location: "Microsoft Teams",
       joinUrl: "https://teams.microsoft.com/l/meetup-join/demo-roadmap",
       description: "Shipping cut for the email agent beta, export background job sizing, bugs triage, headcount asks.",
+      descriptionHtml:
+        "<p><b>Agenda</b></p><ul><li>Shipping cut for the email agent beta</li><li>Export background job sizing</li><li>Bugs triage</li><li>Headcount asks</li></ul>",
       responseStatus: "none",
     },
     {
@@ -628,6 +638,7 @@ function seedThreads(account: Account, list: SeedThread[], me: string, stats: Sy
         to: m.to,
         cc: m.cc ?? [],
         body: m.body,
+        bodyHtml: m.bodyHtml ?? null,
         at: m.at,
         isMine: senderEmail(m.from) === myEmail,
       };
@@ -652,6 +663,7 @@ function seedEvents(account: Account, list: SeedEvent[], stats: SyncStats): void
       attendees: e.attendees,
       joinUrl: e.joinUrl,
       description: e.description,
+      descriptionHtml: e.descriptionHtml ?? null,
       meetingId: null,
       responseStatus: e.responseStatus,
     });

@@ -56,6 +56,7 @@ const fixtures: Record<string, any> = {
         organizer: { emailAddress: { name: "Marcus Chen", address: "marcus@lumenlabs.io" } },
         attendees: [{ emailAddress: { name: "Marcus Chen", address: "marcus@lumenlabs.io" } }],
         onlineMeeting: { joinUrl: "https://teams.microsoft.com/l/meetup-join/abc" },
+        body: { contentType: "html", content: "<p>Review the <b>504</b> and list owners.</p>" },
         bodyPreview: "Review the 504.",
         responseStatus: { response: "accepted" },
         isCancelled: false,
@@ -189,6 +190,7 @@ describe("M365 connector (fixture-driven sync)", () => {
     expect(t.unread).toBe(true);
     expect(t.messages.map((m) => m.isMine)).toEqual([false, true]);
     expect(t.messages[0].body).toBe("Can you send me an ETA by Wednesday?");
+    expect(t.messages[0].bodyHtml).toContain("<b>Wednesday</b>");
     expect(t.participants.map((p) => p.toLowerCase())).toContain("priya raman <priya@northwindops.com>");
   });
 
@@ -207,6 +209,8 @@ describe("M365 connector (fixture-driven sync)", () => {
     expect(evs[0].joinUrl).toContain("meetup-join");
     expect(evs[0].responseStatus).toBe("accepted");
     expect(evs[0].attendees.some((a) => a.includes("you@lumenlabs.io"))).toBe(true);
+    expect(evs[0].description).toContain("Review the 504");
+    expect(evs[0].descriptionHtml).toContain("<b>504</b>");
   });
 
   test("chats: 1:1 title from members, mentions detected, system messages dropped, unread from viewpoint", () => {
@@ -218,6 +222,7 @@ describe("M365 connector (fixture-driven sync)", () => {
     expect(msgs).toHaveLength(1);
     expect(msgs[0].mentionsMe).toBe(true);
     expect(msgs[0].body).toBe("can you send the postmortem by Wednesday?");
+    expect(msgs[0].bodyHtml).toContain("<b>Wednesday</b>");
     const channel = list.find((c) => c.kind === "channel")!;
     expect(channel.title).toBe("Engineering › general");
   });

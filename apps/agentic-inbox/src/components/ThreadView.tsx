@@ -4,6 +4,7 @@ import { senderEmail, senderName } from "../../shared/types.ts";
 import { t } from "../i18n.ts";
 import { fmtDateTime } from "../state.ts";
 import { PersonChip } from "./PersonChip.tsx";
+import { RichBody } from "./RichBody.tsx";
 
 export function ThreadCrashGuard({ resetKey, children }: { resetKey: string | null; children: ReactNode }) {
   return <ThreadCrashGuardInner resetKey={resetKey}>{children}</ThreadCrashGuardInner>;
@@ -154,7 +155,7 @@ export function ThreadView({
               <span className="message-addr">{senderEmail(m.from)}</span>
               <span className="message-time">{fmtDateTime(m.at)}</span>
             </header>
-            <pre className="message-body">{m.body}</pre>
+            <RichBody className="message-body" text={m.body} html={m.bodyHtml} />
           </article>
         ))}
       </div>

@@ -27,6 +27,7 @@ import type {
 } from "../../shared/types.ts";
 import { senderEmail, senderName } from "../../shared/types.ts";
 import { isBlankText } from "../sync/normalize.ts";
+import { applyBoardLane, defaultBoardLane, type BoardLane } from "../features/board.ts";
 import { getDb, json, newId } from "./index.ts";
 
 type Row = Record<string, any>;
@@ -280,6 +281,7 @@ function rowToMessage(raw: unknown): EmailMessage {
     to: json.parse<string[]>(r.to_addrs, []),
     cc: json.parse<string[]>(r.cc_addrs, []),
     body: r.body,
+    bodyHtml: r.body_html ?? null,
     at: r.at,
     isMine: !!r.is_mine,
   };
@@ -375,15 +377,17 @@ export const threads = {
   },
   upsertMessage(m: EmailMessage & { externalId?: string | null }): void {
     const body = isBlankText(m.body) ? "" : m.body;
+    const bodyHtml = m.bodyHtml && !isBlankText(m.bodyHtml) ? m.bodyHtml : null;
     getDb()
       .query(
-        `INSERT INTO messages (id, thread_id, external_id, from_addr, to_addrs, cc_addrs, body, at, is_mine)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO messages (id, thread_id, external_id, from_addr, to_addrs, cc_addrs, body, body_html, at, is_mine)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            from_addr=CASE WHEN TRIM(IFNULL(excluded.from_addr, '')) = '' THEN messages.from_addr ELSE excluded.from_addr END,
            to_addrs=excluded.to_addrs,
            cc_addrs=excluded.cc_addrs,
            body=CASE WHEN TRIM(excluded.body) = '' THEN messages.body ELSE excluded.body END,
+           body_html=CASE WHEN excluded.body_html IS NULL OR TRIM(excluded.body_html) = '' THEN messages.body_html ELSE excluded.body_html END,
            at=excluded.at,
            is_mine=excluded.is_mine`,
       )
@@ -395,6 +399,7 @@ export const threads = {
         json.stringify(m.to),
         json.stringify(m.cc),
         body,
+        bodyHtml,
         m.at,
         m.isMine ? 1 : 0,
       );
@@ -488,6 +493,7 @@ function rowToEvent(raw: unknown): CalendarEvent {
     attendees: json.parse<string[]>(r.attendees, []),
     joinUrl: r.join_url,
     description: r.description,
+    descriptionHtml: r.description_html ?? null,
     meetingId: r.meeting_id,
     responseStatus: r.response_status,
   };
@@ -509,10 +515,11 @@ export const events = {
   upsert(e: CalendarEvent & { externalId?: string | null }): void {
     getDb()
       .query(
-        `INSERT INTO events (id, space_id, account_id, external_id, title, start, end_at, location, organizer, attendees, join_url, description, meeting_id, response_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO events (id, space_id, account_id, external_id, title, start, end_at, location, organizer, attendees, join_url, description, description_html, meeting_id, response_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET title=excluded.title, start=excluded.start, end_at=excluded.end_at, location=excluded.location,
            organizer=excluded.organizer, attendees=excluded.attendees, join_url=excluded.join_url, description=excluded.description,
+           description_html=COALESCE(excluded.description_html, events.description_html),
            meeting_id=COALESCE(excluded.meeting_id, events.meeting_id), response_status=excluded.response_status`,
       )
       .run(
@@ -528,6 +535,7 @@ export const events = {
         json.stringify(e.attendees),
         e.joinUrl,
         e.description,
+        e.descriptionHtml ?? null,
         e.meetingId,
         e.responseStatus,
       );
@@ -574,6 +582,7 @@ function rowToChatMessage(raw: unknown): ChatMessage {
     chatId: r.chat_id,
     from: r.from_addr,
     body: r.body,
+    bodyHtml: r.body_html ?? null,
     at: r.at,
     isMine: !!r.is_mine,
     mentionsMe: !!r.mentions_me,
@@ -640,9 +649,9 @@ export const chats = {
   upsertMessage(m: ChatMessage & { externalId?: string | null }): void {
     getDb()
       .query(
-        `INSERT INTO chat_messages (id, chat_id, external_id, from_addr, body, at, is_mine, mentions_me, reply_to_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET body=excluded.body, at=excluded.at, reply_to_id=excluded.reply_to_id`,
+        `INSERT INTO chat_messages (id, chat_id, external_id, from_addr, body, body_html, at, is_mine, mentions_me, reply_to_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET body=excluded.body, body_html=COALESCE(excluded.body_html, chat_messages.body_html), at=excluded.at, reply_to_id=excluded.reply_to_id`,
       )
       .run(
         m.id,
@@ -650,6 +659,7 @@ export const chats = {
         m.externalId ?? null,
         m.from,
         m.body,
+        m.bodyHtml ?? null,
         m.at,
         m.isMine ? 1 : 0,
         m.mentionsMe ? 1 : 0,
@@ -785,6 +795,7 @@ function rowToCommitment(raw: unknown): Commitment {
     text: r.text,
     dueAt: r.due_at,
     status: r.status,
+    boardLane: (r.board_lane as BoardLane) || defaultBoardLane({ direction: r.direction, status: r.status }),
     source: { kind: r.source_kind, id: r.source_id, label: r.source_label },
     createdAt: r.created_at,
     confidence: r.confidence,
@@ -828,10 +839,11 @@ export const commitments = {
     const fingerprint = `${c.spaceId}|${ownerKey}|${c.direction}|${c.counterpart}|${c.text.toLowerCase().replace(/\W+/g, " ").trim().slice(0, 120)}`;
     const exists = getDb().query("SELECT 1 FROM commitments WHERE fingerprint = ?").get(fingerprint);
     if (exists) return false;
+    const lane = c.boardLane ?? defaultBoardLane(c);
     getDb()
       .query(
-        `INSERT INTO commitments (id, space_id, direction, counterpart, text, due_at, status, source_kind, source_id, source_label, created_at, confidence, fingerprint, owner_email)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO commitments (id, space_id, direction, counterpart, text, due_at, status, board_lane, source_kind, source_id, source_label, created_at, confidence, fingerprint, owner_email)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         c.id ?? newId("cm"),
@@ -841,6 +853,7 @@ export const commitments = {
         c.text,
         c.dueAt,
         c.status,
+        lane,
         c.source.kind,
         c.source.id,
         c.source.label,
@@ -852,7 +865,22 @@ export const commitments = {
     return true;
   },
   setStatus(id: string, status: Commitment["status"]): void {
+    const lane = status === "done" ? "done" : status === "open" ? null : undefined;
+    if (lane === "done") {
+      getDb().query("UPDATE commitments SET status = ?, board_lane = ? WHERE id = ?").run(status, "done", id);
+      return;
+    }
+    if (status === "open") {
+      const row = commitments.get(id);
+      const restored = row ? defaultBoardLane({ direction: row.direction, status: "open" }) : "todo";
+      getDb().query("UPDATE commitments SET status = ?, board_lane = ? WHERE id = ?").run(status, restored, id);
+      return;
+    }
     getDb().query("UPDATE commitments SET status = ? WHERE id = ?").run(status, id);
+  },
+  setLane(id: string, lane: BoardLane): void {
+    const next = applyBoardLane(lane);
+    getDb().query("UPDATE commitments SET status = ?, board_lane = ? WHERE id = ?").run(next.status, next.boardLane, id);
   },
   setMsTask(id: string, listId: string, taskId: string): void {
     getDb().query("UPDATE commitments SET ms_list_id = ?, ms_task_id = ? WHERE id = ?").run(listId, taskId, id);

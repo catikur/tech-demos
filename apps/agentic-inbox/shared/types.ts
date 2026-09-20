@@ -83,6 +83,8 @@ export interface EmailMessage {
   to: string[];
   cc: string[];
   body: string;
+  /** Original HTML when Graph/Gmail sent HTML; render via sanitizeHtml. */
+  bodyHtml?: string | null;
   at: number;
   isMine: boolean;
 }
@@ -129,6 +131,7 @@ export interface CalendarEvent {
   attendees: string[];
   joinUrl: string | null;
   description: string;
+  descriptionHtml?: string | null;
   /** Linked meeting record (recording / transcript) if any. */
   meetingId: string | null;
   responseStatus: "accepted" | "tentative" | "declined" | "none";
@@ -152,6 +155,7 @@ export interface ChatMessage {
   chatId: string;
   from: string;
   body: string;
+  bodyHtml?: string | null;
   at: number;
   isMine: boolean;
   mentionsMe: boolean;
@@ -189,6 +193,7 @@ export interface Transcript {
 
 export type CommitmentDirection = "owed_by_me" | "owed_to_me";
 export type CommitmentStatus = "open" | "done" | "dropped";
+export type BoardLane = "todo" | "doing" | "waiting" | "done";
 
 export interface Commitment {
   id: string;
@@ -201,6 +206,8 @@ export interface Commitment {
   text: string;
   dueAt: number | null;
   status: CommitmentStatus;
+  /** Kanban column. Defaults from direction/status when omitted. */
+  boardLane?: BoardLane;
   source: SourceRef;
   createdAt: number;
   confidence: number;

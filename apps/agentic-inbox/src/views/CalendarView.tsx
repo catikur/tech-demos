@@ -4,6 +4,7 @@ import { api, spaceQuery } from "../api/client.ts";
 import { dateLocale, t } from "../i18n.ts";
 import { fmtDateTime, untilLabel, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
+import { RichBody } from "../components/RichBody.tsx";
 
 function dayKey(at: number): string {
   return new Date(at).toLocaleDateString(dateLocale, { weekday: "long", day: "2-digit", month: "long" });
@@ -116,7 +117,9 @@ export function CalendarView({
                 </div>
               )}
             </div>
-            {selected.description && <p className="detail-desc">{selected.description}</p>}
+            {selected.description && (
+              <RichBody className="detail-desc" text={selected.description} html={selected.descriptionHtml} />
+            )}
             <h3>{t("calendar.attendees")}</h3>
             <ul className="chip-list">
               {selected.attendees.map((a) => (

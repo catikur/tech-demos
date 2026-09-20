@@ -91,15 +91,25 @@ export const featureRoutes = {
   "/api/commitments/:id": {
     PATCH: h(async (req: P<"/api/commitments/:id">) => {
       const c = commitments.get(req.params.id) ?? notFound("Commitment not found");
-      const body = await readJson<{ status: Commitment["status"] }>(req);
-      if (!["open", "done", "dropped"].includes(body.status)) badRequest("Invalid status");
-      commitments.setStatus(c.id, body.status);
-      if (body.status === "done") {
-        await completeTodoTask(c.id).catch((err) =>
-          console.error(`[todo] complete ${c.id}:`, err instanceof Error ? err.message : err),
-        );
+      const body = await readJson<{ status?: Commitment["status"]; boardLane?: string }>(req);
+      if (body.boardLane) {
+        if (!["todo", "doing", "waiting", "done"].includes(body.boardLane)) badRequest("Invalid boardLane");
+        commitments.setLane(c.id, body.boardLane as "todo" | "doing" | "waiting" | "done");
+        if (body.boardLane === "done") {
+          await completeTodoTask(c.id).catch((err) =>
+            console.error(`[todo] complete ${c.id}:`, err instanceof Error ? err.message : err),
+          );
+        }
+      } else {
+        if (!body.status || !["open", "done", "dropped"].includes(body.status)) badRequest("Invalid status");
+        commitments.setStatus(c.id, body.status);
+        if (body.status === "done") {
+          await completeTodoTask(c.id).catch((err) =>
+            console.error(`[todo] complete ${c.id}:`, err instanceof Error ? err.message : err),
+          );
+        }
       }
-      audit.log({ spaceId: c.spaceId, actor: "user", action: `commitment.${body.status}`, detail: c.text });
+      audit.log({ spaceId: c.spaceId, actor: "user", action: `commitment.${body.boardLane ?? body.status}`, detail: c.text });
       broadcast({ type: "data", entity: "commitments", spaceId: c.spaceId });
       return ok(commitments.get(c.id));
     }),

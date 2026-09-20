@@ -3,7 +3,8 @@ import { formatAddress, senderEmail } from "../../shared/types.ts";
 import { env } from "../env.ts";
 import { accounts, events, threads } from "../db/repo.ts";
 import { googleAccessToken } from "../auth/google.ts";
-import { categorize, htmlToText, isBlankText } from "../sync/normalize.ts";
+import { categorize, htmlToText, isBlankText, splitHtmlBody } from "../sync/normalize.ts";
+import { looksLikeHtml } from "../../shared/html.ts";
 import { localId } from "./m365.ts";
 import { emptyStats, type Connector, type SendMailInput, type SyncStats } from "./types.ts";
 
@@ -59,6 +60,17 @@ function header(headers: { name: string; value: string }[] | undefined, name: st
 
 function decodeBase64Url(data: string): string {
   return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+}
+
+export function extractHtml(payload: any): string | null {
+  let html = "";
+  const walk = (part: any) => {
+    if (!part) return;
+    if ((part.mimeType ?? "") === "text/html" && part.body?.data && !html) html = decodeBase64Url(part.body.data);
+    (part.parts ?? []).forEach(walk);
+  };
+  walk(payload);
+  return html || null;
 }
 
 /** Prefer text/plain; fall back to text/html → text. Walks nested multiparts. */
@@ -212,7 +224,18 @@ export class GmailConnector implements Connector {
       if (labels.includes("UNREAD") && !isMine) unread = true;
       for (const p of [from, ...to, ...cc]) if (p) participants.set(senderEmail(p), p);
       lastAt = Math.max(lastAt, at);
-      normalized.push({ id: localId("m", account.id, m.id), externalId: m.id, threadId, from, to, cc, body: extractBody(m.payload), at, isMine });
+      normalized.push({
+        id: localId("m", account.id, m.id),
+        externalId: m.id,
+        threadId,
+        from,
+        to,
+        cc,
+        body: extractBody(m.payload),
+        bodyHtml: extractHtml(m.payload),
+        at,
+        isMine,
+      });
     }
     const listUnsubscribe = !!header(first.payload?.headers, "List-Unsubscribe");
     const hasContent = normalized.some((m) => !isBlankText(m.body) || senderEmail(m.from).includes("@"));
@@ -249,6 +272,7 @@ export class GmailConnector implements Connector {
       if (!start || !end) continue;
       const attendees: any[] = e.attendees ?? [];
       const self = attendees.find((a) => a.self) ?? (e.organizer?.self ? { responseStatus: "accepted" } : null);
+      const desc = splitHtmlBody(e.description ?? "", looksLikeHtml(e.description ?? "") ? "html" : "text");
       const ev: CalendarEvent & { externalId: string } = {
         id: localId("ev", account.id, e.id),
         externalId: e.id,
@@ -261,7 +285,8 @@ export class GmailConnector implements Connector {
         organizer: e.organizer ? formatAddress(e.organizer.displayName ?? "", (e.organizer.email ?? "").toLowerCase()) : "",
         attendees: [...new Set<string>([...attendees.map((a) => formatAddress(a.displayName ?? "", (a.email ?? "").toLowerCase())), formatAddress("You", me)])],
         joinUrl: e.hangoutLink ?? e.conferenceData?.entryPoints?.find((p: any) => p.entryPointType === "video")?.uri ?? null,
-        description: (e.description ?? "").slice(0, 2000),
+        description: desc.text.slice(0, 2000),
+        descriptionHtml: desc.html,
         meetingId: null,
         responseStatus: mapResponse(self?.responseStatus),
       };
