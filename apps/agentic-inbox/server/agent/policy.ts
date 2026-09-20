@@ -39,6 +39,13 @@ export function inScope(ctx: AgentContext, recordSpaceId: string): boolean {
   return ctx.spaceId === null || ctx.spaceId === recordSpaceId;
 }
 
+/** Mailbox wall: `accountIds == null` means unrestricted (local demo / tests). */
+export function inAccountScope(ctx: AgentContext, accountId: string | null | undefined): boolean {
+  if (ctx.accountIds == null) return true;
+  if (!accountId) return false;
+  return ctx.accountIds.includes(accountId);
+}
+
 export function outOfScopeMessage(ctx: AgentContext): string {
   const name = ctx.spaceId ? (spaces.get(ctx.spaceId)?.name ?? "this space") : "this space";
   return `That item belongs to a different space than ${name}. Switch spaces, or say "across both spaces" to allow it explicitly.`;

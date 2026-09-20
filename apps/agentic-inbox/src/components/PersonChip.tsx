@@ -12,8 +12,9 @@ export function PersonChip({ spaceId, email }: { spaceId: string; email: string 
   );
   const p = profile.data;
   if (!p) return null;
-  const owe = p.openCommitments.filter((c) => c.direction === "owed_by_me").length;
-  const owed = p.openCommitments.length - owe;
+  const open = p.openCommitments ?? [];
+  const owe = open.filter((c) => c.direction === "owed_by_me").length;
+  const owed = open.length - owe;
   return (
     <div className="person-chip" title={p.notes || undefined}>
       <span className="avatar avatar-small avatar-agent">{initials(p.name)}</span>
@@ -30,7 +31,7 @@ export function PersonChip({ spaceId, email }: { spaceId: string; email: string 
           })}
           {owe > 0 && <span className="pill pill-warn">{t("person.youOwe", { n: owe })}</span>}
           {owed > 0 && <span className="pill pill-ok">{t("person.owesYou", { n: owed })}</span>}
-          {p.upcomingMeetings[0] && <span className="pill pill-agent">{t("person.next", { title: p.upcomingMeetings[0].title })}</span>}
+          {p.upcomingMeetings?.[0] && <span className="pill pill-agent">{t("person.next", { title: p.upcomingMeetings[0].title })}</span>}
         </span>
       </span>
     </div>

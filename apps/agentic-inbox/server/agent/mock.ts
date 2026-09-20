@@ -31,7 +31,7 @@ function resolveThread(input: string, ctx: AgentContext): string | null {
   if (wantsSelected && ctx.selectedThreadId) return ctx.selectedThreadId;
   const q = tokens(input);
   for (const term of q) {
-    const hits = threads.list(ctx.spaceId, { query: term, limit: 5 });
+    const hits = threads.list(ctx.spaceId, { query: term, limit: 5, accountIds: ctx.accountIds });
     if (hits.length > 0) return hits[0].id;
   }
   return ctx.selectedThreadId;
@@ -61,10 +61,10 @@ export async function* runMockAgent(input: string, ctx: AgentContext): AsyncGene
     await sleep(PACE);
     yield* tool("list_threads", { limit: 20 }, ctx);
     await sleep(PACE);
-    const list = threads.list(ctx.spaceId, { limit: 50 });
+    const list = threads.list(ctx.spaceId, { limit: 50, accountIds: ctx.accountIds });
     const unread = list.filter((t) => t.unread);
-    const upcoming = events.list(ctx.spaceId, Date.now(), Date.now() + 86_400_000);
-    const chatUnread = chats.list(ctx.spaceId).reduce((n, c) => n + c.unreadCount, 0);
+    const upcoming = events.list(ctx.spaceId, Date.now(), Date.now() + 86_400_000, ctx.accountIds);
+    const chatUnread = chats.list(ctx.spaceId, undefined, ctx.accountIds).reduce((n, c) => n + c.unreadCount, 0);
     const urgent = unread.filter((t) => ["support", "project", "billing", "security"].includes(t.category));
     yield {
       kind: "reply",
@@ -86,7 +86,7 @@ export async function* runMockAgent(input: string, ctx: AgentContext): AsyncGene
     yield { kind: "thought", text: "Filtering to unread threads." };
     await sleep(PACE);
     yield* tool("list_threads", { unreadOnly: true }, ctx);
-    const unread = threads.list(ctx.spaceId).filter((t) => t.unread);
+    const unread = threads.list(ctx.spaceId, { accountIds: ctx.accountIds }).filter((t) => t.unread);
     yield {
       kind: "reply",
       text: unread.length
@@ -100,7 +100,7 @@ export async function* runMockAgent(input: string, ctx: AgentContext): AsyncGene
     yield { kind: "thought", text: "Reading the calendar for the coming days." };
     await sleep(PACE);
     yield* tool("list_events", {}, ctx);
-    const list = events.list(ctx.spaceId, Date.now() - 3_600_000, Date.now() + 7 * 86_400_000);
+    const list = events.list(ctx.spaceId, Date.now() - 3_600_000, Date.now() + 7 * 86_400_000, ctx.accountIds);
     const unanswered = list.filter((e) => e.responseStatus === "none");
     yield {
       kind: "reply",
@@ -117,7 +117,7 @@ export async function* runMockAgent(input: string, ctx: AgentContext): AsyncGene
     yield { kind: "thought", text: "Checking Teams chats and channels." };
     await sleep(PACE);
     yield* tool("list_chats", {}, ctx);
-    const list = chats.list(ctx.spaceId);
+    const list = chats.list(ctx.spaceId, undefined, ctx.accountIds);
     const mentions = list.flatMap((c) => chats.messages(c.id).filter((m) => m.mentionsMe && !m.isMine).map((m) => ({ c, m })));
     yield {
       kind: "reply",
@@ -158,7 +158,7 @@ export async function* runMockAgent(input: string, ctx: AgentContext): AsyncGene
     yield { kind: "thought", text: `Searching mail and chats for: ${q}` };
     await sleep(PACE);
     yield* tool("search_mail", { query: tokens(input)[0] }, ctx);
-    const results = threads.list(ctx.spaceId, { query: tokens(input)[0], limit: 10 });
+    const results = threads.list(ctx.spaceId, { query: tokens(input)[0], limit: 10, accountIds: ctx.accountIds });
     yield {
       kind: "reply",
       text: results.length

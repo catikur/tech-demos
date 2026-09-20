@@ -6,7 +6,7 @@ import { formatAddress, senderEmail } from "../../shared/types.ts";
 import { env } from "../env.ts";
 import { accounts, chats, events, meetings, threads } from "../db/repo.ts";
 import { microsoftAccessToken, microsoftCredentials } from "../auth/microsoft.ts";
-import { categorize, htmlToText, parseVtt } from "../sync/normalize.ts";
+import { categorize, htmlToText, isBlankText, parseVtt } from "../sync/normalize.ts";
 import { emptyStats, type Connector, type SendChatInput, type SendMailInput, type SyncStats } from "./types.ts";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
@@ -159,7 +159,9 @@ export class M365Connector implements Connector {
     const at = ts(m.receivedDateTime ?? m.sentDateTime);
     const existing = threads.get(threadId);
     const subjectRaw = (m.subject ?? "").trim();
-    if (!from && !body.trim() && !subjectRaw && !existing) return;
+    const hasFrom = senderEmail(from).includes("@");
+    const emptyShell = !hasFrom && isBlankText(body) && isBlankText(subjectRaw);
+    if (emptyShell && !threads.messageIdByExternal(account.id, m.id)) return;
     const subject = (subjectRaw || "(no subject)").replace(/^((re|fw|fwd|aw|wg)\s*:\s*)+/i, "").trim() || "(no subject)";
     const participants = new Map<string, string>();
     for (const p of [...(existing?.participants ?? []), from, ...to, ...cc]) if (p) participants.set(senderEmail(p), p);

@@ -3,7 +3,7 @@ import { formatAddress, senderEmail } from "../../shared/types.ts";
 import { env } from "../env.ts";
 import { accounts, events, threads } from "../db/repo.ts";
 import { googleAccessToken } from "../auth/google.ts";
-import { categorize, htmlToText } from "../sync/normalize.ts";
+import { categorize, htmlToText, isBlankText } from "../sync/normalize.ts";
 import { localId } from "./m365.ts";
 import { emptyStats, type Connector, type SendMailInput, type SyncStats } from "./types.ts";
 
@@ -215,6 +215,8 @@ export class GmailConnector implements Connector {
       normalized.push({ id: localId("m", account.id, m.id), externalId: m.id, threadId, from, to, cc, body: extractBody(m.payload), at, isMine });
     }
     const listUnsubscribe = !!header(first.payload?.headers, "List-Unsubscribe");
+    const hasContent = normalized.some((m) => !isBlankText(m.body) || senderEmail(m.from).includes("@"));
+    if (!hasContent && (subject === "(no subject)" || isBlankText(subject))) return;
     threads.upsert({
       id: threadId,
       externalId: t.id,

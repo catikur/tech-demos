@@ -71,6 +71,7 @@ const rawRoutes = {
   "/api/accounts/:id": {
     PATCH: h(async (req: P<"/api/accounts/:id">) => {
       const account = accounts.get(req.params.id) ?? notFound("Account not found");
+      ensureVisibleAccount(req, account.id);
       const body = await readJson<{ spaceId?: string }>(req);
       if (body.spaceId) {
         if (!spaces.get(body.spaceId)) badRequest("Unknown space");
@@ -82,6 +83,7 @@ const rawRoutes = {
     }),
     DELETE: h((req: P<"/api/accounts/:id">) => {
       const account = accounts.get(req.params.id) ?? notFound("Account not found");
+      ensureVisibleAccount(req, account.id);
       const session = readSession(req);
       if (account.provider === "m365" && (session?.accountId === account.id || loginRequired())) {
         badRequest("Cannot remove the Microsoft 365 account used to sign in");
@@ -98,11 +100,12 @@ const rawRoutes = {
   "/api/accounts/:id/sync": {
     POST: h(async (req: P<"/api/accounts/:id/sync">) => {
       const account = accounts.get(req.params.id) ?? notFound("Account not found");
+      ensureVisibleAccount(req, account.id);
       const stats = await syncAccount(account, { full: query(req).get("full") === "1" });
       return ok(stats);
     }),
   },
-  "/api/sync": { POST: h(async () => ok(await syncAll())) },
+  "/api/sync": { POST: h(async (req) => ok(await syncAll({ accountIds: visibleAccountIds(req) }))) },
 
   /* ---------- mail ---------- */
   "/api/threads": h((req) => {
@@ -123,16 +126,20 @@ const rawRoutes = {
   }),
   "/api/threads/:id/read": {
     POST: h(async (req: P<"/api/threads/:id/read">) => {
+      const thread = threads.get(req.params.id) ?? notFound("Thread not found");
+      ensureVisibleAccount(req, thread.accountId);
       const body = await readJson<{ unread?: boolean }>(req).catch(() => ({}) as { unread?: boolean });
-      threads.markRead(req.params.id, body.unread ?? false);
+      threads.markRead(thread.id, body.unread ?? false);
       return ok({ ok: true });
     }),
   },
   "/api/threads/:id/reply": {
     POST: h(async (req: P<"/api/threads/:id/reply">) => {
+      const thread = threads.get(req.params.id) ?? notFound("Thread not found");
+      ensureVisibleAccount(req, thread.accountId);
       const body = await readJson<{ body: string; actor?: "user" | "agent" }>(req);
       if (!body.body?.trim()) badRequest("Empty reply");
-      const message = await sendReply(req.params.id, body.body.trim(), body.actor === "agent" ? "agent" : "user");
+      const message = await sendReply(thread.id, body.body.trim(), body.actor === "agent" ? "agent" : "user");
       return ok(message);
     }),
   },
@@ -158,15 +165,19 @@ const rawRoutes = {
   }),
   "/api/chats/:id/read": {
     POST: h((req: P<"/api/chats/:id/read">) => {
-      chats.markRead(req.params.id);
+      const chat = chats.get(req.params.id) ?? notFound("Chat not found");
+      ensureVisibleAccount(req, chat.accountId);
+      chats.markRead(chat.id);
       return ok({ ok: true });
     }),
   },
   "/api/chats/:id/send": {
     POST: h(async (req: P<"/api/chats/:id/send">) => {
+      const chat = chats.get(req.params.id) ?? notFound("Chat not found");
+      ensureVisibleAccount(req, chat.accountId);
       const body = await readJson<{ body: string; actor?: "user" | "agent"; replyToId?: string | null }>(req);
       if (!body.body?.trim()) badRequest("Empty message");
-      return ok(await sendChat(req.params.id, body.body.trim(), body.actor === "agent" ? "agent" : "user", body.replyToId ?? null));
+      return ok(await sendChat(chat.id, body.body.trim(), body.actor === "agent" ? "agent" : "user", body.replyToId ?? null));
     }),
   },
 
@@ -196,9 +207,6 @@ const rawRoutes = {
     }),
   },
 
-  /* ---------- audit ---------- */
-  "/api/audit": h(() => ok(audit.list(200))),
-
   /* ---------- agent ---------- */
   "/api/agent": {
     POST: h(async (req) => {
@@ -209,6 +217,7 @@ const rawRoutes = {
         selectedThreadId: body.context?.selectedThreadId ?? null,
         selectedChatId: body.context?.selectedChatId ?? null,
         selectedEventId: body.context?.selectedEventId ?? null,
+        accountIds: visibleAccountIds(req),
       };
       return agentStream(async (emit) => {
         for await (const ev of runAgent(body.input.trim(), ctx)) emit(ev);

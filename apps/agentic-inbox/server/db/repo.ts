@@ -26,6 +26,7 @@ import type {
   SourceRef,
 } from "../../shared/types.ts";
 import { senderEmail, senderName } from "../../shared/types.ts";
+import { isBlankText } from "../sync/normalize.ts";
 import { getDb, json, newId } from "./index.ts";
 
 type Row = Record<string, any>;
@@ -275,7 +276,7 @@ function rowToMessage(raw: unknown): EmailMessage {
   return {
     id: r.id,
     threadId: r.thread_id,
-    from: r.from_addr,
+    from: r.from_addr ?? "",
     to: json.parse<string[]>(r.to_addrs, []),
     cc: json.parse<string[]>(r.cc_addrs, []),
     body: r.body,
@@ -373,12 +374,13 @@ export const threads = {
       );
   },
   upsertMessage(m: EmailMessage & { externalId?: string | null }): void {
+    const body = isBlankText(m.body) ? "" : m.body;
     getDb()
       .query(
         `INSERT INTO messages (id, thread_id, external_id, from_addr, to_addrs, cc_addrs, body, at, is_mine)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
-           from_addr=excluded.from_addr,
+           from_addr=CASE WHEN TRIM(IFNULL(excluded.from_addr, '')) = '' THEN messages.from_addr ELSE excluded.from_addr END,
            to_addrs=excluded.to_addrs,
            cc_addrs=excluded.cc_addrs,
            body=CASE WHEN TRIM(excluded.body) = '' THEN messages.body ELSE excluded.body END,
@@ -389,10 +391,10 @@ export const threads = {
         m.id,
         m.threadId,
         m.externalId ?? null,
-        m.from,
+        m.from ?? "",
         json.stringify(m.to),
         json.stringify(m.cc),
-        m.body,
+        body,
         m.at,
         m.isMine ? 1 : 0,
       );

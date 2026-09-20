@@ -4,7 +4,7 @@ import { senderName } from "../../shared/types.ts";
 import { commitments, events, meetings } from "../db/repo.ts";
 import { registerTool, when } from "../agent/tools.ts";
 import { registerMockIntent, mockTool, mockSleep, MOCK_PACE } from "../agent/mock.ts";
-import { inScope, outOfScopeMessage } from "../agent/policy.ts";
+import { inScope, inAccountScope, outOfScopeMessage } from "../agent/policy.ts";
 import { parseDue } from "./text.ts";
 import { extractForSpace } from "./commitments.ts";
 import { pushCommitmentToTodo } from "./ms-tasks.ts";
@@ -96,7 +96,8 @@ registerTool({
   schema: z.object({ eventId: z.string().optional() }),
   async run(input, ctx) {
     let event = input.eventId ? events.get(input.eventId) : ctx.selectedEventId ? events.get(ctx.selectedEventId) : null;
-    if (!event) event = events.list(ctx.spaceId, Date.now() - 1_800_000, Date.now() + 14 * 86_400_000).find((e) => e.attendees.length > 1) ?? null;
+    if (event && !inAccountScope(ctx, event.accountId)) event = null;
+    if (!event) event = events.list(ctx.spaceId, Date.now() - 1_800_000, Date.now() + 14 * 86_400_000, ctx.accountIds).find((e) => e.attendees.length > 1) ?? null;
     if (!event) return { output: "No upcoming meeting found." };
     if (!inScope(ctx, event.spaceId)) return { output: outOfScopeMessage(ctx) };
     const brief = await briefForEvent(event.id, { polish: false });
@@ -110,7 +111,7 @@ registerTool({
   schema: z.object({ meetingId: z.string() }),
   async run(input, ctx) {
     const m = meetings.get(input.meetingId);
-    if (!m) return { output: "Meeting not found." };
+    if (!m || !inAccountScope(ctx, m.accountId)) return { output: "Meeting not found." };
     if (!inScope(ctx, m.spaceId)) return { output: outOfScopeMessage(ctx) };
     const t = meetings.transcript(m.id);
     if (!t) return { output: `"${m.title}" has no transcript.` };
@@ -123,7 +124,8 @@ registerTool({
   description: "Turn a meeting transcript into decisions, action items (added to the commitment ledger) and a follow-up mail draft to attendees. The user confirms before sending.",
   schema: z.object({ meetingId: z.string().optional().describe("Defaults to the most recent transcribed meeting") }),
   async run(input, ctx) {
-    const m = input.meetingId ? meetings.get(input.meetingId) : meetings.list(ctx.spaceId, 20).find((x) => x.hasTranscript) ?? null;
+    const found = input.meetingId ? meetings.get(input.meetingId) : meetings.list(ctx.spaceId, 20, ctx.accountIds).find((x) => x.hasTranscript) ?? null;
+    const m = found && inAccountScope(ctx, found.accountId) ? found : null;
     if (!m) return { output: "No transcribed meeting found." };
     if (!inScope(ctx, m.spaceId)) return { output: outOfScopeMessage(ctx) };
     const f = await buildFollowUp(m);
@@ -141,7 +143,7 @@ registerTool({
   async run(input, ctx) {
     const to = Date.now();
     const from = to - (input.sinceHours ?? 24) * 3_600_000;
-    const c = await buildCatchUp(ctx.spaceId, from, to, { polish: false });
+    const c = await buildCatchUp(ctx.spaceId, from, to, { polish: false, accountIds: ctx.accountIds });
     return {
       output: `${c.summaryMarkdown}\n\n${c.sections.map((s) => `${s.title}:\n${s.items.slice(0, 8).map((i) => `• [${i.source.kind}:${i.source.id}] ${i.title} — ${i.excerpt} (${i.reason})`).join("\n")}`).join("\n\n")}`,
     };
@@ -168,7 +170,7 @@ registerTool({
   description: "What is waiting on the user (aging, VIP-first) and what the user is waiting on from others, with nudge suggestions.",
   schema: z.object({}),
   async run(_input, ctx) {
-    const items = computeRadar(ctx.spaceId);
+    const items = computeRadar(ctx.spaceId, ctx.accountIds);
     return { output: items.length ? radarSummary(items) : "Nothing is waiting on you and you're not waiting on anyone." };
   },
 });
@@ -197,7 +199,7 @@ registerMockIntent({
     yield { kind: "thought", text: `Collecting everything from the last ${hours}h across mail, chats and meetings.` };
     await mockSleep(MOCK_PACE);
     yield* mockTool("catch_up", { sinceHours: hours }, ctx);
-    const c = await buildCatchUp(ctx.spaceId, Date.now() - hours * 3_600_000, Date.now(), { polish: false });
+    const c = await buildCatchUp(ctx.spaceId, Date.now() - hours * 3_600_000, Date.now(), { polish: false, accountIds: ctx.accountIds });
     yield* reply(`${c.summaryMarkdown.replace(/\*\*/g, "")}\n\nOpen the Catch-up view for the full list with links.`);
   },
 });
@@ -241,7 +243,7 @@ registerMockIntent({
     yield { kind: "thought", text: "Scanning threads and chats for unanswered asks in both directions." };
     await mockSleep(MOCK_PACE);
     yield* mockTool("response_radar", {}, ctx);
-    const items = computeRadar(ctx.spaceId);
+    const items = computeRadar(ctx.spaceId, ctx.accountIds);
     const me = items.filter((i) => i.direction === "waiting_on_me");
     yield* reply(me.length ? `${me.length} item(s) are waiting on you; the oldest is "${me.sort((a, b) => b.ageMs - a.ageMs)[0].source.label}". Open the Radar view for one-click replies and nudges.` : "Nothing is waiting on you right now.");
   },

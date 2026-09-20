@@ -44,9 +44,10 @@ export async function syncAccount(account: Account, opts: { full?: boolean } = {
   }
 }
 
-export async function syncAll(opts: { full?: boolean } = {}): Promise<Record<string, SyncStats | { error: string }>> {
+export async function syncAll(opts: { full?: boolean; accountIds?: string[] | null } = {}): Promise<Record<string, SyncStats | { error: string }>> {
   const out: Record<string, SyncStats | { error: string }> = {};
-  for (const account of accounts.all()) {
+  const list = opts.accountIds == null ? accounts.all() : accounts.all().filter((a) => opts.accountIds!.includes(a.id));
+  for (const account of list) {
     try {
       out[account.id] = await syncAccount(account, opts);
     } catch (err) {
@@ -66,10 +67,10 @@ function indexPeople(account: Account): void {
     seen.add(email);
     people.ensureFromAddress(account.spaceId, addr);
   };
-  for (const t of threads.list(account.spaceId, { limit: 1000 })) t.participants.forEach(add);
-  for (const e of events.list(account.spaceId, 0, Number.MAX_SAFE_INTEGER)) {
+  for (const t of threads.list(account.spaceId, { limit: 1000, accountIds: [account.id] })) t.participants.forEach(add);
+  for (const e of events.list(account.spaceId, 0, Number.MAX_SAFE_INTEGER, [account.id])) {
     e.attendees.forEach(add);
     if (e.organizer) add(e.organizer);
   }
-  for (const c of chats.list(account.spaceId)) c.members.forEach(add);
+  for (const c of chats.list(account.spaceId, undefined, [account.id])) c.members.forEach(add);
 }

@@ -134,4 +134,24 @@ describe("empty inbox threads", () => {
     threads.upsertMessage({ ...msg("m_keep", "t_keep", ""), at: Date.now() + 1 });
     expect(threads.get("t_keep")!.messages[0].body).toBe("real body");
   });
+
+  test("nbsp-only bodies are stored as empty and hidden when the subject is blank", () => {
+    openMemoryDb();
+    bootstrap();
+    accounts.insert(account, null);
+    threads.upsert({
+      id: "t_nbsp",
+      spaceId: WORK_SPACE_ID,
+      accountId: account.id,
+      subject: "(no subject)",
+      category: "other",
+      labels: [],
+      unread: true,
+      lastAt: Date.now(),
+      participants: [],
+    });
+    threads.upsertMessage(msg("m_nbsp", "t_nbsp", "\u00a0\u00a0"));
+    expect(threads.get("t_nbsp")!.messages[0].body).toBe("");
+    expect(threads.list(WORK_SPACE_ID).some((t) => t.id === "t_nbsp")).toBe(false);
+  });
 });

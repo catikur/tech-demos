@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { categorize, htmlToText, parseVtt } from "../server/sync/normalize.ts";
+import { categorize, htmlToText, isBlankText, parseVtt } from "../server/sync/normalize.ts";
 
 describe("parseVtt", () => {
   test("extracts speakers, timings and merges consecutive lines", () => {
@@ -30,6 +30,16 @@ describe("parseVtt", () => {
 describe("htmlToText", () => {
   test("keeps line structure and decodes entities", () => {
     expect(htmlToText("<p>Hi &amp; hello</p><div>Line<br>two</div><style>p{}</style>")).toBe("Hi & hello\nLine\ntwo");
+  });
+});
+
+describe("isBlankText", () => {
+  test("treats unicode spaces as empty", () => {
+    expect(isBlankText(null)).toBe(true);
+    expect(isBlankText("")).toBe(true);
+    expect(isBlankText("  \n\t")).toBe(true);
+    expect(isBlankText("\u00a0\u200b")).toBe(true);
+    expect(isBlankText("ok")).toBe(false);
   });
 });
 

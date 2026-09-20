@@ -294,6 +294,11 @@ export interface AgentContext {
   selectedThreadId: string | null;
   selectedChatId: string | null;
   selectedEventId: string | null;
+  /**
+   * Mailboxes this viewer may read. Injected by the server from the session —
+   * the client must not set this. `null` / omitted = unrestricted (local demo).
+   */
+  accountIds?: string[] | null;
 }
 
 /* ---------- feature DTOs ---------- */
@@ -409,12 +414,14 @@ export interface AppStatus {
 
 /* ---------- helpers ---------- */
 
-export function senderName(from: string): string {
+export function senderName(from: string | null | undefined): string {
+  if (!from) return "";
   const match = from.match(/^([^<]+)</);
   return (match ? match[1] : from).trim().replace(/^"|"$/g, "");
 }
 
-export function senderEmail(from: string): string {
+export function senderEmail(from: string | null | undefined): string {
+  if (!from) return "";
   const match = from.match(/<([^>]+)>/);
   return (match ? match[1] : from).trim().toLowerCase();
 }

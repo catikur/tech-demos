@@ -15,7 +15,7 @@ export async function buildCatchUp(spaceId: string | null, fromAt: number, toAt:
 
   for (const m of threads.messagesSince(spaceId, fromAt, opts.accountIds)) {
     if (m.at > toAt || m.isMine) continue;
-    const t = threads.list(m.spaceId, { limit: 500 }).find((x) => x.id === m.threadId);
+    const t = threads.list(m.spaceId, { limit: 500, accountIds: opts.accountIds }).find((x) => x.id === m.threadId);
     if (!t) continue;
     const ask = isAsk(m.body);
     const senderVip = vip.has(senderEmail(m.from));
