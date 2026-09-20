@@ -86,7 +86,7 @@ export async function embedTexts(texts: string[], embedder?: Embedder): Promise<
 }
 
 interface PendingChunk {
-  sourceKind: "thread" | "chat" | "meeting";
+  sourceKind: "thread" | "chat" | "meeting" | "kb";
   sourceId: string;
   text: string;
   hash: string;
@@ -154,7 +154,7 @@ export async function indexChunks(spaceId: string, opts?: { embedder?: Embedder 
 export async function hybridSearch(
   spaceId: string | null,
   query: string,
-  opts?: { embedder?: Embedder; sourceKind?: "thread" | "chat" | "meeting"; limit?: number },
+  opts?: { embedder?: Embedder; sourceKind?: "thread" | "chat" | "meeting" | "kb"; limit?: number },
 ): Promise<Array<{ sourceKind: string; sourceId: string; text: string; score: number }>> {
   const q = query.trim();
   if (!q) return [];

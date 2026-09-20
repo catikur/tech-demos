@@ -32,10 +32,13 @@ provided a tenant admin has granted consent for the three admin-only scopes belo
 | `OnlineMeetingRecording.Read.All` | meeting recordings | **yes** |
 | `People.Read` | people ranking | no |
 | `Tasks.ReadWrite` | push commitments to Microsoft To Do | no |
+| `Sites.Read.All` | resolve Conforcus Vault site | **yes** |
+| `Files.ReadWrite.All` | read vault markdown; optional note write-back | **yes** |
 
 Click **Grant admin consent for <tenant>**. That single click is what unlocks transcripts,
-recordings and channel messages for this delegated flow — no application-permission
-access policy is needed.
+recordings, channel messages and SharePoint vault files for this delegated flow — no application-permission
+access policy is needed. After adding Files/Sites, **sign out and sign back in** so the refresh token
+picks up the new scopes.
 
 > If you prefer **application permissions** (daemon-style, no user session) you would
 > additionally need a Teams *application access policy*
@@ -81,6 +84,19 @@ Redirect URIs to register on the Entra app:
 Replies use `POST /me/messages/{id}/reply` (keeps the Outlook conversation intact) and fall
 back to `sendMail`. Chat and channel messages use the corresponding `/messages` endpoints.
 Every send requires your confirmation in the UI and is written to the audit log.
+
+The scheduler also posts the **morning briefing** to the Teams channel configured in
+Settings (default `Yonetim › Butler`) at the Work space digest hour. Manual “Post briefing
+to Teams” uses the same path and is an explicit user action.
+
+## Conforcus Vault (SharePoint)
+
+Settings stores the library URL
+`https://conforcus.sharepoint.com/sites/ConforcusVault/VaultConforcus/Forms/AllItems.aspx`.
+Sync walks that document library for `.md` files, indexes them as `kb` chunks (wikilinks
+included), and lists folders so you can pick a **templates** directory for meeting notes.
+`Sites.Read.All` + `Files.ReadWrite.All` must be consented; 423/403 on a file is skipped
+like locked recordings.
 
 ## Change notifications (webhooks)
 

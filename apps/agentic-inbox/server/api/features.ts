@@ -12,6 +12,11 @@ import { findPerson, personProfile } from "../features/people.ts";
 import { parseDue } from "../features/text.ts";
 import { produceDigest } from "../features/digests.ts";
 import { buildMorningBriefing } from "../features/briefing.ts";
+import { postMorningBriefing } from "../features/briefing-teams.ts";
+import { orgSettingsView, patchOrgConfig, savePlaud } from "../features/org-config.ts";
+import { syncSharePointVault } from "../features/vault.ts";
+import { probePlaud } from "../features/plaud.ts";
+import { buildMeetingMinutes } from "../features/minutes.ts";
 import { produceOvernightDrafts } from "../features/overnight-drafts.ts";
 import { digests } from "../db/repo.ts";
 import { sendNewMail } from "../services/messaging.ts";
@@ -156,6 +161,68 @@ export const featureRoutes = {
       }),
     ),
   ),
+
+  /* ---------- org assistant (Teams brief, SharePoint vault, Plaud) ---------- */
+  "/api/org": {
+    GET: h((req) => ok(orgSettingsView(spaceParam(req)))),
+    PATCH: h(async (req) => {
+      const body = await readJson<{
+        briefChannelTitle?: string;
+        vaultUrl?: string;
+        templateFolder?: string;
+      }>(req);
+      patchOrgConfig({
+        briefChannelTitle: body.briefChannelTitle,
+        vaultUrl: body.vaultUrl,
+        templateFolder: body.templateFolder,
+      });
+      return ok(orgSettingsView(spaceParam(req)));
+    }),
+  },
+  "/api/org/vault/sync": {
+    POST: h(async (req) => {
+      await syncSharePointVault();
+      return ok(orgSettingsView(spaceParam(req)));
+    }),
+  },
+  "/api/org/briefing/post": {
+    POST: h(async (req) => {
+      const spaceId = spaceParam(req) ?? "space_work";
+      const result = await postMorningBriefing(spaceId, { force: true, ownerEmail: viewerEmail(req) });
+      if (!result.posted && result.skipped && /unknown space/i.test(result.skipped)) badRequest(result.skipped);
+      return ok(result);
+    }),
+  },
+  "/api/org/plaud": {
+    POST: h(async (req) => {
+      const body = await readJson<{ clientId?: string; clientSecret?: string | null; apiKey?: string | null; mcpUrl?: string }>(req);
+      savePlaud({
+        clientId: body.clientId,
+        clientSecret: body.clientSecret,
+        apiKey: body.apiKey,
+        mcpUrl: body.mcpUrl,
+      });
+      return ok(orgSettingsView(spaceParam(req)));
+    }),
+  },
+  "/api/org/plaud/probe": {
+    POST: h(async () => ok(await probePlaud())),
+  },
+
+  "/api/meetings/:id/minutes": {
+    GET: h(async (req: P<"/api/meetings/:id/minutes">) => {
+      const m = meetings.get(req.params.id) ?? notFound("Meeting not found");
+      ensureVisibleAccount(req, m.accountId);
+      const existing = notes.list(m.spaceId, { meetingId: m.id, kind: "minutes" })[0];
+      return ok(existing ?? null);
+    }),
+    POST: h(async (req: P<"/api/meetings/:id/minutes">) => {
+      const m = meetings.get(req.params.id) ?? notFound("Meeting not found");
+      ensureVisibleAccount(req, m.accountId);
+      const body = await readJson<{ templatePath?: string; refresh?: boolean }>(req).catch(() => ({}) as { templatePath?: string; refresh?: boolean });
+      return ok(await buildMeetingMinutes(m, { templatePath: body.templatePath, refresh: body.refresh !== false }));
+    }),
+  },
   "/api/drafts": {
     GET: h((req) =>
       ok(proposedDrafts.list(spaceParam(req), { status: (query(req).get("status") as "pending" | "accepted" | "dismissed") || "pending", ownerEmail: viewerEmail(req) || undefined })),

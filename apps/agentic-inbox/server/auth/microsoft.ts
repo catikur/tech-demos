@@ -31,6 +31,8 @@ export const MS_SCOPES = [
   "OnlineMeetingRecording.Read.All", // (admin)
   "People.Read",
   "Tasks.ReadWrite",
+  "Sites.Read.All", // (admin) Conforcus Vault site
+  "Files.ReadWrite.All", // vault markdown + optional note write-back
 ];
 
 export interface MicrosoftOAuthStored {

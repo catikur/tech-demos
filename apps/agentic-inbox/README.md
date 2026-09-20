@@ -57,7 +57,7 @@ Both OAuth flows are auth-code + PKCE implemented with plain `fetch`; tokens are
 - **Chats** — Teams 1:1, group and channel messages (including channel thread replies), mention highlighting; send after confirm.
 - **Meetings** — calendar stubs + transcripts when Graph allows them; if recording download is **423 Locked**, the row still appears with an Open in Teams link.
 - **Catch-up**, **Commitments** (push to Microsoft To Do; Work ledger is shared), **Radar**, **Topics**, **People** — the seven features (below).
-- **Settings** — space rules (quiet hours, digest hour, agent tone, signature), accounts, connectors, OpenRouter status.
+- **Settings** — space rules, accounts, connectors, **corporate assistant** (Teams briefing channel, SharePoint vault URL + template folder, Plaud credentials), OpenRouter status.
 - **Notification bell** — briefs, digests, commitment reminders and radar nudges from the scheduler.
 
 ### Spaces: Work vs Personal
@@ -69,7 +69,7 @@ record from the other space is refused unless the question explicitly says so
 ### Email Agent
 A server-side tool-calling loop (`server/agent/loop.ts`) over these tools:
 `list_threads · search_mail · read_thread · draft_reply · list_events · list_chats ·
-search_chats · read_chat · draft_chat_message · list_commitments · create_commitment ·
+search_chats · read_chat · draft_chat_message · search_vault · list_commitments · create_commitment ·
 push_commitment_to_todo · get_meeting_brief · read_transcript · meeting_followup ·
 catch_up · search_topics · response_radar · get_person`.
 

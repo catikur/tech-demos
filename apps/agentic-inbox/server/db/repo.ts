@@ -1235,6 +1235,9 @@ export const chunks = {
   clear(): void {
     getDb().exec("DELETE FROM chunks");
   },
+  deleteForKind(spaceId: string, sourceKind: Chunk["sourceKind"]): number {
+    return getDb().query("DELETE FROM chunks WHERE space_id = ? AND source_kind = ?").run(spaceId, sourceKind).changes;
+  },
 };
 
 function rowToMemory(raw: unknown): Memory {
