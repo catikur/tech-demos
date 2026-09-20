@@ -1,7 +1,8 @@
 # Add this site block to the VPS Caddy that already owns :80/:443.
-# Do not replace other site blocks.
+# Do not replace other site blocks. atlas-gic joins conforcus-web_default
+# under alias "atlas-gic" (see docker-compose.hostinger.yml).
 
 atlas.conforcus.com {
 	encode gzip
-	reverse_proxy 127.0.0.1:3047
+	reverse_proxy atlas-gic:3000
 }

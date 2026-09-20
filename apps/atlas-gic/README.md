@@ -46,7 +46,7 @@ cd apps/atlas-gic
 docker compose up -d --build
 ```
 
-On the Hostinger VPS (`srv1709361.hstgr.cloud`, `152.239.114.242`) Caddy already owns 80/443. Add `Caddyfile.atlas` to that Caddy so `atlas.conforcus.com` reverse-proxies `127.0.0.1:3047`. Do not replace other site blocks. `conforcus.com` stays on LiteSpeed hosting (`185.97.147.174`). Public DNS for `atlas` is already at the VPS; nameservers are Microsoft 365 — do not retarget NS.
+On the Hostinger VPS (`srv1709361.hstgr.cloud`, `152.239.114.242`) Caddy already owns 80/443. Deploy with `docker-compose.hostinger.yml` (project name `atlas-gic`): join `conforcus-web_default` under alias `atlas-gic`, then append `Caddyfile.atlas` so `atlas.conforcus.com` reverse-proxies `atlas-gic:3000`. Do not replace other site blocks or start a second Caddy. `conforcus.com` stays on LiteSpeed hosting (`185.97.147.174`). Public DNS for `atlas` is already at the VPS; nameservers are Microsoft 365 — do not retarget NS.
 
 ## Settings (parametric)
 
