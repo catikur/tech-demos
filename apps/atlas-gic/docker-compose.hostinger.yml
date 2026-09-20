@@ -1,0 +1,22 @@
+# Used by Hostinger VPS Docker Manager (git build context).
+# Local deploys should use docker-compose.yml instead.
+
+services:
+  atlas-gic:
+    build:
+      context: https://github.com/catikur/tech-demos.git#cursor/atlas-gic-demo-7812:apps/atlas-gic
+      dockerfile: Dockerfile
+    container_name: atlas-gic
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      PUBLIC_URL: "https://atlas.conforcus.com"
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+    volumes:
+      - atlas-gic-data:/app/data
+    ports:
+      - "127.0.0.1:3047:3000"
+
+volumes:
+  atlas-gic-data:

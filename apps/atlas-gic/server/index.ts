@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join, normalize } from "node:path";
 import { LAYER_ORDER } from "../src/shared/agents";
 import { layerMap, synthesize } from "../src/shared/engine";
 import type { AgentTake, AutoresearchProposal, CroResult } from "../src/shared/types";
@@ -19,9 +21,36 @@ import { listModels } from "./openrouter";
 import { bookDebate, closePos, snapshotBook } from "./paper";
 import { markSession, proposeAutoresearch, resolveAutoresearch } from "./scoring";
 
-const PORT = Number(process.env.ATLAS_API_PORT || 5200);
+const PORT = Number(process.env.PORT || process.env.ATLAS_API_PORT || 5200);
+const HOST = process.env.HOST || "0.0.0.0";
+const DIST = join(import.meta.dir, "..", "dist");
+const SERVE_WEB = existsSync(join(DIST, "index.html"));
 
-let pendingProposal: AutoresearchProposal | null = null;
+function mime(path: string): string {
+  if (path.endsWith(".html")) return "text/html; charset=utf-8";
+  if (path.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (path.endsWith(".css")) return "text/css; charset=utf-8";
+  if (path.endsWith(".svg")) return "image/svg+xml";
+  if (path.endsWith(".json")) return "application/json";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".webp")) return "image/webp";
+  if (path.endsWith(".ico")) return "image/x-icon";
+  if (path.endsWith(".woff2")) return "font/woff2";
+  return "application/octet-stream";
+}
+
+async function serveStatic(pathname: string): Promise<Response | null> {
+  if (!SERVE_WEB) return null;
+  const rel = pathname === "/" ? "/index.html" : pathname;
+  const filePath = normalize(join(DIST, decodeURIComponent(rel)));
+  if (!filePath.startsWith(DIST)) return new Response("Forbidden", { status: 403 });
+  const file = Bun.file(filePath);
+  if (await file.exists()) {
+    return new Response(file, { headers: { "Content-Type": mime(filePath) } });
+  }
+  const index = Bun.file(join(DIST, "index.html"));
+  return new Response(index, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+}
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -86,6 +115,7 @@ async function statePayload() {
 }
 
 const server = Bun.serve({
+  hostname: HOST,
   port: PORT,
   idleTimeout: 255,
   async fetch(req) {
@@ -216,6 +246,8 @@ const server = Bun.serve({
         return json(await statePayload());
       }
 
+      const web = await serveStatic(url.pathname);
+      if (web) return web;
       return fail("not found", 404);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -228,4 +260,4 @@ const server = Bun.serve({
   },
 });
 
-console.log(`atlas-gic api http://localhost:${server.port}`);
+console.log(`atlas-gic ${SERVE_WEB ? "web+api" : "api"} http://${HOST}:${server.port}`);

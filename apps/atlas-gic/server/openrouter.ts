@@ -32,7 +32,7 @@ export async function chatJson(
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost:5199",
+        "HTTP-Referer": process.env.PUBLIC_URL || "http://localhost:5199",
         "X-OpenRouter-Title": "ATLAS-GIC paper desk",
       },
       body: JSON.stringify(body),

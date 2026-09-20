@@ -1,0 +1,7 @@
+# Add this site block to the VPS Caddy that already owns :80/:443.
+# Do not replace other site blocks.
+
+atlas.conforcus.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:3047
+}
