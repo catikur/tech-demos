@@ -87,6 +87,24 @@ function migrate(database: Database): void {
   if (notifCols.size > 0 && !notifCols.has("owner_email")) {
     database.exec("ALTER TABLE notifications ADD COLUMN owner_email TEXT NOT NULL DEFAULT ''");
   }
+  const messageCols = columnNames(database, "messages");
+  if (messageCols.size > 0 && !messageCols.has("body_html")) {
+    database.exec("ALTER TABLE messages ADD COLUMN body_html TEXT");
+  }
+  const chatMessageCols = columnNames(database, "chat_messages");
+  if (chatMessageCols.size > 0 && !chatMessageCols.has("body_html")) {
+    database.exec("ALTER TABLE chat_messages ADD COLUMN body_html TEXT");
+  }
+  const eventCols = columnNames(database, "events");
+  if (eventCols.size > 0 && !eventCols.has("description_html")) {
+    database.exec("ALTER TABLE events ADD COLUMN description_html TEXT");
+  }
+  const laneCols = columnNames(database, "commitments");
+  if (laneCols.size > 0 && !laneCols.has("board_lane")) {
+    database.exec("ALTER TABLE commitments ADD COLUMN board_lane TEXT NOT NULL DEFAULT 'todo'");
+    database.exec("UPDATE commitments SET board_lane = 'waiting' WHERE direction = 'owed_to_me' AND status = 'open'");
+    database.exec("UPDATE commitments SET board_lane = 'done' WHERE status = 'done'");
+  }
 }
 
 export function getDb(): Database {

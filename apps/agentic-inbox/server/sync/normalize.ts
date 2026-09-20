@@ -21,8 +21,15 @@ export function htmlToText(html: string): string {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, inner: string) => {
+      const t = inner.replace(/<[^>]+>/g, "").trim();
+      const h = href.trim();
+      if (t && h && t !== h) return `${t} (${h})`;
+      return t || h;
+    })
+    .replace(/<li\b[^>]*>/gi, "\n- ")
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|tr|li|h[1-6]|blockquote)>/gi, "\n")
+    .replace(/<\/(p|div|tr|h[1-6]|blockquote|ul|ol)>/gi, "\n")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
@@ -34,6 +41,14 @@ export function htmlToText(html: string): string {
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/** Keep a flattened copy for search/agent and the original HTML for the pane. */
+export function splitHtmlBody(content: string, contentType?: string | null): { text: string; html: string | null } {
+  const kind = (contentType ?? "").toLowerCase();
+  const isHtml = kind === "html" || (kind !== "text" && /<\/?[a-z][\s\S]*>/i.test(content));
+  if (!isHtml) return { text: content, html: null };
+  return { text: htmlToText(content), html: content };
 }
 
 /** Parse WebVTT (Teams transcript format) into speaker-attributed lines. */

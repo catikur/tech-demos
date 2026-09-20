@@ -6,7 +6,7 @@ import { formatAddress, senderEmail } from "../../shared/types.ts";
 import { env } from "../env.ts";
 import { accounts, chats, events, meetings, threads } from "../db/repo.ts";
 import { microsoftAccessToken, microsoftCredentials } from "../auth/microsoft.ts";
-import { categorize, htmlToText, isBlankText, parseVtt } from "../sync/normalize.ts";
+import { categorize, isBlankText, parseVtt, splitHtmlBody } from "../sync/normalize.ts";
 import { emptyStats, type Connector, type SendChatInput, type SendMailInput, type SyncStats } from "./types.ts";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
@@ -155,7 +155,8 @@ export class M365Connector implements Connector {
     const to = (m.toRecipients ?? []).map(addr);
     const cc = (m.ccRecipients ?? []).map(addr);
     const bodyRaw = m.body?.content ?? "";
-    const body = m.body?.contentType === "html" ? htmlToText(bodyRaw) : bodyRaw;
+    const split = splitHtmlBody(bodyRaw, m.body?.contentType);
+    const body = split.text;
     const at = ts(m.receivedDateTime ?? m.sentDateTime);
     const existing = threads.get(threadId);
     const subjectRaw = (m.subject ?? "").trim();
@@ -187,6 +188,7 @@ export class M365Connector implements Connector {
       to,
       cc,
       body,
+      bodyHtml: split.html,
       at,
       isMine,
     };
@@ -201,10 +203,11 @@ export class M365Connector implements Connector {
     const end = new Date(Date.now() + 30 * DAY).toISOString();
     const url =
       `/me/calendarView?startDateTime=${start}&endDateTime=${end}&$top=100` +
-      `&$select=id,subject,start,end,location,organizer,attendees,onlineMeeting,bodyPreview,responseStatus,isCancelled,isOnlineMeeting`;
+      `&$select=id,subject,start,end,location,organizer,attendees,onlineMeeting,body,bodyPreview,responseStatus,isCancelled,isOnlineMeeting`;
     const { items } = await g.collect<any>(url, { prefer: 'outlook.timezone="UTC"' });
     for (const e of items) {
       if (e.isCancelled) continue;
+      const desc = splitHtmlBody(e.body?.content ?? e.bodyPreview ?? "", e.body?.contentType);
       const ev: CalendarEvent & { externalId: string } = {
         id: localId("ev", account.id, e.id),
         externalId: e.id,
@@ -217,7 +220,8 @@ export class M365Connector implements Connector {
         organizer: addr(e.organizer),
         attendees: [...new Set<string>([...(e.attendees ?? []).map(addr), formatAddress(me.displayName, me.mail)])],
         joinUrl: e.onlineMeeting?.joinUrl ?? null,
-        description: e.bodyPreview ?? "",
+        description: desc.text,
+        descriptionHtml: desc.html,
         meetingId: null,
         responseStatus: mapResponse(e.responseStatus?.response),
       };
@@ -374,7 +378,8 @@ export class M365Connector implements Connector {
     const email = member?.email ?? (user.id === me.id ? me.mail : "");
     const from = formatAddress(user.displayName ?? member?.name ?? "Unknown", email || `${user.id}@teams.local`);
     const raw = m.body?.content ?? "";
-    const body = m.body?.contentType === "html" ? htmlToText(raw) : raw;
+    const split = splitHtmlBody(raw, m.body?.contentType);
+    const body = split.text;
     if (!body.trim()) return null;
     const mentionsMe = (m.mentions ?? []).some((x: any) => x.mentioned?.user?.id === me.id);
     return {
@@ -383,6 +388,7 @@ export class M365Connector implements Connector {
       chatId,
       from,
       body,
+      bodyHtml: split.html,
       at: ts(m.createdDateTime),
       isMine: user.id === me.id,
       mentionsMe,

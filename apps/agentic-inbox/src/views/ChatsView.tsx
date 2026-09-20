@@ -5,6 +5,7 @@ import { api, spaceQuery } from "../api/client.ts";
 import { t } from "../i18n.ts";
 import { ago, fmtTime, initials, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
+import { RichBody } from "../components/RichBody.tsx";
 
 function kindLabel(kind: Chat["kind"]): string {
   return t(`chats.kind.${kind}`);
@@ -120,7 +121,9 @@ export function ChatsView({
                     <span className="message-from">{m.isMine ? t("common.you") : senderName(m.from)}</span>
                     <span className="message-time">{fmtTime(m.at)}</span>
                   </header>
-                  <div className="chat-msg-body">{m.body}</div>
+                  <div className="chat-msg-body">
+                    <RichBody text={m.body} html={m.bodyHtml} />
+                  </div>
                 </article>
               ))}
             </div>

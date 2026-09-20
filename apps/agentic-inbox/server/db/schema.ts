@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS messages (
   to_addrs TEXT NOT NULL DEFAULT '[]',
   cc_addrs TEXT NOT NULL DEFAULT '[]',
   body TEXT NOT NULL,
+  body_html TEXT,
   at INTEGER NOT NULL,
   is_mine INTEGER NOT NULL DEFAULT 0
 );
@@ -80,6 +81,7 @@ CREATE TABLE IF NOT EXISTS events (
   attendees TEXT NOT NULL DEFAULT '[]',
   join_url TEXT,
   description TEXT NOT NULL DEFAULT '',
+  description_html TEXT,
   meeting_id TEXT,
   response_status TEXT NOT NULL DEFAULT 'none'
 );
@@ -103,6 +105,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   external_id TEXT,
   from_addr TEXT NOT NULL,
   body TEXT NOT NULL,
+  body_html TEXT,
   at INTEGER NOT NULL,
   is_mine INTEGER NOT NULL DEFAULT 0,
   mentions_me INTEGER NOT NULL DEFAULT 0,
@@ -140,6 +143,7 @@ CREATE TABLE IF NOT EXISTS commitments (
   text TEXT NOT NULL,
   due_at INTEGER,
   status TEXT NOT NULL DEFAULT 'open',
+  board_lane TEXT NOT NULL DEFAULT 'todo',
   source_kind TEXT NOT NULL,
   source_id TEXT NOT NULL,
   source_label TEXT NOT NULL,
