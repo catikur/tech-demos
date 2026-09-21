@@ -43,6 +43,7 @@ class UpstreamError extends Error {
 let venuePin: Venue | null = null;
 
 const instrumentCache = new Map<Venue, { at: number; instruments: Instrument[] }>();
+const historyCache = new Map<string, { at: number; bars: Bar[] }>();
 
 function json(data: unknown, status = 200): Response {
   return Response.json(data, { status, headers: { "cache-control": "no-store" } });
@@ -189,15 +190,53 @@ async function bybitKlines(symbol: string, interval: string): Promise<Bar[]> {
   return barsFromRows(Array.isArray(list) ? list : []);
 }
 
-async function bitgetKlines(symbol: string, granularity: string): Promise<Bar[]> {
-  const url = new URL(`${BITGET}/api/v2/mix/market/candles`);
+function mergeBars(parts: Bar[][]): Bar[] {
+  const byTime = new Map<number, Bar>();
+  for (const part of parts) {
+    for (const bar of part) byTime.set(bar.time, bar);
+  }
+  return [...byTime.values()].sort((a, b) => a.time - b.time);
+}
+
+async function bitgetCandlePage(
+  kind: "candles" | "history-candles",
+  symbol: string,
+  granularity: string,
+  endTimeMs?: number,
+): Promise<Bar[]> {
+  const url = new URL(`${BITGET}/api/v2/mix/market/${kind}`);
   url.searchParams.set("productType", "USDT-FUTURES");
   url.searchParams.set("symbol", symbol);
   url.searchParams.set("granularity", granularity);
-  url.searchParams.set("limit", "1000");
+  url.searchParams.set("limit", kind === "candles" ? "1000" : "200");
+  if (endTimeMs !== undefined) url.searchParams.set("endTime", String(endTimeMs));
   const body = asRecord(await getJson(url.toString(), "Bitget"));
   if (String(body.code) !== "00000") throw new UpstreamError(String(body.msg || "Bitget kline failed"), false);
   return barsFromRows(Array.isArray(body.data) ? body.data : []);
+}
+
+async function bitgetKlines(symbol: string, granularity: string): Promise<Bar[]> {
+  const recent = await bitgetCandlePage("candles", symbol, granularity);
+  if (recent.length >= 1000 || recent.length === 0) return recent.slice(-1000);
+
+  // Bitget's recent endpoint stops early on slow intervals (about 90 daily bars).
+  // Older pages are cached so the 15s poll only refreshes the live tip.
+  const key = `${symbol}|${granularity}`;
+  const cached = historyCache.get(key);
+  let older = cached && Date.now() - cached.at < INSTRUMENT_TTL_MS ? cached.bars : null;
+  if (!older) {
+    older = [];
+    let endMs = recent[0].time * 1000;
+    for (let page = 0; page < 15 && older.length + recent.length < 1000; page++) {
+      const batch = await bitgetCandlePage("history-candles", symbol, granularity, endMs);
+      const fresh = batch.filter((bar) => bar.time * 1000 < endMs);
+      if (fresh.length === 0) break;
+      older = fresh.concat(older);
+      endMs = fresh[0].time * 1000;
+    }
+    historyCache.set(key, { at: Date.now(), bars: older });
+  }
+  return mergeBars([older, recent]).slice(-1000);
 }
 
 async function bybitTicker(symbol: string): Promise<Ticker> {
