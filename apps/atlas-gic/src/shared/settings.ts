@@ -1,4 +1,4 @@
-import type { Settings } from "./types";
+import type { BybitClass, ScreenUniverse, Settings } from "./types";
 
 export const DEFAULT_SETTINGS: Settings = {
   openrouterBaseUrl: "https://openrouter.ai/api/v1",
@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   screenWRegime: 0.8,
   screenScoutEnabled: true,
   screenScoutMaxNames: 8,
+  screenBybitClass: "all",
 };
 
 export const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
@@ -81,8 +82,8 @@ export function mergeSettings(raw: Record<string, unknown> | null | undefined): 
     vixRiskOnBelow: clamp(NUM(r.vixRiskOnBelow, d.vixRiskOnBelow), 5, 40),
     vixRiskOffAbove: clamp(NUM(r.vixRiskOffAbove, d.vixRiskOffAbove), 10, 80),
     autoresearchLookback: Math.round(clamp(NUM(r.autoresearchLookback, d.autoresearchLookback), 3, 50)),
-    screenUniverse:
-      r.screenUniverse === "ndx100" || r.screenUniverse === "watchlist" ? r.screenUniverse : "sp100",
+    screenUniverse: parseScreenUniverse(r.screenUniverse),
+    screenBybitClass: parseBybitClass(r.screenBybitClass),
     screenWatchlist: String(r.screenWatchlist ?? d.screenWatchlist).slice(0, 2000),
     screenSize: Math.round(clamp(NUM(r.screenSize, d.screenSize), 3, 20)),
     screenMinPrice: clamp(NUM(r.screenMinPrice, d.screenMinPrice), 0, 10_000),
@@ -107,4 +108,14 @@ export function mergeSettings(raw: Record<string, unknown> | null | undefined): 
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
+}
+
+export function parseScreenUniverse(v: unknown): ScreenUniverse {
+  if (v === "ndx100" || v === "watchlist" || v === "bybit") return v;
+  return "sp100";
+}
+
+export function parseBybitClass(v: unknown): BybitClass {
+  if (v === "crypto" || v === "stock" || v === "commodity" || v === "etf" || v === "forex") return v;
+  return "all";
 }

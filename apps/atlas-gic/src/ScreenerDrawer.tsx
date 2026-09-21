@@ -1,7 +1,23 @@
 import { useState } from "react";
 import { api } from "./api";
 import { RegimeBadge } from "./components";
-import type { ScreenHit, Settings } from "./shared/types";
+import type { BybitClass, ScreenHit, ScreenUniverse, Settings } from "./shared/types";
+
+const UNIVERSES: Array<[ScreenUniverse, string]> = [
+  ["sp100", "S&P 100"],
+  ["ndx100", "Nasdaq-100"],
+  ["watchlist", "İzleme"],
+  ["bybit", "Bybit perp"],
+];
+
+const BYBIT_CLASSES: Array<[BybitClass, string]> = [
+  ["all", "Hepsi"],
+  ["crypto", "Kripto"],
+  ["stock", "Hisse"],
+  ["commodity", "Emtia"],
+  ["etf", "ETF"],
+  ["forex", "Forex"],
+];
 
 export function ScreenerDrawer({
   settings,
@@ -13,6 +29,8 @@ export function ScreenerDrawer({
   onClose: () => void;
 }) {
   const [theme, setTheme] = useState("");
+  const [universe, setUniverse] = useState<ScreenUniverse>(settings.screenUniverse);
+  const [bybitClass, setBybitClass] = useState<BybitClass>(settings.screenBybitClass);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hits, setHits] = useState<ScreenHit[]>([]);
@@ -22,6 +40,8 @@ export function ScreenerDrawer({
     scanned?: number;
     universe?: number;
     scoutSkipped?: boolean;
+    universeId?: string;
+    bybitClass?: string | null;
   } | null>(null);
 
   async function run() {
@@ -35,7 +55,12 @@ export function ScreenerDrawer({
         scanned: number;
         universe: number;
         scoutSkipped?: boolean;
-      }>("/api/screen", { method: "POST", body: JSON.stringify({ theme }) });
+        universeId?: string;
+        bybitClass?: string | null;
+      }>("/api/screen", {
+        method: "POST",
+        body: JSON.stringify({ theme, universe, bybitClass }),
+      });
       setHits(r.hits);
       setMeta({
         regime: r.regime,
@@ -43,6 +68,8 @@ export function ScreenerDrawer({
         scanned: r.scanned,
         universe: r.universe,
         scoutSkipped: r.scoutSkipped,
+        universeId: r.universeId,
+        bybitClass: r.bybitClass,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -57,7 +84,7 @@ export function ScreenerDrawer({
         <div className="mb-4 flex items-center gap-3">
           <h2 className="font-mono text-sm font-bold tracking-widest text-zinc-100">SCREENER</h2>
           <span className="text-[10px] text-zinc-500">
-            {settings.screenUniverse} · top {settings.screenSize}
+            {universe === "bybit" ? `bybit ${bybitClass}` : universe} · top {settings.screenSize}
             {settings.screenScoutEnabled ? " · scout açık" : " · yalnız teyp"}
           </span>
           <button onClick={onClose} className="ml-auto text-zinc-500 hover:text-zinc-200">
@@ -66,12 +93,42 @@ export function ScreenerDrawer({
         </div>
 
         <div className="mb-4 flex flex-wrap items-end gap-3">
+          <label className="min-w-36">
+            <div className="mb-1 font-mono text-[10px] tracking-widest text-zinc-500">EVREN</div>
+            <select
+              value={universe}
+              onChange={(e) => setUniverse(e.target.value as ScreenUniverse)}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs"
+            >
+              {UNIVERSES.map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {universe === "bybit" && (
+            <label className="min-w-32">
+              <div className="mb-1 font-mono text-[10px] tracking-widest text-zinc-500">SINIF</div>
+              <select
+                value={bybitClass}
+                onChange={(e) => setBybitClass(e.target.value as BybitClass)}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs"
+              >
+                {BYBIT_CLASSES.map(([id, label]) => (
+                  <option key={id} value={id}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="min-w-60 flex-1">
             <div className="mb-1 font-mono text-[10px] tracking-widest text-zinc-500">TEMA (opsiyonel)</div>
             <input
               value={theme}
               onChange={(e) => setTheme(e.target.value)}
-              placeholder="RISK-ON AI yarıiletkenler"
+              placeholder={universe === "bybit" ? "altın ve tesla" : "RISK-ON AI yarıiletkenler"}
               className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs"
             />
           </label>
@@ -83,6 +140,12 @@ export function ScreenerDrawer({
             {busy ? "Taranıyor…" : "Tara"}
           </button>
         </div>
+        {universe === "bybit" && (
+          <p className="mb-3 text-[10px] leading-relaxed text-zinc-500">
+            Canlı Bybit linear perpetual (kripto, hisse, XAU/petrol, ETF, forex). Emir yok. Min hacim = 24s USDT
+            ciro. Hepsi’de volatil kriptolar sıralamayı doldurur; XAU için Emtia, TSLA için Hisse.
+          </p>
+        )}
 
         {meta && (
           <p className="mb-3 font-mono text-[11px] text-zinc-500">
@@ -109,6 +172,12 @@ export function ScreenerDrawer({
                   <td className="px-3 py-2">
                     <div className="font-mono font-bold text-zinc-100">{h.ticker}</div>
                     <div className="text-[10px] text-zinc-500">{h.company}</div>
+                    {h.venue === "bybit" && (
+                      <div className="font-mono text-[10px] text-zinc-500">
+                        {h.symbolClass}
+                        {h.fundingRate != null ? ` · fund ${(h.fundingRate * 10_000).toFixed(1)} bps` : ""}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2 font-mono text-zinc-300">
                     {h.price.toFixed(2)}{" "}
@@ -141,7 +210,7 @@ export function ScreenerDrawer({
               {!hits.length && !busy && (
                 <tr>
                   <td colSpan={5} className="px-3 py-8 text-center text-zinc-500">
-                    Evreni taramak için Tara. Tema kutusu boşsa Ayarlar’daki universe kullanılır.
+                    Evreni taramak için Tara. Bybit’te sınıf seç (Hisse, Emtia…). Tema boşsa seçili evren kullanılır.
                   </td>
                 </tr>
               )}

@@ -15,12 +15,13 @@ export async function chatJson(
   apiKey: string,
   system: string,
   user: string,
+  opts?: { maxTokens?: number },
 ): Promise<unknown> {
   const attempt = async (withFormat: boolean) => {
     const body: Record<string, unknown> = {
       model: settings.model,
       temperature: settings.temperature,
-      max_tokens: settings.maxTokens,
+      max_tokens: Math.min(8000, Math.max(256, opts?.maxTokens ?? settings.maxTokens)),
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },

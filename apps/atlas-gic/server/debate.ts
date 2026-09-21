@@ -77,7 +77,9 @@ ${priorTakes(prior)}
 Agents to speak (id, current Darwinian weight, charter):
 ${roster.map((a) => `- ${a.id} | ${a.name} | weight ${weights[a.id]?.toFixed(2) ?? "1.00"}× | ${a.role}\n  CHARTER: ${a.prompt}`).join("\n")}
 `;
-  const json = (await chatJson(settings, apiKey, system, user)) as { takes?: unknown[] };
+  const json = (await chatJson(settings, apiKey, system, user, {
+    maxTokens: Math.max(settings.maxTokens, 3200),
+  })) as { takes?: unknown[] };
   const byId = new Map<string, unknown>();
   for (const t of json.takes ?? []) {
     const id = String((t as { agentId?: string }).agentId ?? "");

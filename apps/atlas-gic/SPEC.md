@@ -45,7 +45,8 @@ Layer LLM calls are **batched per layer** (one JSON object of takes), sequential
 | `server/openrouter.ts` | Chat completions, JSON parse, model list |
 | `server/market.ts` | Quote, VIX, headlines |
 | `server/debate.ts` | Orchestrate briefing + 5 LLM calls + persist |
-| `server/screen.ts` | Universe/theme tape scan + optional one-shot scout |
+| `server/screen.ts` | Universe/theme tape scan, Bybit perp book, optional one-shot scout |
+| `server/bybit.ts` | Public Bybit v5 linear perpetuals (no orders, host pinned) |
 | `server/paper.ts` | Book / mark / close |
 | `server/scoring.ts` | Contributions + weight update + autoresearch |
 | `src/App.tsx` | Desk UI: ticker, screener, stream, book, mark, settings / kadro |

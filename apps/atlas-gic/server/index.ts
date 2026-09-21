@@ -226,11 +226,16 @@ const server = Bun.serve({
 
       if (url.pathname === "/api/screen" && req.method === "POST") {
         const ip = clientIp(req);
-        if (!rateLimit(`screen:${ip}`, 12, 60 * 60 * 1000)) return fail("Too many requests", 429);
+        if (!rateLimit(`screen:${ip}`, 30, 60 * 60 * 1000)) return fail("Too many requests", 429);
         const body = await readBody(req);
         const theme = String(body.theme ?? "").trim();
         const key = resolveApiKey();
-        return json(await runScreen(getSettings(), key, theme));
+        return json(
+          await runScreen(getSettings(), key, theme, {
+            universe: body.universe,
+            bybitClass: body.bybitClass,
+          }),
+        );
       }
 
       if (url.pathname === "/api/agents" && req.method === "PUT") {

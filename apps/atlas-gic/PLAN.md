@@ -1,22 +1,18 @@
-# PLAN — atlas-gic screener + parametric roster
+# PLAN — Bybit perps on the paper desk
 
 ## Goal
 
-Daily Yahoo tape scan over a parametric universe, optional screen-persona scout (one LLM batch), click-through to the existing debate desk. Agent roster is editable: `kind` + `surfaces` (`debate` | `screen` | `both`).
+Screen and debate Bybit linear perpetuals (crypto, stock, commodity, ETF, forex) from the public market API, and add six personas that cover gaps in the current roster.
 
 ## In
 
-- Universes: S&P 100 / NDX / watchlist
-- Numeric score (momentum, volume, range, regime fit) — knobs in Ayarlar
-- Top N; `screen`/`both` agents one OpenRouter pass
-- Theme box: one LLM ticker list, Yahoo-validated, same pipe
-- `Masaya al` fills ticker + briefing (no auto-debate)
-- Two default scouts (technical, fundamental); kadro editor in Ayarlar
+- Universe `bybit` plus class filter: all / crypto / stock / commodity / etf / forex
+- One tickers call + instrument metadata (`symbolType`). No API key, no orders, host pinned to `api.bybit.com`
+- `TSLA` resolves to `TSLAUSDT`. Masaya al briefs funding, open interest, turnover, class
+- Screen-only: Funding Scout, Turnover Scout
+- Debate-only: Perp Structurer, TradFi Bridge
+- Both: Range Auction, Crowding Fade
 
 ## Out
 
-Live broker, auto-debate on every hit, paid fundamentals (PE/options).
-
-## UX
-
-Header **Screener** drawer: universe, theme, Tara, ranked table. Settings: screen knobs + persona rows.
+Bybit orders, options, dated futures, a second broker.

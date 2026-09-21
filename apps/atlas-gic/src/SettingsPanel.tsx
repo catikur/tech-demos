@@ -153,9 +153,27 @@ export function SettingsPanel({
               <option value="sp100">S&P 100</option>
               <option value="ndx100">Nasdaq-100</option>
               <option value="watchlist">İzleme listesi</option>
+              <option value="bybit">Bybit perpetual</option>
             </select>
           </label>
           <Num label="Top N" value={form.screenSize} step={1} onChange={(v) => set("screenSize", v)} />
+          {form.screenUniverse === "bybit" && (
+            <label className="mb-2 block">
+              <div className="mb-1 font-mono text-[10px] tracking-widest text-zinc-500 uppercase">Bybit sınıf</div>
+              <select
+                value={form.screenBybitClass}
+                onChange={(e) => set("screenBybitClass", e.target.value as Settings["screenBybitClass"])}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs"
+              >
+                <option value="all">Hepsi</option>
+                <option value="crypto">Kripto</option>
+                <option value="stock">Hisse</option>
+                <option value="commodity">Emtia (XAU, petrol)</option>
+                <option value="etf">ETF</option>
+                <option value="forex">Forex</option>
+              </select>
+            </label>
+          )}
           <Num label="Min fiyat" value={form.screenMinPrice} step={1} onChange={(v) => set("screenMinPrice", v)} />
           <Num label="Min hacim" value={form.screenMinVolume} step={100000} onChange={(v) => set("screenMinVolume", v)} />
           <Num label="W momentum" value={form.screenWMomentum} step={0.1} onChange={(v) => set("screenWMomentum", v)} />

@@ -16,7 +16,8 @@ describe("sanitizeTicker", () => {
   test("accepts listed symbols", () => {
     expect(sanitizeTicker("nvda")).toBe("NVDA");
     expect(sanitizeTicker("BRK.B")).toBe("BRK.B");
-    expect(sanitizeTicker("^VIX")).toBe("^VIX");
+    expect(sanitizeTicker("1000000BABYDOGEUSDT")).toBe("1000000BABYDOGEUSDT");
+    expect(sanitizeTicker("TSLAUSDT")).toBe("TSLAUSDT");
   });
 
   test("rejects empty, path, url, and oversized input", () => {

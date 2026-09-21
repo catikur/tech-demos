@@ -3,7 +3,8 @@ export type LayerId = "macro" | "sector" | "superinvestor" | "decision";
 export type Regime = "RISK-ON" | "RISK-OFF" | "CHOP";
 export type AgentKind = "tape" | "technical" | "fundamental" | "macro" | "superinvestor" | "risk";
 export type AgentSurface = "debate" | "screen" | "both";
-export type ScreenUniverse = "sp100" | "ndx100" | "watchlist";
+export type ScreenUniverse = "sp100" | "ndx100" | "watchlist" | "bybit";
+export type BybitClass = "all" | "crypto" | "stock" | "commodity" | "etf" | "forex";
 
 export interface Agent {
   id: string;
@@ -65,6 +66,7 @@ export interface Settings {
   screenWRegime: number;
   screenScoutEnabled: boolean;
   screenScoutMaxNames: number;
+  screenBybitClass: BybitClass;
 }
 
 export interface ScreenScoutTake {
@@ -87,6 +89,10 @@ export interface ScreenHit {
   tapeScore: number;
   score: number;
   scouts: ScreenScoutTake[];
+  venue?: "yahoo" | "bybit";
+  symbolClass?: Exclude<BybitClass, "all">;
+  fundingRate?: number | null;
+  openInterest?: number | null;
 }
 
 export type Weights = Record<string, number>;

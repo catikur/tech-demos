@@ -1,5 +1,7 @@
 import { croCapForRegime, regimeFromVix } from "../src/shared/engine";
+import { formatBybitTape, looksLikeBybitSymbol } from "../src/shared/bybit";
 import type { Briefing, Headline, Settings } from "../src/shared/types";
+import { fetchBybitPerp } from "./bybit";
 import { sanitizeTicker } from "./security";
 
 const UA = "Mozilla/5.0 (compatible; atlas-gic-paper-desk/0.2; +https://github.com/catikur/tech-demos)";
@@ -150,6 +152,36 @@ export async function fetchVix(settings: Settings) {
 export async function fetchBriefing(ticker: string, settings: Settings): Promise<Briefing> {
   const clean = sanitizeTicker(ticker);
   if (!clean) throw new Error("Invalid ticker");
+  if (looksLikeBybitSymbol(clean)) {
+    const quote = await fetchBybitPerp(clean);
+    if (!quote) throw new Error("Unknown Bybit symbol");
+    let vix = 0;
+    let vixChangePct = 0;
+    let regime: Briefing["regime"] = "CHOP";
+    try {
+      const live = await fetchVix(settings);
+      vix = live.vix;
+      vixChangePct = live.vixChangePct;
+      regime = live.regime;
+    } catch {
+      /* tape still stands without VIX */
+    }
+    return {
+      ticker: quote.ticker,
+      company: quote.company,
+      price: quote.price,
+      changePct: quote.changePct,
+      volume: quote.volume,
+      dayHigh: quote.dayHigh,
+      dayLow: quote.dayLow,
+      currency: quote.currency,
+      vix,
+      vixChangePct,
+      regime,
+      headlines: [],
+      tape: formatBybitTape(quote, vix),
+    };
+  }
   const [quote, vixMeta, headlines] = await Promise.all([
     fetchQuote(clean),
     yahooChart("^VIX"),
