@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "./api";
+import { TIMEFRAMES } from "./shared/forecast";
 import { DEFAULT_SETTINGS } from "./shared/settings";
 import type { Agent, ModelOption, Settings } from "./shared/types";
 
@@ -198,6 +199,34 @@ export function SettingsPanel({
           />
           Screen personaları ile tek tur scout
         </label>
+
+        <h3 className="mt-5 mb-2 font-mono text-[10px] tracking-widest text-zinc-500">VOL FAN</h3>
+        <p className="mb-2 text-[10px] leading-relaxed text-zinc-500">
+          Bybit mumundan tohumlu yollar. Aynı mum ve tohum aynı fanı üretir. Kronos ağırlığı değil; LLM temperature
+          ile karışmaz.
+        </p>
+        <div className="mb-3 grid grid-cols-2 gap-3">
+          <label className="mb-2 block">
+            <div className="mb-1 font-mono text-[10px] tracking-widest text-zinc-500 uppercase">Aralık</div>
+            <select
+              value={form.forecastInterval}
+              onChange={(e) => set("forecastInterval", e.target.value as Settings["forecastInterval"])}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs"
+            >
+              {TIMEFRAMES.map((tf) => (
+                <option key={tf.id} value={tf.id}>
+                  {tf.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Num label="Lookback" value={form.forecastLookback} step={1} onChange={(v) => set("forecastLookback", v)} />
+          <Num label="Ufuk" value={form.forecastPredLen} step={1} onChange={(v) => set("forecastPredLen", v)} />
+          <Num label="Fan T" value={form.forecastTemperature} step={0.1} onChange={(v) => set("forecastTemperature", v)} />
+          <Num label="Top-p" value={form.forecastTopP} step={0.05} onChange={(v) => set("forecastTopP", v)} />
+          <Num label="Yol sayısı" value={form.forecastSampleCount} step={1} onChange={(v) => set("forecastSampleCount", v)} />
+          <Num label="Tohum" value={form.forecastSeed} step={1} onChange={(v) => set("forecastSeed", v)} />
+        </div>
 
         <KadroEditor agents={agents} onSaved={onSaved} />
 

@@ -1,7 +1,8 @@
 import { croCapForRegime, regimeFromVix } from "../src/shared/engine";
 import { formatBybitTape, looksLikeBybitSymbol } from "../src/shared/bybit";
 import type { Briefing, Headline, Settings } from "../src/shared/types";
-import { fetchBybitPerp } from "./bybit";
+import { fetchPerpQuote } from "./bybit";
+import { loadForecastChart } from "./forecast";
 import { sanitizeTicker } from "./security";
 
 const UA = "Mozilla/5.0 (compatible; atlas-gic-paper-desk/0.2; +https://github.com/catikur/tech-demos)";
@@ -153,8 +154,8 @@ export async function fetchBriefing(ticker: string, settings: Settings): Promise
   const clean = sanitizeTicker(ticker);
   if (!clean) throw new Error("Invalid ticker");
   if (looksLikeBybitSymbol(clean)) {
-    const quote = await fetchBybitPerp(clean);
-    if (!quote) throw new Error("Unknown Bybit symbol");
+    const quote = await fetchPerpQuote(clean);
+    if (!quote) throw new Error("Unknown perp symbol");
     let vix = 0;
     let vixChangePct = 0;
     let regime: Briefing["regime"] = "CHOP";
@@ -179,7 +180,7 @@ export async function fetchBriefing(ticker: string, settings: Settings): Promise
       vixChangePct,
       regime,
       headlines: [],
-      tape: formatBybitTape(quote, vix),
+      tape: await tapeWithFan(quote.ticker, formatBybitTape(quote, vix), settings),
     };
   }
   const [quote, vixMeta, headlines] = await Promise.all([
@@ -206,6 +207,16 @@ export async function fetchBriefing(ticker: string, settings: Settings): Promise
     headlines,
     tape,
   };
+}
+
+async function tapeWithFan(symbol: string, tape: string, settings: Settings): Promise<string> {
+  try {
+    const fan = await loadForecastChart(symbol, settings);
+    return fan.note ? `${tape} · ${fan.note}` : tape;
+  } catch (err) {
+    console.error("briefing forecast skipped", err instanceof Error ? err.message : err);
+    return tape;
+  }
 }
 
 export function regimeCap(briefing: Briefing, settings: Settings): number {

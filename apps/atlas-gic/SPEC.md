@@ -43,10 +43,12 @@ Layer LLM calls are **batched per layer** (one JSON object of takes), sequential
 | `src/shared/agents.ts` | Roster + original (non-ATLAS-IP) system prompts |
 | `server/db.ts` | Schema, seed, repositories |
 | `server/openrouter.ts` | Chat completions, JSON parse, model list |
-| `server/market.ts` | Quote, VIX, headlines |
+| `src/shared/forecast.ts` | Seeded vol fan (not Kronos weights) + kline parse |
+| `server/market.ts` | Quote, VIX, headlines, fan sentence on perp tape |
 | `server/debate.ts` | Orchestrate briefing + 5 LLM calls + persist |
-| `server/screen.ts` | Universe/theme tape scan, Bybit perp book, optional one-shot scout |
-| `server/bybit.ts` | Public Bybit v5 linear perpetuals (no orders, host pinned) |
+| `server/screen.ts` | Universe/theme tape scan, Bybit perp book, fan on the shortlist, optional scout |
+| `server/bybit.ts` | Public Bybit v5 linear perpetuals; Bitget kline/quote fallback (no orders) |
+| `server/forecast.ts` | Lookback bars → fan payload for briefing, screen, and `/api/chart` |
 | `server/paper.ts` | Book / mark / close |
 | `server/scoring.ts` | Contributions + weight update + autoresearch |
 | `src/App.tsx` | Desk UI: ticker, screener, stream, book, mark, settings / kadro |

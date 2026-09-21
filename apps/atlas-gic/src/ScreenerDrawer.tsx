@@ -161,6 +161,7 @@ export function ScreenerDrawer({
               <tr className="border-b border-zinc-800">
                 <th className="px-3 py-2">Ticker</th>
                 <th className="px-3 py-2">Teyp</th>
+                {universe === "bybit" && <th className="px-3 py-2">Fan</th>}
                 <th className="px-3 py-2">Skor</th>
                 <th className="px-3 py-2">Scout</th>
                 <th className="px-3 py-2" />
@@ -186,6 +187,25 @@ export function ScreenerDrawer({
                       {h.changePct.toFixed(2)}%
                     </span>
                   </td>
+                  {universe === "bybit" && (
+                    <td className="px-3 py-2 font-mono text-[11px]">
+                      {h.forecastMeanPct == null ? (
+                        <span className="text-zinc-600">—</span>
+                      ) : (
+                        <>
+                          <div className={h.forecastMeanPct >= 0 ? "text-amber-300" : "text-rose-300"}>
+                            {h.forecastMeanPct >= 0 ? "+" : ""}
+                            {h.forecastMeanPct.toFixed(1)}%
+                          </div>
+                          {h.forecastP10Pct != null && h.forecastP90Pct != null && (
+                            <div className="text-[10px] text-zinc-500">
+                              {h.forecastP10Pct.toFixed(1)} … {h.forecastP90Pct.toFixed(1)}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  )}
                   <td className="px-3 py-2 font-mono text-sky-300">{h.score.toFixed(1)}</td>
                   <td className="px-3 py-2 text-zinc-400">
                     {h.scouts.length === 0 && "—"}
@@ -209,7 +229,7 @@ export function ScreenerDrawer({
               ))}
               {!hits.length && !busy && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-zinc-500">
+                  <td colSpan={universe === "bybit" ? 6 : 5} className="px-3 py-8 text-center text-zinc-500">
                     Evreni taramak için Tara. Bybit’te sınıf seç (Hisse, Emtia…). Tema boşsa seçili evren kullanılır.
                   </td>
                 </tr>

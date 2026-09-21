@@ -9,7 +9,7 @@ Source bookmark: [x.com/tom_doerr/status/2048618137830969438](https://x.com/tom_
 ## What it does
 
 1. Type a ticker. Pull delayed Yahoo quote, headlines, and a VIX regime.
-2. **Screener** — S&P 100 / Nasdaq-100 / watchlist, or **live Bybit linear perpetuals** (crypto, US stock perps such as `TSLAUSDT`, commodities such as `XAUUSDT`, ETFs, forex). Tape score first; optional one-shot OpenRouter scout. **Masaya al** loads that symbol. Bybit names use the public market API only — no orders.
+2. **Screener** — S&P 100 / Nasdaq-100 / watchlist, or **live Bybit linear perpetuals** (crypto, US stock perps such as `TSLAUSDT`, commodities such as `XAUUSDT`, ETFs, forex). Tape score first; the Bybit shortlist gets a seeded vol-fan summary before the optional one-shot OpenRouter scout. **Masaya al** loads that symbol. Bybit names use the public market API only — no orders. If Bybit is geo-blocked, that symbol's candles and quote fall back to Bitget USDT perpetuals and the chart names the venue.
 3. **Run debate** — real OpenRouter calls, batched by layer. The roster includes screen-only scouts, debate-only desks, and personas that sit on both. `kind` + `surfaces` stay editable in Ayarlar.
 4. Direction and size are computed from Darwinian weights × conviction, then CRO-capped.
 5. **Book to paper** (explicit by default). Mark the session to score agents on the ticker's subsequent return.
@@ -58,7 +58,7 @@ All knobs live in **Ayarlar** and SQLite (`data/atlas.sqlite`, gitignored):
 OpenRouter base URL, **model** (live catalog), temperature, max tokens, agent language (tr/en),
 starting cash, confirm-to-book, allow short, slippage bps, CRO caps per regime, Darwin
 multipliers + weight clamp, VIX thresholds, autoresearch lookback, screener universe / weights /
-scout toggle, and the agent kadro (kind, surfaces, charter).
+scout toggle, vol-fan interval / lookback / horizon / temperature / top-p / path count / seed (separate from the LLM temperature), and the agent kadro (kind, surfaces, charter).
 
 Default model: `anthropic/claude-sonnet-5`. Change it any time.
 
@@ -71,3 +71,4 @@ live Alpaca-Kalshi are **not** cloned. Agent charters here are original placehol
 
 - Architecture inspiration: [chrisworsey55/atlas-gic](https://github.com/chrisworsey55/atlas-gic)
 - Found via [@tom_doerr](https://x.com/tom_doerr/status/2048618137830969438)
+- Candle fallback and the seeded fan follow [shiyu-coder/Kronos](https://github.com/shiyu-coder/Kronos) (MIT). Paths are realized-vol samples from the lookback, not Kronos foundation-model weights.

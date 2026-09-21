@@ -1,7 +1,9 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { LAYER_ORDER } from "../src/shared/agents";
+import { looksLikeBybitSymbol } from "../src/shared/bybit";
 import { layerMap, synthesize } from "../src/shared/engine";
+import { timeframeById } from "../src/shared/forecast";
 import type { AgentTake, AutoresearchProposal, CroResult } from "../src/shared/types";
 import {
   getSettings,
@@ -16,6 +18,7 @@ import {
   upsertAgent,
 } from "./db";
 import { persistDebate, runCio, runCro, runLayer } from "./debate";
+import { loadForecastChart } from "./forecast";
 import { fetchBriefing } from "./market";
 import { listModels } from "./openrouter";
 import { bookDebate, closePos, snapshotBook } from "./paper";
@@ -222,6 +225,17 @@ const server = Bun.serve({
         if (!rateLimit(`briefing:${ip}`, 60, 60 * 60 * 1000)) return fail("Too many requests", 429);
         const briefing = await fetchBriefing(ticker, getSettings());
         return json({ briefing, cap: briefing.regime });
+      }
+
+      if (url.pathname === "/api/chart" && req.method === "GET") {
+        const symbol = sanitizeTicker(String(url.searchParams.get("symbol") ?? ""));
+        if (!symbol || !looksLikeBybitSymbol(symbol)) return fail("Invalid ticker");
+        const rawInterval = url.searchParams.get("interval");
+        if (rawInterval && !timeframeById(rawInterval)) return fail("Invalid interval");
+        const ip = clientIp(req);
+        if (!rateLimit(`chart:${ip}`, 60, 60 * 60 * 1000)) return fail("Too many requests", 429);
+        const chart = await loadForecastChart(symbol, getSettings(), rawInterval ?? undefined);
+        return json({ chart });
       }
 
       if (url.pathname === "/api/screen" && req.method === "POST") {

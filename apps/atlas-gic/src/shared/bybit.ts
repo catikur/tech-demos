@@ -12,7 +12,7 @@ export interface BybitQuote {
   dayHigh: number;
   dayLow: number;
   currency: string;
-  venue: "bybit";
+  venue: "bybit" | "bitget";
   symbolClass: BybitInstrumentClass;
   fundingRate: number | null;
   openInterest: number | null;
@@ -126,8 +126,9 @@ export function formatBybitTape(q: BybitQuote, vix: number): string {
   const fund = q.fundingRate == null ? "funding n/a" : `funding ${(q.fundingRate * 10_000).toFixed(2)} bps`;
   const oi = q.openInterest != null ? `OI ${compact(q.openInterest)}` : "OI n/a";
   const vixBit = vix > 0 ? `VIX ${vix.toFixed(1)}` : "VIX n/a";
+  const venue = q.venue === "bitget" ? "Bitget" : "Bybit";
   return [
-    `Bybit linear perpetual (${q.symbolClass})`,
+    `${venue} linear perpetual (${q.symbolClass})`,
     q.company,
     `${q.currency} ${formatPx(q.price)}`,
     `${q.changePct >= 0 ? "+" : ""}${q.changePct.toFixed(2)}%`,
@@ -154,10 +155,11 @@ export function describeQuote(q: {
   fundingRate?: number | null;
   openInterest?: number | null;
   tapeScore?: number;
+  forecastNote?: string;
 }): string {
   const bits = [
     `${q.ticker} (${q.company})`,
-    q.venue === "bybit" ? `bybit ${q.symbolClass ?? "perp"}` : "yahoo",
+    q.venue === "bybit" || q.venue === "bitget" ? `${q.venue} ${q.symbolClass ?? "perp"}` : "yahoo",
     `px ${formatPx(q.price)} ${q.currency ?? ""}`.trim(),
     `${q.changePct >= 0 ? "+" : ""}${q.changePct.toFixed(2)}%`,
     `H ${formatPx(q.dayHigh)} L ${formatPx(q.dayLow)}`,
@@ -170,5 +172,45 @@ export function describeQuote(q: {
     bits.push(`oi ${Math.round(q.openInterest)}`);
   }
   if (q.tapeScore != null) bits.push(`tapeScore ${q.tapeScore.toFixed(1)}`);
+  if (q.forecastNote) bits.push(q.forecastNote);
   return bits.join(" ");
+}
+
+/** Bitget `change24h` is a fraction (0.06902 → +6.902%), same shape as Bybit `price24hPcnt`. */
+export function normalizeBitgetTicker(
+  symbol: string,
+  row: {
+    lastPr?: string;
+    change24h?: string;
+    high24h?: string;
+    low24h?: string;
+    usdtVolume?: string;
+    fundingRate?: string;
+    holdingAmount?: string;
+  },
+  meta?: BybitMetaRaw,
+): BybitQuote | null {
+  const ticker = sanitizeTicker(symbol);
+  if (!ticker) return null;
+  const price = num(row.lastPr);
+  if (price == null || price <= 0) return null;
+  const pct = num(row.change24h);
+  const high = num(row.high24h);
+  const low = num(row.low24h);
+  const turnover = num(row.usdtVolume);
+  const holding = num(row.holdingAmount);
+  return {
+    ticker,
+    company: meta ? String(meta.fullName || meta.baseCoin || ticker) : ticker.replace(/USDT$/, "") || ticker,
+    price,
+    changePct: pct == null ? 0 : pct * 100,
+    volume: turnover ?? 0,
+    dayHigh: high != null && high > 0 ? high : price,
+    dayLow: low != null && low > 0 ? low : price,
+    currency: "USDT",
+    venue: "bitget",
+    symbolClass: meta ? bybitClassOf(meta.symbolType) : "crypto",
+    fundingRate: num(row.fundingRate),
+    openInterest: holding != null ? holding * price : null,
+  };
 }

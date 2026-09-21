@@ -5,6 +5,7 @@ export type AgentKind = "tape" | "technical" | "fundamental" | "macro" | "superi
 export type AgentSurface = "debate" | "screen" | "both";
 export type ScreenUniverse = "sp100" | "ndx100" | "watchlist" | "bybit";
 export type BybitClass = "all" | "crypto" | "stock" | "commodity" | "etf" | "forex";
+export type ForecastInterval = "5m" | "15m" | "1h" | "4h" | "1d";
 
 export interface Agent {
   id: string;
@@ -67,6 +68,13 @@ export interface Settings {
   screenScoutEnabled: boolean;
   screenScoutMaxNames: number;
   screenBybitClass: BybitClass;
+  forecastInterval: ForecastInterval;
+  forecastLookback: number;
+  forecastPredLen: number;
+  forecastTemperature: number;
+  forecastTopP: number;
+  forecastSampleCount: number;
+  forecastSeed: number;
 }
 
 export interface ScreenScoutTake {
@@ -89,10 +97,14 @@ export interface ScreenHit {
   tapeScore: number;
   score: number;
   scouts: ScreenScoutTake[];
-  venue?: "yahoo" | "bybit";
+  venue?: "yahoo" | "bybit" | "bitget";
   symbolClass?: Exclude<BybitClass, "all">;
   fundingRate?: number | null;
   openInterest?: number | null;
+  forecastMeanPct?: number;
+  forecastP10Pct?: number;
+  forecastP90Pct?: number;
+  forecastNote?: string;
 }
 
 export type Weights = Record<string, number>;

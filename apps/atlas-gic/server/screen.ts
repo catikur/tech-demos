@@ -4,6 +4,7 @@ import { parseBybitClass, parseScreenUniverse } from "../src/shared/settings";
 import { sanitizeTicker } from "../src/shared/ticker";
 import type { Agent, BybitClass, ScreenHit, ScreenScoutTake, ScreenUniverse, Settings, Stance } from "../src/shared/types";
 import { listBybitPerpQuotes } from "./bybit";
+import { loadForecastChart } from "./forecast";
 import { listAgents } from "./db";
 import { fetchQuotes, fetchVix } from "./market";
 import { chatJson } from "./openrouter";
@@ -98,6 +99,7 @@ async function finish(
   vix: { vix: number; regime: string },
 ) {
   let hits = [...quotes].sort((a, b) => b.score - a.score);
+  if (universeId === "bybit") hits = await withFan(settings, hits, settings.screenSize);
   const scouts = listAgents().filter((a) => usesSurface(a, "screen"));
   const scoutN = Math.min(settings.screenScoutMaxNames, settings.screenSize, hits.length);
   let scouted = false;
@@ -130,8 +132,35 @@ async function finish(
     scoutSkipped: Boolean(settings.screenScoutEnabled && !scouted),
     universeId,
     bybitClass,
-    hits: hits.slice(0, settings.screenSize),
+    hits: universeId === "bybit" ? await fillFan(settings, hits.slice(0, settings.screenSize)) : hits.slice(0, settings.screenSize),
   };
+}
+
+async function withFan(settings: Settings, hits: ScreenHit[], n: number): Promise<ScreenHit[]> {
+  const head = await Promise.all(hits.slice(0, n).map((h) => annotateHit(settings, h)));
+  return [...head, ...hits.slice(n)];
+}
+
+async function fillFan(settings: Settings, hits: ScreenHit[]): Promise<ScreenHit[]> {
+  return Promise.all(hits.map((h) => (h.forecastNote ? h : annotateHit(settings, h))));
+}
+
+async function annotateHit(settings: Settings, hit: ScreenHit): Promise<ScreenHit> {
+  if (hit.venue !== "bybit" && hit.venue !== "bitget") return hit;
+  try {
+    const fan = await loadForecastChart(hit.ticker, settings);
+    if (fan.meanPct == null || !fan.note) return hit;
+    return {
+      ...hit,
+      forecastMeanPct: fan.meanPct,
+      forecastP10Pct: fan.p10Pct ?? undefined,
+      forecastP90Pct: fan.p90Pct ?? undefined,
+      forecastNote: fan.note,
+    };
+  } catch (err) {
+    console.error("forecast skip", hit.ticker, err instanceof Error ? err.message : err);
+    return hit;
+  }
 }
 
 async function themeTickers(settings: Settings, apiKey: string, theme: string): Promise<string[]> {
@@ -171,7 +200,7 @@ async function runScouts(
     `You are a tape scout desk. ${lang} Return ONLY JSON:
 {"rows":[{"ticker":"NVDA","takes":[{"agentId":"...","stance":"LONG|SHORT|FLAT","conviction":0-1,"take":"1-2 sentences"}]}]}
 One row per ticker, one take per requested agent. Do not invent prices, funding, or headlines.
-If funding, open interest, turnover, or a Bybit class is present, use it. If funding is missing or 0, do not invent a rate.`,
+If funding, open interest, turnover, or a Bybit class is present, use it. If funding is missing or 0, do not invent a rate. A vol fan line is a seeded realized-vol sample, not Kronos model weights and not a price target.`,
     `Regime: ${regime}
 Agents:
 ${scouts.map((a) => `- ${a.id} | ${a.name} | ${a.kind} | ${a.role}\n  CHARTER: ${a.prompt}`).join("\n")}

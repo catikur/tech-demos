@@ -9,8 +9,11 @@ import {
   Leaderboard,
   RegimeBadge,
 } from "./components";
+import { ForecastChart } from "./ForecastChart";
 import { SettingsPanel } from "./SettingsPanel";
 import { ScreenerDrawer } from "./ScreenerDrawer";
+import { looksLikeBybitSymbol } from "./shared/bybit";
+import type { TimeframeId } from "./shared/forecast";
 import { AGENTS } from "./shared/agents";
 import { usesSurface } from "./shared/screen";
 import { DEFAULT_SETTINGS } from "./shared/settings";
@@ -169,6 +172,19 @@ export default function App() {
     await api("/api/logout", { method: "POST" }).catch(() => undefined);
     setNeedsLogin(true);
     setPassword("");
+  }
+
+  async function setFanInterval(id: TimeframeId) {
+    setSettings((s) => ({ ...s, forecastInterval: id }));
+    try {
+      const r = await api<{ settings: Settings }>("/api/settings", {
+        method: "PUT",
+        body: JSON.stringify({ forecastInterval: id }),
+      });
+      setSettings(r.settings);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   async function loadBriefing(symbol = ticker) {
@@ -454,6 +470,10 @@ export default function App() {
           </div>
         )}
       </header>
+
+      {briefing && looksLikeBybitSymbol(briefing.ticker) && (
+        <ForecastChart symbol={briefing.ticker} settings={settings} onInterval={(id) => void setFanInterval(id)} />
+      )}
 
       {!keyConfigured && (
         <div className="mt-4 rounded-xl border border-rose-500/40 bg-rose-950/30 p-4 text-sm text-rose-200">

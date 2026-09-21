@@ -33,7 +33,7 @@ export function publicErrorMessage(err: unknown): string {
     return "Upstream model request failed";
   }
   const client =
-    /required|missing|not found|Already booked|STAND DOWN|Need at least|disabled|quantity is 0|Not enough cash|Could not identify|incomplete patch|Unauthorized|Too many|Invalid ticker|Invalid agent|No pending|Theme returned|No Bybit|Unknown Bybit|Bybit|CRO\/CIO/i.test(
+    /required|missing|not found|Already booked|STAND DOWN|Need at least|disabled|quantity is 0|Not enough cash|Could not identify|incomplete patch|Unauthorized|Too many|Invalid ticker|Invalid agent|Invalid interval|No pending|Theme returned|No Bybit|Unknown Bybit|Unknown perp|Bybit|Bitget|CRO\/CIO/i.test(
       message,
     );
   if (client && message.length <= 180) return message;

@@ -4,6 +4,7 @@ import {
   describeQuote,
   formatBybitTape,
   looksLikeBybitSymbol,
+  normalizeBitgetTicker,
   normalizeBybitQuote,
   resolveBybitSymbol,
   selectBybitQuotes,
@@ -102,6 +103,26 @@ describe("tape text", () => {
     expect(line).toContain("no headlines");
     expect(line).toContain("VIX 18.0");
     expect(describeQuote({ ...(tsla as BybitQuote), tapeScore: 70 })).toContain("funding 0.00 bps");
+    expect(line.startsWith("Bybit linear perpetual")).toBe(true);
+  });
+
+  test("Bitget change24h fraction becomes percent and the tape names Bitget", () => {
+    const q = normalizeBitgetTicker("BTCUSDT", {
+      lastPr: "86716.2",
+      change24h: "0.06902",
+      high24h: "86868",
+      low24h: "80528",
+      usdtVolume: "4922814239",
+      fundingRate: "0.000011",
+      holdingAmount: "2",
+    });
+    expect(q?.venue).toBe("bitget");
+    expect(q?.changePct).toBeCloseTo(6.902, 3);
+    expect(q?.openInterest).toBeCloseTo(86716.2 * 2, 1);
+    expect(formatBybitTape(q as BybitQuote, 0)).toContain("Bitget linear perpetual");
+    expect(describeQuote({ ...(q as BybitQuote), forecastNote: "vol fan 1h mean +1.0% p10 -2.0% p90 +3.0% seed 1 (realized-vol sample, not Kronos weights)" })).toContain(
+      "not Kronos weights",
+    );
   });
 });
 

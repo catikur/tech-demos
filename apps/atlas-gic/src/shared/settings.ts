@@ -1,4 +1,5 @@
-import type { BybitClass, ScreenUniverse, Settings } from "./types";
+import { FORECAST_LIMITS, timeframeById } from "./forecast";
+import type { BybitClass, ForecastInterval, ScreenUniverse, Settings } from "./types";
 
 export const DEFAULT_SETTINGS: Settings = {
   openrouterBaseUrl: "https://openrouter.ai/api/v1",
@@ -32,6 +33,13 @@ export const DEFAULT_SETTINGS: Settings = {
   screenScoutEnabled: true,
   screenScoutMaxNames: 8,
   screenBybitClass: "all",
+  forecastInterval: "1h",
+  forecastLookback: 128,
+  forecastPredLen: 24,
+  forecastTemperature: 0.9,
+  forecastTopP: 0.9,
+  forecastSampleCount: 8,
+  forecastSeed: 1,
 };
 
 export const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
@@ -94,6 +102,15 @@ export function mergeSettings(raw: Record<string, unknown> | null | undefined): 
     screenWRegime: clamp(NUM(r.screenWRegime, d.screenWRegime), 0, 5),
     screenScoutEnabled: BOOL(r.screenScoutEnabled, d.screenScoutEnabled),
     screenScoutMaxNames: Math.round(clamp(NUM(r.screenScoutMaxNames, d.screenScoutMaxNames), 3, 20)),
+    forecastInterval: parseForecastInterval(r.forecastInterval),
+    forecastLookback: Math.round(clamp(NUM(r.forecastLookback, d.forecastLookback), FORECAST_LIMITS.lookback.min, FORECAST_LIMITS.lookback.max)),
+    forecastPredLen: Math.round(clamp(NUM(r.forecastPredLen, d.forecastPredLen), FORECAST_LIMITS.predLen.min, FORECAST_LIMITS.predLen.max)),
+    forecastTemperature: clamp(NUM(r.forecastTemperature, d.forecastTemperature), FORECAST_LIMITS.temperature.min, FORECAST_LIMITS.temperature.max),
+    forecastTopP: clamp(NUM(r.forecastTopP, d.forecastTopP), FORECAST_LIMITS.topP.min, FORECAST_LIMITS.topP.max),
+    forecastSampleCount: Math.round(
+      clamp(NUM(r.forecastSampleCount, d.forecastSampleCount), FORECAST_LIMITS.sampleCount.min, FORECAST_LIMITS.sampleCount.max),
+    ),
+    forecastSeed: Math.round(clamp(NUM(r.forecastSeed, d.forecastSeed), FORECAST_LIMITS.seed.min, FORECAST_LIMITS.seed.max)),
   };
   if (s.vixRiskOnBelow >= s.vixRiskOffAbove) {
     s.vixRiskOnBelow = d.vixRiskOnBelow;
@@ -118,4 +135,9 @@ export function parseScreenUniverse(v: unknown): ScreenUniverse {
 export function parseBybitClass(v: unknown): BybitClass {
   if (v === "crypto" || v === "stock" || v === "commodity" || v === "etf" || v === "forex") return v;
   return "all";
+}
+
+export function parseForecastInterval(v: unknown): ForecastInterval {
+  const id = timeframeById(String(v ?? ""));
+  return id ? id.id : DEFAULT_SETTINGS.forecastInterval;
 }
