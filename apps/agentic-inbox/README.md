@@ -26,6 +26,9 @@ English). Without an OpenRouter key the agent uses a rule-based fallback.
 
 Other scripts: `bun run typecheck`, `bun test` (offline), `bun run start` (production).
 
+**iOS:** a native SwiftUI client lives in [`ios/`](ios/README.md) (`xcodegen generate`, iOS 17+). It signs in
+through the same Entra app and talks to the same API with a bearer session token.
+
 Requires [Bun](https://bun.sh) ≥ 1.2.
 
 ## Connect real accounts

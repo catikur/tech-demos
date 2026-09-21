@@ -1,0 +1,1 @@
+{"authenticated":false,"loginRequired":false,"allowedDomain":"conforcus.com","email":null,"accountId":null,"microsoftConfigured":false,"googleConfigured":false,"microsoft":{"configured":false,"fromEnv":false,"tenantId":null,"clientIdMasked":null},"google":{"configured":false,"fromEnv":false,"clientIdMasked":null,"redirectUri":"http://localhost:3011/api/auth/google/callback"}}
