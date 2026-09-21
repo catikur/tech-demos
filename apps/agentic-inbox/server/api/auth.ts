@@ -16,7 +16,7 @@ import { emailAllowed } from "../auth/allowlist.ts";
 import { loginRequired } from "../auth/gate.ts";
 import { readSession } from "../auth/session.ts";
 import { ensureVisibleAccount } from "../auth/scope.ts";
-import { denyLoginRedirect, finishMicrosoftSignIn } from "../auth/signin.ts";
+import { denyLoginRedirect, finishMicrosoftSignIn, signInErrorRedirect, type SignInClient } from "../auth/signin.ts";
 
 /**
  * OAuth start/callback endpoints. Providers register a small descriptor:
@@ -99,27 +99,34 @@ export const authRoutes = {
     }
     const spaceId = query(req).get("space") || (req.params.provider === "microsoft" ? WORK_SPACE_ID : "");
     if (!spaces.get(spaceId)) badRequest("Choose a space to connect the account to");
+    // The iOS app opens this URL in ASWebAuthenticationSession and asks to land on butler://signed-in.
+    const client: SignInClient = req.params.provider === "microsoft" && query(req).get("client") === "native" ? "native" : "web";
     const { verifier, challenge } = pkcePair();
-    const state = oauthStates.create(req.params.provider, spaceId, verifier);
+    const state = oauthStates.create(req.params.provider, spaceId, verifier, client);
     return redirect(authorizeUrl(flow.config(), state, challenge));
   }),
 
   "/api/auth/:provider/callback": h(async (req: BunRequest<"/api/auth/:provider/callback">) => {
     const flow = flows[req.params.provider] ?? badRequest("Unknown provider");
     const q = query(req);
-    if (q.get("error")) return redirect(`/?connect=error&reason=${encodeURIComponent(q.get("error_description") ?? q.get("error") ?? "")}`);
     const code = q.get("code");
     const stateRaw = q.get("state");
+    if (q.get("error")) {
+      const reason = q.get("error_description") ?? q.get("error") ?? "";
+      const client = stateRaw ? (oauthStates.consume(stateRaw)?.client ?? "web") : "web";
+      return signInErrorRedirect(reason, { client });
+    }
     if (!code || !stateRaw) badRequest("Missing code/state");
     const state = oauthStates.consume(stateRaw) ?? badRequest("Login session expired — start again");
     if (state.provider !== req.params.provider) badRequest("State/provider mismatch");
+    const client = state.client;
     try {
       const tokens = await exchangeCode(flow.config(), code, state.codeVerifier);
       const account = await flow.identify(tokens, state.spaceId);
       if (req.params.provider === "microsoft") {
         account.ownerEmail = account.email;
-        if (!emailAllowed(account.email)) return denyLoginRedirect(account.email);
-        const res = finishMicrosoftSignIn(account, tokens);
+        if (!emailAllowed(account.email)) return denyLoginRedirect(account.email, { client });
+        const res = finishMicrosoftSignIn(account, tokens, { client });
         audit.log({ spaceId: account.spaceId, actor: "user", action: "account.connect", detail: `${account.provider} ${account.email}` });
         broadcast({ type: "data", entity: "accounts", spaceId: null });
         syncAccount(account, { full: true }).catch((err) => console.error(`[auth] initial sync failed for ${account.email}:`, err));
@@ -143,7 +150,7 @@ export const authRoutes = {
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       console.error("[auth] callback failed:", reason);
-      return redirect(`/?connect=error&reason=${encodeURIComponent(reason)}`);
+      return signInErrorRedirect(reason, { client });
     }
   }),
 

@@ -1172,18 +1172,18 @@ export const settings = {
 };
 
 export const oauthStates = {
-  create(provider: string, spaceId: string, codeVerifier: string): string {
+  create(provider: string, spaceId: string, codeVerifier: string, client: "web" | "native" = "web"): string {
     const state = newId("st");
     getDb()
-      .query("INSERT INTO oauth_states (state, provider, space_id, code_verifier, created_at) VALUES (?, ?, ?, ?, ?)")
-      .run(state, provider, spaceId, codeVerifier, Date.now());
+      .query("INSERT INTO oauth_states (state, provider, space_id, code_verifier, client, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(state, provider, spaceId, codeVerifier, client, Date.now());
     return state;
   },
-  consume(state: string): { provider: string; spaceId: string; codeVerifier: string } | null {
+  consume(state: string): { provider: string; spaceId: string; codeVerifier: string; client: "web" | "native" } | null {
     const r = getDb().query("SELECT * FROM oauth_states WHERE state = ?").get(state) as Row | null;
     if (!r) return null;
     getDb().query("DELETE FROM oauth_states WHERE state = ? OR created_at < ?").run(state, Date.now() - 3_600_000);
-    return { provider: r.provider, spaceId: r.space_id, codeVerifier: r.code_verifier };
+    return { provider: r.provider, spaceId: r.space_id, codeVerifier: r.code_verifier, client: r.client === "native" ? "native" : "web" };
   },
 };
 
