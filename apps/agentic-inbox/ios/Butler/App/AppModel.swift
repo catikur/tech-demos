@@ -147,7 +147,9 @@ final class AppModel {
             let s = ASWebAuthenticationSession(url: url, callbackURLScheme: "butler") { url, error in
                 if let url { cont.resume(returning: url) } else { cont.resume(throwing: error ?? APIError.transport("Sign-in cancelled")) }
             }
-            s.prefersEphemeralWebBrowserSession = false
+            // Don't inherit Safari's butler.conforcus.com cookie; a fresh Microsoft login
+            // is the sign-in. An existing cookie is still accepted by the server as a handoff.
+            s.prefersEphemeralWebBrowserSession = true
             s.presentationContextProvider = PresentationAnchor.shared
             authSession = s
             s.start()

@@ -9,7 +9,7 @@ import { loginRequired } from "../server/auth/gate.ts";
 import { microsoftConfigured, setStoredMicrosoftOAuth } from "../server/auth/microsoft.ts";
 import { googleConfigured, setStoredGoogleOAuth } from "../server/auth/google.ts";
 import { routes } from "../server/api/routes.ts";
-import { denyLoginRedirect, finishMicrosoftSignIn } from "../server/auth/signin.ts";
+import { denyLoginRedirect, finishMicrosoftSignIn, resumeNativeSignIn } from "../server/auth/signin.ts";
 
 const savedEnv = { ...process.env };
 function restoreEnv() {
@@ -156,6 +156,67 @@ describe("Microsoft sign-in finish", () => {
     expect(location.protocol).toBe("butler:");
     expect(location.searchParams.get("error")).toBe("denied");
     expect(location.searchParams.get("email")).toBe("ada@gmail.com");
+  });
+
+  test("native start with an existing web session hands the phone a bearer token", async () => {
+    const account = m365("ada@conforcus.com");
+    accounts.insert(account, null);
+    setStoredMicrosoftOAuth({
+      tenantId: "11111111-1111-1111-1111-111111111111",
+      clientId: "22222222-2222-2222-2222-222222222222",
+      clientSecret: "super-secret-value-12",
+    });
+    const server = Bun.serve({
+      port: 0,
+      routes: { "/api/auth/:provider/start": routes["/api/auth/:provider/start"] },
+    });
+    try {
+      const res = await fetch(`${server.url}api/auth/microsoft/start?client=native`, {
+        headers: { cookie: cookieHeader(makeSessionCookie(account)) },
+        redirect: "manual",
+      });
+      expect(res.status).toBe(302);
+      const location = new URL(res.headers.get("Location") ?? "");
+      expect(location.protocol).toBe("butler:");
+      expect(location.host).toBe("signed-in");
+      expect(location.searchParams.get("error")).toBeNull();
+      const token = location.searchParams.get("token") ?? "";
+      expect(readSession(new Request("http://local/", { headers: { Authorization: `Bearer ${token}` } }))?.email).toBe("ada@conforcus.com");
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("web start while already signed in returns home", async () => {
+    const account = m365("ada@conforcus.com");
+    accounts.insert(account, null);
+    setStoredMicrosoftOAuth({
+      tenantId: "11111111-1111-1111-1111-111111111111",
+      clientId: "22222222-2222-2222-2222-222222222222",
+      clientSecret: "super-secret-value-12",
+    });
+    const server = Bun.serve({
+      port: 0,
+      routes: { "/api/auth/:provider/start": routes["/api/auth/:provider/start"] },
+    });
+    try {
+      const res = await fetch(`${server.url}api/auth/microsoft/start`, {
+        headers: { cookie: cookieHeader(makeSessionCookie(account)) },
+        redirect: "manual",
+      });
+      expect(res.status).toBe(302);
+      expect(res.headers.get("Location")).toBe("/");
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("resumeNativeSignIn does not require a new Microsoft round-trip", () => {
+    const account = m365("ada@conforcus.com");
+    const res = resumeNativeSignIn(account);
+    const location = new URL(res.headers.get("Location") ?? "");
+    expect(location.searchParams.get("token")?.length ?? 0).toBeGreaterThan(20);
+    expect(location.searchParams.get("email")).toBe("ada@conforcus.com");
   });
 
   test("oauth state remembers the native client", () => {
