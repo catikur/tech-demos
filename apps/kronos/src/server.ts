@@ -1,4 +1,6 @@
 import index from "../index.html";
+import { parseForecastRequest } from "./lib/contract";
+import { runForecast } from "./lib/forecast";
 import { TIMEFRAMES, type Bar } from "./lib/ohlcv";
 
 /**
@@ -45,8 +47,21 @@ let venuePin: Venue | null = null;
 const instrumentCache = new Map<Venue, { at: number; instruments: Instrument[] }>();
 const historyCache = new Map<string, { at: number; bars: Bar[] }>();
 
+function corsHeaders(): Record<string, string> {
+  return {
+    "access-control-allow-origin": process.env.KRONOS_CORS_ORIGIN || "*",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-headers": "content-type",
+    "cache-control": "no-store",
+  };
+}
+
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, { status, headers: { "cache-control": "no-store" } });
+  return Response.json(data, { status, headers: corsHeaders() });
+}
+
+function options(): Response {
+  return new Response(null, { status: 204, headers: corsHeaders() });
 }
 
 function timeframe(id: string) {
@@ -302,7 +317,14 @@ const server = Bun.serve({
   development: { hmr: true, console: true },
   routes: {
     "/": index,
+    "/api/health": {
+      OPTIONS: options,
+      GET() {
+        return json({ ok: true, service: "kronos", venue: venuePin });
+      },
+    },
     "/api/instruments": {
+      OPTIONS: options,
       async GET() {
         try {
           const { venue, data } = await withVenue(
@@ -317,6 +339,7 @@ const server = Bun.serve({
       },
     },
     "/api/klines": {
+      OPTIONS: options,
       async GET(req) {
         const params = new URL(req.url).searchParams;
         const symbol = (params.get("symbol") ?? "").toUpperCase();
@@ -339,6 +362,7 @@ const server = Bun.serve({
       },
     },
     "/api/ticker": {
+      OPTIONS: options,
       async GET(req) {
         const symbol = (new URL(req.url).searchParams.get("symbol") ?? "").toUpperCase();
         const symbolError = badSymbol(symbol);
@@ -348,6 +372,52 @@ const server = Bun.serve({
           return json({ venue, ticker: data });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Ticker request failed";
+          return json({ error: message }, 502);
+        }
+      },
+    },
+    "/api/forecast": {
+      OPTIONS: options,
+      async POST(req) {
+        let payload: unknown;
+        try {
+          payload = await req.json();
+        } catch {
+          return json({ error: "JSON body required" }, 400);
+        }
+        const parsed = parseForecastRequest(payload);
+        if (!parsed.ok) return json({ error: parsed.error }, 400);
+        const request = parsed.value;
+        const tf = timeframe(request.interval);
+        if (!tf) return json({ error: "Unknown interval" }, 400);
+        try {
+          const { venue, data } = await withVenue(
+            () => bybitKlines(request.symbol, tf.bybit),
+            () => bitgetKlines(request.symbol, tf.bitget),
+          );
+          const window = data.slice(-request.lookback);
+          if (window.length < 2) return json({ error: `Not enough candles for ${request.symbol}` }, 404);
+          const last = window[window.length - 1];
+          const forecast = runForecast(window, tf.seconds, {
+            predLen: request.predLen,
+            temperature: request.temperature,
+            topP: request.topP,
+            sampleCount: request.sampleCount,
+            seed: request.seed,
+          });
+          return json({
+            venue,
+            symbol: request.symbol,
+            interval: request.interval,
+            anchorTime: last.time,
+            anchorPrice: last.close,
+            seed: request.seed,
+            barSeconds: tf.seconds,
+            lookback: window.length,
+            forecast,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Forecast request failed";
           return json({ error: message }, 502);
         }
       },

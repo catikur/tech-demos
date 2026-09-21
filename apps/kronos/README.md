@@ -1,31 +1,18 @@
-# kronos — live architecture demo
+# Kronos
 
-A single-user Bun + React/TypeScript app that shows the **two-stage idea** behind
-[shiyu-coder/Kronos](https://github.com/shiyu-coder/Kronos) (~39k★, MIT) on real
-USDT-perpetual candles:
+USDT-perpetual chart and multi-path forecast. Candles come from the public
+**Bybit linear** API. If that host is blocked, the server pins to **Bitget USDT
+perpetuals** and says so. No API key and no orders.
 
-1. **Hierarchical tokenizer** — every OHLCV bar becomes a (coarse, fine) pair of discrete
-   tokens. Real Kronos learns these codebooks with Binary Spherical Quantization (BSQ);
-   this app fakes the codes with hand-rolled feature binning (4-bit coarse + 6-bit fine)
-   but keeps the structure, including ±1 bit displays and codebook-usage stats.
-2. **Autoregressive multi-path forecast** — real Kronos samples next-bar tokens from a
-   decoder-only transformer. This app samples discrete return tokens from a seeded prior
-   **fit on the live lookback**, with temperature (T) scaling and top-p (nucleus)
-   truncation, then draws N sample paths. **Run forecast** freezes that snapshot: later
-   candles keep printing through the fan until you run again.
+Sample paths are drawn from the lookback’s realized volatility with temperature
+and top-p. The same seed and the same candles always reproduce the same paths.
+This is not the Kronos foundation-model weights and it is not financial advice.
+The two-stage layout (hierarchical bar tokens + sampled paths) follows
+[shiyu-coder/Kronos](https://github.com/shiyu-coder/Kronos) (MIT).
 
-Links: [paper (arXiv:2508.02739)](https://arxiv.org/abs/2508.02739) ·
-[upstream live demo](https://shiyu-coder.github.io/Kronos-demo/) ·
+[Paper](https://arxiv.org/abs/2508.02739) ·
+[upstream demo](https://shiyu-coder.github.io/Kronos-demo/) ·
 [source bookmark](https://x.com/gusik4ever/status/2045469263255724233)
-
-## Honest scope disclaimer
-
-**Live candles, mock model.** Market data is public OHLCV from **Bybit USDT linear
-perpetuals**. If Bybit is geo-blocked, the local proxy fails over to **Bitget USDT
-perpetuals** and the header says so. There is no API key, no order routing, no Hugging
-Face download, and no PyTorch. The tokenizer and the fan are deterministic local math,
-not Kronos weights and not financial advice. **Demo** mode keeps the original seeded
-random walk for offline use.
 
 ## Run
 
@@ -35,25 +22,53 @@ bun install
 bun run dev   # http://localhost:3000
 ```
 
-No API keys and no GPU. The dev server proxies `/api/instruments`, `/api/klines`, and
-`/api/ticker` to the exchange. Symbols are restricted to `[A-Z0-9]{2,20}` and intervals
-to `5m`, `15m`, `1h`, `4h`, `1d`.
+`PORT` overrides the listen port. `KRONOS_CORS_ORIGIN` overrides the
+`Access-Control-Allow-Origin` header (default `*`) so another app on another
+origin can call the API.
+
+The UI remembers symbol, timeframe, and knobs in `localStorage` (`kronos.workspace`).
+
+## HTTP API
+
+Other repos should call these routes instead of copying the React tree. Responses
+are JSON. Errors are `{ "error": string }` with HTTP 400 or 502.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/health` | `{ ok, service: "kronos", venue }` |
+| GET | `/api/instruments` | USDT perpetuals: `symbol`, `baseCoin`, `priceScale`, `tickSize` |
+| GET | `/api/klines?symbol=BTCUSDT&interval=1h` | Up to 1000 bars, oldest first. `time` is unix seconds |
+| GET | `/api/ticker?symbol=BTCUSDT` | `lastPrice`, `change24hPct` (fraction, `0.01` = 1%) |
+| POST | `/api/forecast` | Load candles and return sample paths |
+
+`interval` is `5m`, `15m`, `1h`, `4h`, or `1d`. Symbols match `[A-Z0-9]{2,20}`.
+
+```bash
+curl -s localhost:3000/api/health
+
+curl -s -X POST localhost:3000/api/forecast \
+  -H 'content-type: application/json' \
+  -d '{"symbol":"BTCUSDT","interval":"1h","lookback":128,"predLen":48,"temperature":0.9,"topP":0.9,"sampleCount":8,"seed":1}'
+```
+
+Forecast body limits: `lookback` 32–256, `predLen` 8–96, `temperature` 0.1–2,
+`topP` 0.1–1, `sampleCount` 1–30, integer `seed` 0–1e9 (default 1).
+
+The response includes `venue`, `anchorTime`, `anchorPrice`, and `forecast`
+(`paths`, `mean`, `p10`, `p90`). The React UI calls the same `runForecast`
+function in-process; `POST /api/forecast` is the integration surface.
 
 ## UI
 
-- **Header** — Live / Demo, pinned USDT perps plus search, timeframe, last price and 24h change.
-- **Knobs** — `lookback`, `pred_len`, `T`, `top_p`, `sample_count`. Changing them marks the
-  forecast stale; **Run forecast** re-samples with the next seed. Symbol or timeframe
-  changes run once automatically. Candles refresh about every 15 seconds without moving
-  the frozen fan.
-- **Chart** — candlesticks, volume, N translucent paths, a bold mean path, and dashed
-  p10/p90 guides ([lightweight-charts](https://github.com/tradingview/lightweight-charts)).
-- **Token panel** — coarse/fine strips for the current lookback (hover a column) and the
-  sampled return-token strip for path #1 of the frozen forecast.
+- Symbol search and pins (BTC, ETH, SOL, XRP, DOGE), timeframe, last price, 24h change.
+- Knobs: `lookback`, `pred_len`, `T`, `top_p`, `sample_count`. **Run forecast** freezes
+  the fan. Changing a knob marks it for update. Symbol or timeframe changes run once
+  on the new candles. The chart keeps the previous candles under a loading veil
+  instead of going blank. Candles refresh about every 15 seconds.
+- Token panel: coarse (4-bit) and fine (6-bit) ids for the current lookback.
 
 ## Credits
 
-- [Kronos](https://github.com/shiyu-coder/Kronos) by shiyu-coder et al., MIT license — the
-  architecture ideas are theirs.
-- Charting by [TradingView lightweight-charts](https://github.com/tradingview/lightweight-charts) (Apache-2.0).
-- Public market data from [Bybit](https://www.bybit.com) v5 and, as fallback, [Bitget](https://www.bitget.com).
+- [Kronos](https://github.com/shiyu-coder/Kronos) by shiyu-coder et al., MIT — architecture ideas.
+- [TradingView lightweight-charts](https://github.com/tradingview/lightweight-charts), Apache-2.0.
+- Public market data from Bybit v5 and, when Bybit is unreachable, Bitget.

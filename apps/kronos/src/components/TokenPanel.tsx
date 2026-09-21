@@ -50,13 +50,12 @@ export function TokenPanel({ tokens, forecast }: Props) {
     <div className="panel token-panel">
       <div className="panel-header">
         <h2>Hierarchical tokenizer</h2>
-        <span className="tag">mock · BSQ-shaped</span>
+        <span className="tag">4-bit coarse · 6-bit fine</span>
       </div>
       <p className="panel-note">
-        Each bar of the lookback window is quantized into a <strong>coarse</strong> token (4 bits: return
-        direction/magnitude × range regime) plus a <strong>fine</strong> residual token (6 bits: return residual ×
-        body shape × volume). Real Kronos learns these codebooks with Binary Spherical Quantization — this panel
-        fakes the codes but keeps the structure.
+        Each bar in the lookback is quantized into a <strong>coarse</strong> token (return direction and magnitude ×
+        range) and a <strong>fine</strong> residual token (return detail × body × volume). Hover a column to read the
+        pair.
       </p>
 
       <div className="token-strip-wrap">

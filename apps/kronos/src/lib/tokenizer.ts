@@ -1,16 +1,9 @@
 import type { Bar } from "./ohlcv";
 
 /**
- * Mock hierarchical tokenizer.
- *
- * Real Kronos quantizes each OHLCV bar into discrete tokens with Binary
- * Spherical Quantization (BSQ), split into a coarse codebook and a fine
- * (residual) codebook that a decoder-only transformer predicts autoregressively.
- *
- * This mock keeps the *shape* of that idea — every bar becomes
- *   (coarse token: 4 bits, fine token: 6 bits)
- * via hand-rolled feature binning — but shares no code or weights with the
- * real tokenizer.
+ * Hierarchical tokenizer. Each bar becomes a coarse token (4 bits: return and
+ * range) and a fine residual token (6 bits: return detail, body, volume).
+ * The same bar always maps to the same ids.
  */
 
 export const COARSE_BITS = 4;

@@ -274,9 +274,26 @@ input[type="range"]::-webkit-slider-thumb {
   gap: 10px;
 }
 
+.chart-stage {
+  position: relative;
+}
+
 .chart-container {
   height: 520px;
   width: 100%;
+}
+
+.chart-veil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 14, 20, 0.62);
+  color: var(--accent);
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  z-index: 2;
 }
 
 .stats-row {

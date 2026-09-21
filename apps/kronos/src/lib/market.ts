@@ -1,4 +1,6 @@
-import type { Bar } from "./ohlcv";
+import type { ForecastRequest } from "./contract";
+import type { ForecastResult } from "./forecast";
+import type { Bar, TimeframeId } from "./ohlcv";
 
 /** Client for the local Bun proxy. The exchange is chosen server-side. */
 
@@ -44,4 +46,30 @@ export async function fetchKlines(symbol: string, interval: string): Promise<{ v
 export async function fetchTicker(symbol: string): Promise<{ venue: Venue; ticker: Ticker }> {
   const params = new URLSearchParams({ symbol });
   return getJson(`/api/ticker?${params}`);
+}
+
+export interface ForecastResponse {
+  venue: Venue;
+  symbol: string;
+  interval: TimeframeId;
+  anchorTime: number;
+  anchorPrice: number;
+  seed: number;
+  barSeconds: number;
+  lookback: number;
+  forecast: ForecastResult;
+}
+
+/** Same sampler the UI runs locally. Other apps can call this instead of importing the library. */
+export async function postForecast(request: ForecastRequest): Promise<ForecastResponse> {
+  const res = await fetch("/api/forecast", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  const body = (await res.json().catch(() => null)) as { error?: string } | null;
+  if (!res.ok) {
+    throw new Error(body && typeof body.error === "string" ? body.error : `Forecast HTTP ${res.status}`);
+  }
+  return body as ForecastResponse;
 }

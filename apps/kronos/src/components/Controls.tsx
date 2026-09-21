@@ -77,7 +77,7 @@ export function Controls({ knobs, onChange, onRun, seed, stale, disabled }: Prop
       </div>
       <div className="run-group">
         <button className={`run-button${stale ? " run-button-stale" : ""}`} onClick={onRun} disabled={disabled}>
-          {stale ? "Run forecast · update" : "Run forecast"} <span className="run-note">(mock)</span>
+          {stale ? "Run forecast · update" : "Run forecast"}
         </button>
         <span className="seed-note">
           {seed === null ? "seed —" : `seed ${seed}`} · deterministic{stale ? " · knobs changed" : ""}

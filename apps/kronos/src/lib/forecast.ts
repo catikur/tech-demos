@@ -2,14 +2,12 @@ import type { Bar } from "./ohlcv";
 import { rngFrom, type Rng } from "./rng";
 
 /**
- * Mock two-stage sampler.
+ * Two-stage sampler used by the app and by POST /api/forecast.
  *
- * Real Kronos autoregressively samples the *next bar's tokens* from a
- * decoder-only transformer, then de-tokenizes them back into OHLCV. This mock
- * keeps the sampling mechanics honest — a discrete distribution over return
- * "tokens", temperature scaling, top-p (nucleus) truncation, multinomial
- * sampling per path — but the distribution itself is a simple seeded
- * Gaussian-ish prior fit on the lookback window. No model, no weights.
+ * Each step draws a discrete return token with temperature scaling and top-p
+ * truncation, then maps that token back to a log-return. The distribution is
+ * fit on the lookback window (shrunk drift + realized volatility). Same seed
+ * and same bars always reproduce the same paths.
  */
 
 export interface ForecastParams {

@@ -1,4 +1,4 @@
-/** Deterministic PRNG utilities. Everything in the demo is seeded — no Math.random. */
+/** Deterministic PRNG. Forecast paths are seeded — no Math.random. */
 
 export function hashString(input: string): number {
   // FNV-1a 32-bit
@@ -26,11 +26,4 @@ export function mulberry32(seed: number): Rng {
 
 export function rngFrom(...parts: (string | number)[]): Rng {
   return mulberry32(hashString(parts.join("|")));
-}
-
-/** Standard normal via Box–Muller. */
-export function gaussian(rng: Rng): number {
-  const u = Math.max(rng(), 1e-12);
-  const v = rng();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
