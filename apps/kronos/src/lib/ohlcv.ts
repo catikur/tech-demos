@@ -25,9 +25,11 @@ export const SYMBOLS: SymbolSpec[] = [
 ];
 
 export const TIMEFRAMES = [
-  { id: "5m", seconds: 300, volScale: 0.09 },
-  { id: "1h", seconds: 3600, volScale: 0.28 },
-  { id: "1d", seconds: 86400, volScale: 1.0 },
+  { id: "5m", seconds: 300, volScale: 0.09, bybit: "5", bitget: "5m" },
+  { id: "15m", seconds: 900, volScale: 0.16, bybit: "15", bitget: "15m" },
+  { id: "1h", seconds: 3600, volScale: 0.28, bybit: "60", bitget: "1H" },
+  { id: "4h", seconds: 14400, volScale: 0.55, bybit: "240", bitget: "4H" },
+  { id: "1d", seconds: 86400, volScale: 1.0, bybit: "D", bitget: "1D" },
 ] as const;
 
 export type TimeframeId = (typeof TIMEFRAMES)[number]["id"];

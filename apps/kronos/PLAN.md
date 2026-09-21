@@ -1,42 +1,41 @@
 # PLAN — kronos
 
 ## Goal
-Single-user MVP architecture slice inspired by [shiyu-coder/Kronos](https://github.com/shiyu-coder/Kronos) (~39k★, MIT): the first open-source foundation model for financial candlesticks (K-lines / OHLCV-as-tokens). Demo the **two-stage idea** locally — hierarchical tokenizer tokens + multi-path forecast viz — without loading Hugging Face weights or calling a broker.
+Single-user app inspired by [shiyu-coder/Kronos](https://github.com/shiyu-coder/Kronos) (~39k★, MIT): show the two-stage candlestick idea (hierarchical tokens + multi-path forecast) on **live USDT-perpetual OHLCV**, without Hugging Face weights or a broker.
 
-Source bookmark (Ai folder): https://x.com/gusik4ever/status/2045469263255724233  
-Upstream: https://github.com/shiyu-coder/Kronos · paper https://arxiv.org/abs/2508.02739 · live upstream demo https://shiyu-coder.github.io/Kronos-demo/
+Source bookmark: https://x.com/gusik4ever/status/2045469263255724233  
+Upstream: https://github.com/shiyu-coder/Kronos · paper https://arxiv.org/abs/2508.02739 · upstream demo https://shiyu-coder.github.io/Kronos-demo/
 
-## MVP in scope
+## In scope
 - Path: `apps/kronos/`
-- Bun + React/TS UI
-- Seeded historical OHLCV series (e.g. BTC-like or equity 5m/1d bars)
-- Candle chart (lookback window)
-- Hierarchical token visualization (mock discrete token ids / levels — not real Kronos tokenizer outputs)
-- Forecast panel: generate N mock sample paths (temperature / top-p style controls as UI knobs) overlaid on future timestamps
-- Toggle sample_count, T, pred_len in the UI (local mock only)
-- README: credit Kronos + bookmark; explicit "architecture UX demo — no HF weights, no live broker, no real money"
-- `bun install && bun run dev`
+- Bun server + React/TS UI (`bun install && bun run dev`)
+- Public market proxy: Bybit v5 `category=linear` (instruments, klines, ticker). If Bybit is blocked, pin to Bitget USDT perpetuals and label the venue. No API key, no orders, symbol/interval allowlist only.
+- Candle chart for a lookback window, volume histogram, live refresh (~15s)
+- Frozen mock forecast: T, top_p, sample_count, pred_len, lookback. Run keeps the fan put while new candles print through it. Sampler math unchanged.
+- Hierarchical token panel (mock codes, not real Kronos tokenizer outputs) on the live lookback
+- Demo mode: seeded synthetic OHLCV when the network is down
+- README credits Kronos + bookmark and states the honest scope
 
 ## Out of scope
-- Loading NeoQuasar/Kronos-* Hugging Face checkpoints or running PyTorch inference
-- Live exchange data / broker execution / backtest PnL claims
-- Cloning the upstream Python training stack into this folder
+- NeoQuasar/Kronos Hugging Face checkpoints or PyTorch inference
+- Order placement, account keys, broker execution, PnL claims
+- Cloning the upstream Python training stack
 - Changes outside `apps/kronos/`
-- New GitHub repository
+- A new GitHub repository
 
 ## Stack
-- Bun-first
-- Lightweight React + TypeScript + chart lib (lightweight-charts or similar)
-- Seeded JSON / deterministic mock forecast paths
+- Bun (`Bun.serve` + HTML route) and React/TypeScript
+- lightweight-charts
+- Seeded local forecast (`src/lib/forecast.ts`) calibrated on whatever bars are loaded
 
 ## UX
-1. Header: symbol + timeframe + lookback / pred_len knobs
-2. Main chart: history candles + multi-path forecast overlays
-3. Side panel: hierarchical token strip / grid for the lookback window
-4. Controls: T, top_p, sample_count → "Run forecast" (mock)
+1. Header: live/demo, symbol search, timeframe, last price, venue status
+2. Main chart: history candles + volume + frozen multi-path forecast
+3. Side panel: hierarchical token strip for the lookback window
+4. Controls: T, top_p, sample_count, lookback, pred_len → Run forecast (mock)
 
 ## Success criteria
-- `bun install && bun run dev` works with no API keys / no GPU
-- One PR scoped only to `apps/kronos/`
-- PR includes **at least one screenshot** and **at least one video** of the running app
-- README credits upstream + X bookmark + honest scope note
+- `bun install && bun run dev` works with no API keys and no GPU
+- Live BTCUSDT candles render (Bybit, or Bitget when Bybit is unreachable)
+- One PR scoped to `apps/kronos/`
+- PR includes at least one screenshot and one video of the running app
