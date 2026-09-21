@@ -16,7 +16,7 @@ import { emailAllowed } from "../auth/allowlist.ts";
 import { loginRequired } from "../auth/gate.ts";
 import { readSession } from "../auth/session.ts";
 import { ensureVisibleAccount } from "../auth/scope.ts";
-import { denyLoginRedirect, finishMicrosoftSignIn, signInErrorRedirect, type SignInClient } from "../auth/signin.ts";
+import { denyLoginRedirect, finishMicrosoftSignIn, resumeNativeSignIn, signInErrorRedirect, type SignInClient } from "../auth/signin.ts";
 
 /**
  * OAuth start/callback endpoints. Providers register a small descriptor:
@@ -94,8 +94,16 @@ export const authRoutes = {
     if (req.params.provider === "google" && loginRequired() && !readSession(req)) {
       return Response.json({ error: "Sign in with Microsoft 365" }, { status: 401 });
     }
-    if (req.params.provider === "microsoft" && loginRequired() && readSession(req)) {
-      badRequest("Microsoft 365 is already connected via sign-in");
+    if (req.params.provider === "microsoft" && loginRequired()) {
+      const existing = readSession(req);
+      if (existing) {
+        // The iOS sign-in sheet shares Safari cookies. A cookie from the web cockpit
+        // used to 400 here ("already connected"); hand the phone that session instead.
+        const native = query(req).get("client") === "native";
+        const account = accounts.get(existing.accountId);
+        if (native && account) return resumeNativeSignIn(account);
+        if (!native) return redirect("/");
+      }
     }
     const spaceId = query(req).get("space") || (req.params.provider === "microsoft" ? WORK_SPACE_ID : "");
     if (!spaces.get(spaceId)) badRequest("Choose a space to connect the account to");

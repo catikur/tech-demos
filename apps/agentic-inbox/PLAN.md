@@ -40,7 +40,7 @@ Upstream: https://github.com/cloudflare/agentic-inbox
 ## iOS (phase 14)
 - `ios/ButlerCore`: Foundation-only models mirroring `shared/types.ts`, `ButlerAPI` (bearer auth, SSE streaming), `HTMLText` (same hygiene as `shared/html.ts`). Tested on Linux with fixtures captured from the demo server plus live round-trips.
 - `ios/Butler`: SwiftUI, iOS 17+. Tabs Brifing / Gelen / Takvim / Pano / Daha; Butler’a sor as a sheet; list→detail stacks; Kanban pages horizontally with Taşı menu, context menu and drag-drop.
-- Server: `readSession` accepts `Authorization: Bearer <session blob>`; `/api/auth/microsoft/start?client=native` records the client in `oauth_states.client` and the callback bounces to `butler://signed-in?token=…` instead of setting a cookie.
+- Server: `readSession` accepts `Authorization: Bearer <session blob>`; `/api/auth/microsoft/start?client=native` records the client in `oauth_states.client` and the callback bounces to `butler://signed-in?token=…` instead of setting a cookie. If Safari already holds a session cookie, the same URL resumes that account (`resumeNativeSignIn`) instead of returning “already connected”.
 - Cannot be built or screenshotted from this Linux agent (no Xcode). `xcodegen generate` on a Mac produces the project.
 
 ## Out of scope (for now)

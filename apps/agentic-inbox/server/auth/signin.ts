@@ -35,6 +35,14 @@ export function signInErrorRedirect(reason: string, opts: SignInOptions = {}): R
   return new Response(null, { status: 302, headers: { Location: `/?connect=error&reason=${encodeURIComponent(reason)}` } });
 }
 
+/**
+ * Safari (or the system browser) already has a Butler session. Hand that same
+ * account to the iOS app as a bearer token instead of starting Microsoft login again.
+ */
+export function resumeNativeSignIn(account: Pick<Account, "id" | "email">): Response {
+  return nativeBounce({ token: makeSessionToken(account), email: account.email.toLowerCase() });
+}
+
 /** Persist the M365 mailbox as the Work account and issue the session (cookie for web, token for native). */
 export function finishMicrosoftSignIn(account: Account, tokens: TokenSet | null, opts: SignInOptions = {}): Response {
   if (!emailAllowed(account.email)) return denyLoginRedirect(account.email, opts);
