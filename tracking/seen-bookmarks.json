@@ -1,16 +1,5 @@
 {
-  "proposed": [
-    {
-      "id": "2045469263255724233-kronos",
-      "title": "Kronos (shiyu-coder) — foundation model for financial candlesticks",
-      "url": "https://x.com/gusik4ever/status/2045469263255724233",
-      "github": "https://github.com/shiyu-coder/Kronos",
-      "date": "2026-09-21",
-      "source": "daily-x-tech-scout",
-      "slug": "kronos",
-      "folder": "Ai"
-    }
-  ],
+  "proposed": [],
   "skipped": [
     {
       "id": "2098941338297458746-hyperframes",
@@ -102,6 +91,17 @@
       "pr": "https://github.com/catikur/tech-demos/pull/7",
       "source": "owner-pick-trade-folder",
       "slug": "atlas-gic"
+    },
+    {
+      "id": "2045469263255724233-kronos",
+      "title": "Kronos (shiyu-coder) — foundation model for financial candlesticks",
+      "url": "https://x.com/gusik4ever/status/2045469263255724233",
+      "github": "https://github.com/shiyu-coder/Kronos",
+      "date": "2026-09-21",
+      "pr": "https://github.com/catikur/tech-demos/pull/15",
+      "source": "daily-x-tech-scout",
+      "slug": "kronos",
+      "folder": "Ai"
     }
   ]
 }
