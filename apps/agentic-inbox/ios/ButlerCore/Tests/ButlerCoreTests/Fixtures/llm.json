@@ -1,0 +1,1 @@
+{"provider":"mock","configured":false,"model":"openai/gpt-4o-mini","modelSource":"default","envModel":null,"apiKeyConfigured":true,"apiKeySource":"env","apiKeyMasked":"sk-or-…f34e","baseUrl":"https://openrouter.ai/api/v1","embedModel":"openai/text-embedding-3-small","embedModelSource":"default","envEmbedModel":null,"mockForced":true}

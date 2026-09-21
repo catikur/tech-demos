@@ -15,13 +15,18 @@ function sessionSecure(): boolean {
   return base.startsWith("https://");
 }
 
-export function makeSessionCookie(account: Pick<Account, "id" | "email">, secure = sessionSecure()): string {
+/** Opaque encrypted session blob — cookie value for the web, bearer token for native clients. */
+export function makeSessionToken(account: Pick<Account, "id" | "email">): string {
   const payload: Session = {
     accountId: account.id,
     email: account.email.toLowerCase(),
     exp: Date.now() + MAX_AGE_SEC * 1000,
   };
-  const token = encodeURIComponent(encryptJson(payload));
+  return encryptJson(payload);
+}
+
+export function makeSessionCookie(account: Pick<Account, "id" | "email">, secure = sessionSecure()): string {
+  const token = encodeURIComponent(makeSessionToken(account));
   const parts = [
     `${SESSION_COOKIE}=${token}`,
     "HttpOnly",
@@ -44,11 +49,21 @@ export function cookieHeader(setCookie: string): string {
   return setCookie.split(";")[0].trim();
 }
 
-export function readSession(req: Request): Session | null {
+function sessionTokenFrom(req: Request): string | null {
+  const auth = req.headers.get("authorization") ?? "";
+  if (/^bearer\s+/i.test(auth)) {
+    const bearer = auth.replace(/^bearer\s+/i, "").trim();
+    if (bearer) return bearer;
+  }
   const raw = req.headers.get("cookie") ?? "";
   const match = raw.split(";").map((p) => p.trim()).find((p) => p.startsWith(`${SESSION_COOKIE}=`));
   if (!match) return null;
-  const token = decodeURIComponent(match.slice(SESSION_COOKIE.length + 1));
+  return decodeURIComponent(match.slice(SESSION_COOKIE.length + 1));
+}
+
+export function readSession(req: Request): Session | null {
+  const token = sessionTokenFrom(req);
+  if (!token) return null;
   try {
     const session = decryptJson<Session>(token);
     if (!session?.accountId || !session.email || typeof session.exp !== "number") return null;

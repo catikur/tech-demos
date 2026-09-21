@@ -220,6 +220,7 @@ CREATE TABLE IF NOT EXISTS oauth_states (
   provider TEXT NOT NULL,
   space_id TEXT NOT NULL,
   code_verifier TEXT NOT NULL,
+  client TEXT NOT NULL DEFAULT 'web',
   created_at INTEGER NOT NULL
 );
 

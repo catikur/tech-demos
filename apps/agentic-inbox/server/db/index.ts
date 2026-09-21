@@ -99,6 +99,10 @@ function migrate(database: Database): void {
   if (eventCols.size > 0 && !eventCols.has("description_html")) {
     database.exec("ALTER TABLE events ADD COLUMN description_html TEXT");
   }
+  const oauthCols = columnNames(database, "oauth_states");
+  if (oauthCols.size > 0 && !oauthCols.has("client")) {
+    database.exec("ALTER TABLE oauth_states ADD COLUMN client TEXT NOT NULL DEFAULT 'web'");
+  }
   const laneCols = columnNames(database, "commitments");
   if (laneCols.size > 0 && !laneCols.has("board_lane")) {
     database.exec("ALTER TABLE commitments ADD COLUMN board_lane TEXT NOT NULL DEFAULT 'todo'");

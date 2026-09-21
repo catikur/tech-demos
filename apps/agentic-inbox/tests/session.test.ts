@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Account } from "../shared/types.ts";
 import { openMemoryDb } from "../server/db/index.ts";
 import { bootstrap, WORK_SPACE_ID } from "../server/bootstrap.ts";
-import { accounts } from "../server/db/repo.ts";
+import { accounts, oauthStates } from "../server/db/repo.ts";
 import { emailAllowed, allowedLoginDomain } from "../server/auth/allowlist.ts";
 import { cookieHeader, makeSessionCookie, readSession } from "../server/auth/session.ts";
 import { loginRequired } from "../server/auth/gate.ts";
@@ -130,6 +130,46 @@ describe("Microsoft sign-in finish", () => {
     expect(res.headers.get("Set-Cookie") ?? "").toContain("inbox_session=");
     expect(accounts.all().map((a) => a.email)).toEqual(["ada@conforcus.com"]);
     expect(accounts.all()[0].spaceId).toBe(WORK_SPACE_ID);
+  });
+
+  test("native client sign-in bounces to butler://signed-in with a bearer token, no cookie", async () => {
+    const account = m365("ada@conforcus.com");
+    const res = finishMicrosoftSignIn(account, null, { client: "native" });
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("Location") ?? "");
+    expect(location.protocol).toBe("butler:");
+    expect(location.host).toBe("signed-in");
+    expect(res.headers.get("Set-Cookie")).toBeNull();
+    const token = location.searchParams.get("token") ?? "";
+    expect(token.length).toBeGreaterThan(20);
+
+    const authed = await (routes["/api/status"] as (req: Request) => Promise<Response>)(
+      new Request("http://local/api/status", { headers: { Authorization: `Bearer ${token}` } }),
+    );
+    expect(authed.status).toBe(200);
+    expect((await authed.json()).accounts[0].email).toBe("ada@conforcus.com");
+  });
+
+  test("native denial bounces to butler://signed-in?error=denied", () => {
+    const res = denyLoginRedirect("ada@gmail.com", { client: "native" });
+    const location = new URL(res.headers.get("Location") ?? "");
+    expect(location.protocol).toBe("butler:");
+    expect(location.searchParams.get("error")).toBe("denied");
+    expect(location.searchParams.get("email")).toBe("ada@gmail.com");
+  });
+
+  test("oauth state remembers the native client", () => {
+    const state = oauthStates.create("microsoft", WORK_SPACE_ID, "verifier", "native");
+    expect(oauthStates.consume(state)).toMatchObject({ provider: "microsoft", client: "native" });
+    const web = oauthStates.create("microsoft", WORK_SPACE_ID, "verifier");
+    expect(oauthStates.consume(web)?.client).toBe("web");
+  });
+
+  test("a garbage bearer token is rejected", async () => {
+    const res = await (routes["/api/status"] as (req: Request) => Promise<Response>)(
+      new Request("http://local/api/status", { headers: { Authorization: "Bearer nope" } }),
+    );
+    expect(res.status).toBe(401);
   });
 });
 
