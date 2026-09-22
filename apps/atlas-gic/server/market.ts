@@ -1,15 +1,14 @@
 import { croCapForRegime, regimeFromVix } from "../src/shared/engine";
+import { featuresFromBars, formatFeatures } from "../src/shared/features";
 import { formatBybitTape, looksLikeBybitSymbol } from "../src/shared/bybit";
+import { timeframeById } from "../src/shared/forecast";
 import type { Briefing, Headline, Settings } from "../src/shared/types";
-import { fetchPerpQuote } from "./bybit";
+import { fetchKlines, fetchPerpQuote, perpFlow } from "./bybit";
 import { loadForecastChart } from "./forecast";
 import { sanitizeTicker } from "./security";
+import { fetchYahooBars, yahooSymbol } from "./yahoo";
 
 const UA = "Mozilla/5.0 (compatible; atlas-gic-paper-desk/0.2; +https://github.com/catikur/tech-demos)";
-
-function yahooSymbol(ticker: string): string {
-  return ticker.trim().toUpperCase().replace(/\./g, "-");
-}
 
 async function yahooChart(symbol: string) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
@@ -35,6 +34,42 @@ async function yahooSearch(q: string): Promise<Headline[]> {
     .filter((n) => n.title)
     .slice(0, 5)
     .map((n) => ({ title: n.title!, publisher: n.publisher ?? "" }));
+}
+
+export async function quoteAny(ticker: string): Promise<{
+  ticker: string;
+  company: string;
+  price: number;
+  changePct: number;
+  volume: number;
+  dayHigh: number;
+  dayLow: number;
+  currency: string;
+  fundingRate: number | null;
+}> {
+  const clean = sanitizeTicker(ticker);
+  if (!clean) throw new Error("Invalid ticker");
+  if (looksLikeBybitSymbol(clean)) {
+    const q = await fetchPerpQuote(clean);
+    if (!q) throw new Error("Unknown perp symbol");
+    return { ...q, fundingRate: q.fundingRate };
+  }
+  const q = await fetchQuote(clean);
+  return { ...q, fundingRate: null };
+}
+
+async function featureLine(symbol: string): Promise<string> {
+  try {
+    if (looksLikeBybitSymbol(symbol)) {
+      const tf = timeframeById("1d");
+      if (!tf) return "";
+      const { bars } = await fetchKlines(symbol, tf, 220);
+      return formatFeatures(featuresFromBars(bars, tf.seconds));
+    }
+    return formatFeatures(featuresFromBars(await fetchYahooBars(symbol, "1d"), 86400));
+  } catch {
+    return "";
+  }
 }
 
 export async function fetchQuote(ticker: string): Promise<{
@@ -167,6 +202,9 @@ export async function fetchBriefing(ticker: string, settings: Settings): Promise
     } catch {
       /* tape still stands without VIX */
     }
+    const headlines = await yahooSearch(quote.company || quote.ticker).catch(() => [] as Headline[]);
+    let tape = await enrichTape(quote.ticker, await tapeWithFan(quote.ticker, formatBybitTape(quote, vix), settings));
+    if (headlines.length) tape = tape.replace("no headlines", `${headlines.length} headlines`);
     return {
       ticker: quote.ticker,
       company: quote.company,
@@ -179,8 +217,8 @@ export async function fetchBriefing(ticker: string, settings: Settings): Promise
       vix,
       vixChangePct,
       regime,
-      headlines: [],
-      tape: await tapeWithFan(quote.ticker, formatBybitTape(quote, vix), settings),
+      headlines,
+      tape,
     };
   }
   const [quote, vixMeta, headlines] = await Promise.all([
@@ -192,13 +230,16 @@ export async function fetchBriefing(ticker: string, settings: Settings): Promise
   const vixChangePct = Number(vixMeta.regularMarketChangePercent ?? 0);
   if (!Number.isFinite(vix)) throw new Error("Could not read VIX");
   const regime = regimeFromVix(vix, settings);
-  const tape = [
-    `${quote.currency} ${quote.price.toFixed(2)}`,
-    `${quote.changePct >= 0 ? "+" : ""}${quote.changePct.toFixed(2)}%`,
-    `H ${quote.dayHigh.toFixed(2)} / L ${quote.dayLow.toFixed(2)}`,
-    `vol ${Intl.NumberFormat("en", { notation: "compact" }).format(quote.volume)}`,
-    `VIX ${vix.toFixed(1)} (${vixChangePct >= 0 ? "+" : ""}${vixChangePct.toFixed(1)}%)`,
-  ].join(" · ");
+  const tape = await enrichTape(
+    quote.ticker,
+    [
+      `${quote.currency} ${quote.price.toFixed(2)}`,
+      `${quote.changePct >= 0 ? "+" : ""}${quote.changePct.toFixed(2)}%`,
+      `H ${quote.dayHigh.toFixed(2)} / L ${quote.dayLow.toFixed(2)}`,
+      `vol ${Intl.NumberFormat("en", { notation: "compact" }).format(quote.volume)}`,
+      `VIX ${vix.toFixed(1)} (${vixChangePct >= 0 ? "+" : ""}${vixChangePct.toFixed(1)}%)`,
+    ].join(" · "),
+  );
   return {
     ...quote,
     vix,
@@ -207,6 +248,18 @@ export async function fetchBriefing(ticker: string, settings: Settings): Promise
     headlines,
     tape,
   };
+}
+
+async function enrichTape(symbol: string, tape: string): Promise<string> {
+  const bits = [tape];
+  const feat = await featureLine(symbol);
+  if (feat) bits.push(feat);
+  if (looksLikeBybitSymbol(symbol)) {
+    const flow = await perpFlow(symbol);
+    if (flow.oiChangePct != null) bits.push(`oi24 ${flow.oiChangePct >= 0 ? "+" : ""}${flow.oiChangePct.toFixed(1)}%`);
+    if (flow.longShort != null) bits.push(`ls ${flow.longShort.toFixed(2)}`);
+  }
+  return bits.join(" · ");
 }
 
 async function tapeWithFan(symbol: string, tape: string, settings: Settings): Promise<string> {

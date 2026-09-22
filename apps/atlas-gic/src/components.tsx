@@ -133,30 +133,34 @@ export function Leaderboard({
   weights,
   flaggedId,
   agents,
+  title = "Darwinian weights",
+  onSelect,
 }: {
   weights: Weights;
   flaggedId: string | null;
   agents: Agent[];
+  title?: string;
+  onSelect?: (id: string) => void;
 }) {
   const rows = agents
     .filter((a) => usesSurface(a, "debate") && a.layer !== "decision")
     .sort((a, b) => (weights[b.id] ?? b.baseWeight) - (weights[a.id] ?? a.baseWeight));
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
-      <h3 className="mb-3 font-mono text-xs font-bold tracking-[0.2em] text-zinc-400 uppercase">
-        Darwinian weights
-      </h3>
+      <h3 className="mb-3 font-mono text-xs font-bold tracking-[0.2em] text-zinc-400 uppercase">{title}</h3>
       <ol className="space-y-2.5">
         {rows.map((a, i) => {
           const delta = (weights[a.id] ?? a.baseWeight) - a.baseWeight;
           return (
             <li key={a.id} className="flex items-center gap-2">
+              <button type="button" onClick={() => onSelect?.(a.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
               <span className="w-4 font-mono text-[11px] text-zinc-600">{i + 1}</span>
               <span className="text-sm">{a.emoji}</span>
               <span className="w-32 truncate text-xs text-zinc-300">{a.name}</span>
               <div className="flex-1">
                 <WeightBar weight={weights[a.id] ?? a.baseWeight} highlight={a.id === flaggedId} />
               </div>
+              </button>
               {Math.abs(delta) > 0.001 && (
                 <span
                   className={`font-mono text-[10px] font-bold ${

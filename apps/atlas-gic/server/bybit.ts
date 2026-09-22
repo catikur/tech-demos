@@ -227,6 +227,34 @@ export async function fetchPerpQuote(symbol: string): Promise<BybitQuote | null>
   return fetchBitgetPerp(clean);
 }
 
+export function currentVenue(): "bybit" | "bitget" | null {
+  return venuePin;
+}
+
+export async function perpFlow(symbol: string): Promise<{ oiChangePct: number | null; longShort: number | null }> {
+  const clean = sanitizeTicker(symbol);
+  if (!clean || venuePin === "bitget") return { oiChangePct: null, longShort: null };
+  try {
+    const oi = await bybitGet(
+      `/v5/market/open-interest?category=linear&symbol=${encodeURIComponent(clean)}&intervalTime=1h&limit=24`,
+    );
+    const rows = (oi.list as Array<{ openInterest?: string }> | undefined) ?? [];
+    const newest = Number(rows[0]?.openInterest);
+    const oldest = Number(rows[rows.length - 1]?.openInterest);
+    const oiChangePct = newest > 0 && oldest > 0 ? ((newest - oldest) / oldest) * 100 : null;
+    const ratio = await bybitGet(
+      `/v5/market/account-ratio?category=linear&symbol=${encodeURIComponent(clean)}&period=1h&limit=1`,
+    );
+    const point = ((ratio.list as Array<{ buyRatio?: string; sellRatio?: string }> | undefined) ?? [])[0];
+    const buy = Number(point?.buyRatio);
+    const sell = Number(point?.sellRatio);
+    const longShort = buy > 0 && sell > 0 ? buy / sell : null;
+    return { oiChangePct: Number.isFinite(oiChangePct ?? NaN) ? oiChangePct : null, longShort };
+  } catch {
+    return { oiChangePct: null, longShort: null };
+  }
+}
+
 export async function fetchKlines(
   symbol: string,
   tf: { id: TimeframeId; bybit: string; bitget: string },

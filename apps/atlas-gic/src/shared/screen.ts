@@ -15,9 +15,20 @@ export function parseWatchlist(raw: string): string[] {
 }
 
 export function pickUniverse(settings: Pick<Settings, "screenUniverse" | "screenWatchlist">): string[] {
+  if (settings.screenUniverse === "bybit") return [];
   if (settings.screenUniverse === "ndx100") return [...NDX100];
   if (settings.screenUniverse === "watchlist") return parseWatchlist(settings.screenWatchlist);
   return [...SP100];
+}
+
+export function diffTickers(prev: string[], next: string[]): { entered: string[]; exited: string[]; stayed: string[] } {
+  const a = new Set(prev);
+  const b = new Set(next);
+  return {
+    entered: next.filter((t) => !a.has(t)),
+    exited: prev.filter((t) => !b.has(t)),
+    stayed: next.filter((t) => a.has(t)),
+  };
 }
 
 export function usesSurface(

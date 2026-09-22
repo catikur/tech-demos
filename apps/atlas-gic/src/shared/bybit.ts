@@ -16,6 +16,9 @@ export interface BybitQuote {
   symbolClass: BybitInstrumentClass;
   fundingRate: number | null;
   openInterest: number | null;
+  markPrice?: number | null;
+  indexPrice?: number | null;
+  nextFundingTime?: number | null;
 }
 
 export interface BybitTickerRaw {
@@ -27,6 +30,9 @@ export interface BybitTickerRaw {
   lowPrice24h?: string;
   fundingRate?: string;
   openInterestValue?: string;
+  markPrice?: string;
+  indexPrice?: string;
+  nextFundingTime?: string;
 }
 
 export interface BybitMetaRaw {
@@ -93,6 +99,9 @@ export function normalizeBybitQuote(
     symbolClass: bybitClassOf(meta.symbolType),
     fundingRate: num(row.fundingRate),
     openInterest: num(row.openInterestValue),
+    markPrice: num(row.markPrice),
+    indexPrice: num(row.indexPrice),
+    nextFundingTime: num(row.nextFundingTime),
   };
 }
 
@@ -127,7 +136,7 @@ export function formatBybitTape(q: BybitQuote, vix: number): string {
   const oi = q.openInterest != null ? `OI ${compact(q.openInterest)}` : "OI n/a";
   const vixBit = vix > 0 ? `VIX ${vix.toFixed(1)}` : "VIX n/a";
   const venue = q.venue === "bitget" ? "Bitget" : "Bybit";
-  return [
+  const bits = [
     `${venue} linear perpetual (${q.symbolClass})`,
     q.company,
     `${q.currency} ${formatPx(q.price)}`,
@@ -138,7 +147,17 @@ export function formatBybitTape(q: BybitQuote, vix: number): string {
     oi,
     vixBit,
     "no headlines",
-  ].join(" · ");
+  ];
+  if (q.markPrice != null && q.indexPrice != null && q.indexPrice > 0) {
+    const basisBps = ((q.markPrice - q.indexPrice) / q.indexPrice) * 10_000;
+    bits.push(`basis ${basisBps >= 0 ? "+" : ""}${basisBps.toFixed(1)} bps`);
+    bits.push(`mark ${formatPx(q.markPrice)}`);
+  }
+  if (q.nextFundingTime != null && q.nextFundingTime > Date.now()) {
+    const mins = Math.round((q.nextFundingTime - Date.now()) / 60_000);
+    bits.push(`fund in ${mins}m`);
+  }
+  return bits.join(" · ");
 }
 
 export function describeQuote(q: {

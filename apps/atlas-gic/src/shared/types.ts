@@ -26,6 +26,7 @@ export interface AgentTake {
   stance: Stance;
   conviction: number;
   take: string;
+  round?: number;
 }
 
 export interface Synthesis {
@@ -75,6 +76,19 @@ export interface Settings {
   forecastTopP: number;
   forecastSampleCount: number;
   forecastSeed: number;
+  markHorizonHours: number;
+  markHorizonPerpHours: number;
+  autoMark: boolean;
+  trialMarks: number;
+  modelScout: string;
+  modelDebate: string;
+  modelDecision: string;
+  debateRebuttal: boolean;
+  screenSchedule: "off" | "daily" | "4h";
+  maxNamePct: number;
+  stopPct: number;
+  targetPct: number;
+  webhookUrl: string;
 }
 
 export interface ScreenScoutTake {
@@ -158,6 +172,13 @@ export interface DebateRecord {
   booked: boolean;
   scored: boolean;
   createdAt: string;
+  horizonHours: number | null;
+  dueAt: string | null;
+  markPrice: number | null;
+  markedAt: string | null;
+  llmCalls: number;
+  llmTokens: number;
+  llmMs: number;
 }
 
 export interface Position {
@@ -168,13 +189,20 @@ export interface Position {
   avgPrice: number;
   debateId: number;
   openedAt: string;
+  closedAt?: string | null;
   status: "open" | "closed";
+  realizedPnl?: number | null;
+  fundingAccrued?: number;
+  lastFundingAt?: string | null;
 }
 
 export interface BookSnapshot {
   cash: number;
   equity: number;
+  grossPct: number;
+  netPct: number;
   positions: Array<Position & { last?: number; mtm?: number; pnl?: number }>;
+  closed: Array<Position & { last?: number; mtm?: number; pnl?: number }>;
 }
 
 export interface Commit {
@@ -186,6 +214,8 @@ export interface Commit {
 }
 
 export interface AutoresearchProposal {
+  id?: number;
+  status?: string;
   agentId: string;
   agentName: string;
   attribution: string;

@@ -40,6 +40,19 @@ export const DEFAULT_SETTINGS: Settings = {
   forecastTopP: 0.9,
   forecastSampleCount: 8,
   forecastSeed: 1,
+  markHorizonHours: 72,
+  markHorizonPerpHours: 24,
+  autoMark: true,
+  trialMarks: 3,
+  modelScout: "",
+  modelDebate: "",
+  modelDecision: "",
+  debateRebuttal: false,
+  screenSchedule: "off",
+  maxNamePct: 25,
+  stopPct: 0,
+  targetPct: 0,
+  webhookUrl: "",
 };
 
 export const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
@@ -111,6 +124,19 @@ export function mergeSettings(raw: Record<string, unknown> | null | undefined): 
       clamp(NUM(r.forecastSampleCount, d.forecastSampleCount), FORECAST_LIMITS.sampleCount.min, FORECAST_LIMITS.sampleCount.max),
     ),
     forecastSeed: Math.round(clamp(NUM(r.forecastSeed, d.forecastSeed), FORECAST_LIMITS.seed.min, FORECAST_LIMITS.seed.max)),
+    markHorizonHours: Math.round(clamp(NUM(r.markHorizonHours, d.markHorizonHours), 1, 24 * 30)),
+    markHorizonPerpHours: Math.round(clamp(NUM(r.markHorizonPerpHours, d.markHorizonPerpHours), 1, 24 * 14)),
+    autoMark: BOOL(r.autoMark, d.autoMark),
+    trialMarks: Math.round(clamp(NUM(r.trialMarks, d.trialMarks), 1, 20)),
+    modelScout: String(r.modelScout ?? d.modelScout).trim().slice(0, 80),
+    modelDebate: String(r.modelDebate ?? d.modelDebate).trim().slice(0, 80),
+    modelDecision: String(r.modelDecision ?? d.modelDecision).trim().slice(0, 80),
+    debateRebuttal: BOOL(r.debateRebuttal, d.debateRebuttal),
+    screenSchedule: r.screenSchedule === "daily" || r.screenSchedule === "4h" ? r.screenSchedule : "off",
+    maxNamePct: clamp(NUM(r.maxNamePct, d.maxNamePct), 1, 100),
+    stopPct: clamp(NUM(r.stopPct, d.stopPct), 0, 90),
+    targetPct: clamp(NUM(r.targetPct, d.targetPct), 0, 500),
+    webhookUrl: httpsOrEmpty(r.webhookUrl),
   };
   if (s.vixRiskOnBelow >= s.vixRiskOffAbove) {
     s.vixRiskOnBelow = d.vixRiskOnBelow;
@@ -121,6 +147,18 @@ export function mergeSettings(raw: Record<string, unknown> | null | undefined): 
     s.weightMax = d.weightMax;
   }
   return s;
+}
+
+function httpsOrEmpty(v: unknown): string {
+  const raw = String(v ?? "").trim().slice(0, 300);
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    if (u.protocol === "https:") return u.toString();
+  } catch {
+    /* ignore */
+  }
+  return "";
 }
 
 function clamp(n: number, lo: number, hi: number): number {

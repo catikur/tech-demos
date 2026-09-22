@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual as tse } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual as tse } from "node:crypto";
 import { join, normalize } from "node:path";
 import { pinOpenRouterBase } from "../src/shared/settings";
 import { sanitizeTicker } from "../src/shared/ticker";
@@ -33,11 +33,38 @@ export function publicErrorMessage(err: unknown): string {
     return "Upstream model request failed";
   }
   const client =
-    /required|missing|not found|Already booked|STAND DOWN|Need at least|disabled|quantity is 0|Not enough cash|Could not identify|incomplete patch|Unauthorized|Too many|Invalid ticker|Invalid agent|Invalid interval|No pending|Theme returned|No Bybit|Unknown Bybit|Unknown perp|Bybit|Bitget|CRO\/CIO/i.test(
+    /required|missing|not found|Already booked|STAND DOWN|Need at least|disabled|quantity is 0|Not enough cash|Could not identify|incomplete patch|Unauthorized|Too many|Invalid ticker|Invalid agent|Invalid interval|No pending|Theme returned|No Bybit|Unknown Bybit|Unknown perp|Bybit|Bitget|CRO\/CIO|Name cap|No debates due|Seeded agents|cannot be removed|cannot be disabled|proposal is open|already running/i.test(
       message,
     );
   if (client && message.length <= 180) return message;
   return "Request failed";
+}
+
+function keySecret(): Buffer | null {
+  const token = process.env.ATLAS_AUTH_TOKEN?.trim();
+  if (!token) return null;
+  return createHash("sha256").update(`atlas-gic-key-v1:${token}`).digest();
+}
+
+export function sealSecret(plain: string): string {
+  const key = keySecret();
+  if (!key) return plain;
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const enc = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc:v1:${iv.toString("hex")}:${tag.toString("hex")}:${enc.toString("hex")}`;
+}
+
+export function openSecret(stored: string): string {
+  if (!stored.startsWith("enc:v1:")) return stored;
+  const key = keySecret();
+  if (!key) return "";
+  const parts = stored.split(":");
+  if (parts.length !== 5) return "";
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(parts[2], "hex"));
+  decipher.setAuthTag(Buffer.from(parts[3], "hex"));
+  return Buffer.concat([decipher.update(Buffer.from(parts[4], "hex")), decipher.final()]).toString("utf8");
 }
 
 export function maskKeyPublic(key: string | null | undefined): string | null {

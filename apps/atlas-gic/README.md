@@ -8,12 +8,13 @@ Source bookmark: [x.com/tom_doerr/status/2048618137830969438](https://x.com/tom_
 
 ## What it does
 
-1. Type a ticker. Pull delayed Yahoo quote, headlines, and a VIX regime.
+1. Type a ticker. Pull a delayed Yahoo quote or a Bybit/Bitget perp quote, headlines, a feature line (returns, moving averages, ATR, realized vol, RSI, range), and a VIX regime. Equities and perps both get a seeded vol fan.
 2. **Screener** — S&P 100 / Nasdaq-100 / watchlist, or **live Bybit linear perpetuals** (crypto, US stock perps such as `TSLAUSDT`, commodities such as `XAUUSDT`, ETFs, forex). Tape score first; the Bybit shortlist gets a seeded vol-fan summary before the optional one-shot OpenRouter scout. **Masaya al** loads that symbol. Bybit names use the public market API only — no orders. If Bybit is geo-blocked, that symbol's candles and quote fall back to Bitget USDT perpetuals and the chart names the venue.
 3. **Run debate** — real OpenRouter calls, batched by layer. The roster includes screen-only scouts, debate-only desks, and personas that sit on both. `kind` + `surfaces` stay editable in Ayarlar.
 4. Direction and size are computed from Darwinian weights × conviction, then CRO-capped.
-5. **Book to paper** (explicit by default). Mark the session to score agents on the ticker's subsequent return.
-6. **Autoresearch** after ≥3 debates: worst agent by rolling contribution gets a real prompt patch; Keep / Revert writes SQLite history.
+5. **Book to paper** (explicit by default). A name cannot exceed `maxNamePct` of equity. Optional stop and target close the paper position on the next mark. Perp funding accrues on the hourly scheduler.
+6. **Mark session** waits for the horizon (72h equities, 24h perps by default). The scheduler marks due debates without calling a model and stores an equity snapshot.
+7. **Autoresearch** after ≥3 debates stores the proposal in SQLite. Keep starts a trial and does not bump the weight immediately. History, agent scorecards, the journal, and saved screens survive a reload.
 
 No mock takes. No API key → the desk refuses to debate.
 

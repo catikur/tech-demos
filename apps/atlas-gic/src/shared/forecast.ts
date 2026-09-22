@@ -70,7 +70,7 @@ export interface ForecastBand {
 }
 
 export interface ChartPayload {
-  venue: "bybit" | "bitget";
+  venue: "bybit" | "bitget" | "yahoo";
   symbol: string;
   interval: TimeframeId;
   bars: OhlcvBar[];
@@ -111,6 +111,22 @@ export function parseKlineRows(rows: unknown): OhlcvBar[] {
     else deduped.push(bar);
   }
   return deduped;
+}
+
+export function aggregateBars(bars: OhlcvBar[], seconds: number): OhlcvBar[] {
+  const out: OhlcvBar[] = [];
+  for (const bar of bars) {
+    const bucket = Math.floor(bar.time / seconds) * seconds;
+    const last = out[out.length - 1];
+    if (!last || last.time !== bucket) out.push({ ...bar, time: bucket });
+    else {
+      last.high = Math.max(last.high, bar.high);
+      last.low = Math.min(last.low, bar.low);
+      last.close = bar.close;
+      last.volume += bar.volume;
+    }
+  }
+  return out;
 }
 
 export function priceScaleFor(price: number): { precision: number; minMove: number } {

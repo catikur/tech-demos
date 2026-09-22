@@ -188,7 +188,7 @@ export function ForecastChart({
     chart.timeScale().fitContent();
   }, [payload, symbol]);
 
-  const venue = payload?.venue === "bitget" ? "Bitget" : "Bybit";
+  const venue = payload?.venue === "bitget" ? "Bitget" : payload?.venue === "yahoo" ? "Yahoo" : "Bybit";
 
   return (
     <section className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950/80 p-3">

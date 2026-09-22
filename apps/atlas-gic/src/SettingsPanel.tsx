@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "./api";
+import { AGENTS } from "./shared/agents";
 import { TIMEFRAMES } from "./shared/forecast";
 import { DEFAULT_SETTINGS } from "./shared/settings";
 import type { Agent, ModelOption, Settings } from "./shared/types";
@@ -228,6 +229,47 @@ export function SettingsPanel({
           <Num label="Tohum" value={form.forecastSeed} step={1} onChange={(v) => set("forecastSeed", v)} />
         </div>
 
+        <h3 className="mt-5 mb-2 font-mono text-[10px] tracking-widest text-zinc-500">DÖNGÜ</h3>
+        <div className="mb-3 grid grid-cols-2 gap-3">
+          <Num label="Hisse ufku (saat)" value={form.markHorizonHours} step={1} onChange={(v) => set("markHorizonHours", v)} />
+          <Num label="Perp ufku (saat)" value={form.markHorizonPerpHours} step={1} onChange={(v) => set("markHorizonPerpHours", v)} />
+          <Num label="Deneme işaret" value={form.trialMarks} step={1} onChange={(v) => set("trialMarks", v)} />
+          <Num label="İsim tavanı %" value={form.maxNamePct} step={1} onChange={(v) => set("maxNamePct", v)} />
+          <Num label="Stop % (0 kapalı)" value={form.stopPct} step={0.5} onChange={(v) => set("stopPct", v)} />
+          <Num label="Hedef % (0 kapalı)" value={form.targetPct} step={0.5} onChange={(v) => set("targetPct", v)} />
+        </div>
+        <label className="mb-2 flex items-center gap-2 text-xs text-zinc-400">
+          <input type="checkbox" checked={form.autoMark} onChange={(e) => set("autoMark", e.target.checked)} />
+          Saatlik otomatik işaretleme
+        </label>
+        <label className="mb-3 flex items-center gap-2 text-xs text-zinc-400">
+          <input type="checkbox" checked={form.debateRebuttal} onChange={(e) => set("debateRebuttal", e.target.checked)} />
+          Çürütme turu (ek LLM, varsayılan kapalı)
+        </label>
+        <Field label="Scout modeli (boşsa ana model)">
+          <input value={form.modelScout} onChange={(e) => set("modelScout", e.target.value)} className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs" />
+        </Field>
+        <Field label="Tartışma modeli">
+          <input value={form.modelDebate} onChange={(e) => set("modelDebate", e.target.value)} className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs" />
+        </Field>
+        <Field label="CRO / CIO modeli">
+          <input value={form.modelDecision} onChange={(e) => set("modelDecision", e.target.value)} className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs" />
+        </Field>
+        <Field label="Zamanlı tarama">
+          <select
+            value={form.screenSchedule}
+            onChange={(e) => set("screenSchedule", e.target.value as Settings["screenSchedule"])}
+            className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs"
+          >
+            <option value="off">kapalı</option>
+            <option value="daily">günlük</option>
+            <option value="4h">4 saatte bir</option>
+          </select>
+        </Field>
+        <Field label="Webhook (yalnız https, boşsa sessiz)">
+          <input value={form.webhookUrl} onChange={(e) => set("webhookUrl", e.target.value)} className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-xs" />
+        </Field>
+
         <KadroEditor agents={agents} onSaved={onSaved} />
 
         <div className="mt-3 flex flex-wrap gap-4 text-xs text-zinc-400">
@@ -237,7 +279,7 @@ export function SettingsPanel({
               checked={form.language === "tr"}
               onChange={(e) => set("language", e.target.checked ? "tr" : "en")}
             />
-            Ajan metinleri Türkçe
+            Arayüz ve ajan metinleri Türkçe
           </label>
           <label className="flex items-center gap-2">
             <input
@@ -271,7 +313,7 @@ export function SettingsPanel({
             onClick={() => setForm(DEFAULT_SETTINGS)}
             className="rounded-xl border border-zinc-700 px-4 py-2 font-mono text-xs text-zinc-400"
           >
-            Varsayılanlar
+            Formu sıfırla (kaydetmeden)
           </button>
         </div>
       </div>
@@ -318,6 +360,9 @@ function KadroEditor({ agents, onSaved }: { agents: Agent[]; onSaved: () => void
   const [nid, setNid] = useState("custom-ta");
   const [nname, setNname] = useState("Yeni teknikçi");
   const [nprompt, setNprompt] = useState("");
+  const [nlayer, setNlayer] = useState<Agent["layer"]>("sector");
+  const [nkind, setNkind] = useState<Agent["kind"]>("technical");
+  const [nsurf, setNsurf] = useState<Agent["surfaces"]>("both");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -336,6 +381,19 @@ function KadroEditor({ agents, onSaved }: { agents: Agent[]; onSaved: () => void
     }
   }
 
+  async function remove(id: string) {
+    setBusy(id);
+    setErr(null);
+    try {
+      await api(`/api/agents/${id}`, { method: "DELETE" });
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function create() {
     setBusy("new");
     setErr(null);
@@ -346,9 +404,9 @@ function KadroEditor({ agents, onSaved }: { agents: Agent[]; onSaved: () => void
           id: nid,
           name: nname,
           role: "custom",
-          layer: "sector",
-          kind: "technical",
-          surfaces: "both",
+          layer: nlayer,
+          kind: nkind,
+          surfaces: nsurf,
           enabled: true,
           emoji: "🧪",
           prompt: nprompt || "You are a custom scout. Stay close to the tape. FLAT if thin.",
@@ -372,8 +430,39 @@ function KadroEditor({ agents, onSaved }: { agents: Agent[]; onSaved: () => void
         {drafts.map((a) => (
           <div key={a.id} className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-2">
             <div className="mb-1 flex flex-wrap items-center gap-2">
-              <span className="text-sm">{a.emoji}</span>
-              <span className="font-mono text-[11px] text-zinc-200">{a.name}</span>
+              <input
+                value={a.emoji}
+                onChange={(e) => setDrafts((ds) => ds.map((d) => (d.id === a.id ? { ...d, emoji: e.target.value } : d)))}
+                className="w-10 rounded border border-zinc-800 bg-zinc-950 px-1 text-sm"
+              />
+              <input
+                value={a.name}
+                onChange={(e) => setDrafts((ds) => ds.map((d) => (d.id === a.id ? { ...d, name: e.target.value } : d)))}
+                className="w-28 rounded border border-zinc-800 bg-zinc-950 px-1 font-mono text-[11px] text-zinc-200"
+              />
+              <input
+                value={a.role}
+                onChange={(e) => setDrafts((ds) => ds.map((d) => (d.id === a.id ? { ...d, role: e.target.value } : d)))}
+                className="w-24 rounded border border-zinc-800 bg-zinc-950 px-1 font-mono text-[10px]"
+              />
+              <select
+                value={a.layer}
+                onChange={(e) => setDrafts((ds) => ds.map((d) => (d.id === a.id ? { ...d, layer: e.target.value as Agent["layer"] } : d)))}
+                className="rounded border border-zinc-800 bg-zinc-950 px-1 py-0.5 font-mono text-[10px]"
+              >
+                {["macro", "sector", "superinvestor", "decision"].map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                step={0.1}
+                value={a.baseWeight}
+                onChange={(e) => setDrafts((ds) => ds.map((d) => (d.id === a.id ? { ...d, baseWeight: Number(e.target.value) } : d)))}
+                className="w-14 rounded border border-zinc-800 bg-zinc-950 px-1 font-mono text-[10px]"
+              />
               <select
                 value={a.kind}
                 onChange={(e) => setDrafts((ds) => ds.map((d) => (d.id === a.id ? { ...d, kind: e.target.value as Agent["kind"] } : d)))}
@@ -411,6 +500,11 @@ function KadroEditor({ agents, onSaved }: { agents: Agent[]; onSaved: () => void
               >
                 {busy === a.id ? "…" : "kaydet"}
               </button>
+              {a.id !== "cro" && a.id !== "cio" && !AGENTS.some((s) => s.id === a.id) && (
+                <button onClick={() => void remove(a.id)} className="font-mono text-[10px] text-rose-400">
+                  sil
+                </button>
+              )}
             </div>
             <textarea
               value={a.prompt}
@@ -442,6 +536,23 @@ function KadroEditor({ agents, onSaved }: { agents: Agent[]; onSaved: () => void
         rows={2}
         className="mt-2 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono text-[10px]"
       />
+      <div className="mt-2 flex flex-wrap gap-2">
+        <select value={nlayer} onChange={(e) => setNlayer(e.target.value as Agent["layer"])} className="rounded border border-zinc-800 bg-zinc-900 px-1 font-mono text-[10px]">
+          {["macro", "sector", "superinvestor"].map((k) => (
+            <option key={k}>{k}</option>
+          ))}
+        </select>
+        <select value={nkind} onChange={(e) => setNkind(e.target.value as Agent["kind"])} className="rounded border border-zinc-800 bg-zinc-900 px-1 font-mono text-[10px]">
+          {["tape", "technical", "fundamental", "macro", "superinvestor", "risk"].map((k) => (
+            <option key={k}>{k}</option>
+          ))}
+        </select>
+        <select value={nsurf} onChange={(e) => setNsurf(e.target.value as Agent["surfaces"])} className="rounded border border-zinc-800 bg-zinc-900 px-1 font-mono text-[10px]">
+          {["debate", "screen", "both"].map((k) => (
+            <option key={k}>{k}</option>
+          ))}
+        </select>
+      </div>
       <button
         onClick={() => void create()}
         disabled={busy === "new"}

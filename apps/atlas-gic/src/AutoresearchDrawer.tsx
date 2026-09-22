@@ -77,13 +77,13 @@ export function AutoresearchDrawer({
               onClick={onKeep}
               className="flex-1 rounded-xl border border-emerald-500/50 bg-emerald-500/15 px-4 py-3 font-mono text-sm font-bold tracking-wider text-emerald-400 transition hover:bg-emerald-500/25"
             >
-              ✓ KEEP — commit tweak
+              {proposal.status === "suggest_revert" ? "✓ KEEP — eski charter" : "✓ KEEP — denemeye al"}
             </button>
             <button
               onClick={onRevert}
               className="flex-1 rounded-xl border border-rose-500/50 bg-rose-500/15 px-4 py-3 font-mono text-sm font-bold tracking-wider text-rose-400 transition hover:bg-rose-500/25"
             >
-              ↩ REVERT — discard
+              {proposal.status === "suggest_revert" ? "↩ REVERT — denemede kal" : "↩ REVERT — discard"}
             </button>
           </div>
         ) : (

@@ -4,10 +4,10 @@ import { parseBybitClass, parseScreenUniverse } from "../src/shared/settings";
 import { sanitizeTicker } from "../src/shared/ticker";
 import type { Agent, BybitClass, ScreenHit, ScreenScoutTake, ScreenUniverse, Settings, Stance } from "../src/shared/types";
 import { listBybitPerpQuotes } from "./bybit";
+import { insertLlmCalls, listAgents, logEvent, saveScreenRun } from "./db";
 import { loadForecastChart } from "./forecast";
-import { listAgents } from "./db";
 import { fetchQuotes, fetchVix } from "./market";
-import { chatJson } from "./openrouter";
+import { chatJson, type LlmTrace } from "./openrouter";
 
 const STANCES: Stance[] = ["LONG", "SHORT", "FLAT"];
 
@@ -34,10 +34,12 @@ export async function runScreen(
   universeId: ScreenUniverse;
   bybitClass: BybitClass | null;
   hits: ScreenHit[];
+  runId: number;
 }> {
   const universeId = parseScreenUniverse(scope?.universe ?? settings.screenUniverse);
   const bybitClass = parseBybitClass(scope?.bybitClass ?? settings.screenBybitClass);
   const themeText = theme.trim().slice(0, 400);
+  const trace: LlmTrace[] = [];
   const vixPromise = readRegime(settings);
 
   let quotes: ScreenHit[];
@@ -49,7 +51,7 @@ export async function runScreen(
       if (!apiKey) throw new Error("OPENROUTER_API_KEY missing");
       const known = new Set(all.map((q) => q.ticker));
       const wanted = new Set(
-        (await themeTickers(settings, apiKey, themeText))
+        (await themeTickers(settings, apiKey, themeText, "bybit", trace))
           .map((s) => resolveBybitSymbol(s, known))
           .filter((s): s is string => Boolean(s)),
       );
@@ -68,13 +70,13 @@ export async function runScreen(
       hit.score = ts;
       return hit;
     });
-    return finish(settings, apiKey, themeText, universeId, bybitClass, universeCount, quotes, vix);
+    return finish(settings, apiKey, themeText, universeId, bybitClass, universeCount, quotes, vix, trace);
   }
 
   let names = pickUniverse(settings);
   if (themeText) {
     if (!apiKey) throw new Error("OPENROUTER_API_KEY missing");
-    names = await themeTickers(settings, apiKey, themeText);
+    names = await themeTickers(settings, apiKey, themeText, universeId, trace);
     if (!names.length) throw new Error("Theme returned no valid tickers");
   }
   universeCount = names.length;
@@ -85,7 +87,7 @@ export async function runScreen(
       const ts = tapeScore({ ...q, regime: vix.regime }, settings);
       return { ...q, venue: "yahoo" as const, tapeScore: ts, score: ts, scouts: [] };
     });
-  return finish(settings, apiKey, themeText, universeId, null, universeCount, quotes, vix);
+  return finish(settings, apiKey, themeText, universeId, null, universeCount, quotes, vix, trace);
 }
 
 async function finish(
@@ -97,6 +99,7 @@ async function finish(
   universeCount: number,
   quotes: ScreenHit[],
   vix: { vix: number; regime: string },
+  trace: LlmTrace[],
 ) {
   let hits = [...quotes].sort((a, b) => b.score - a.score);
   if (universeId === "bybit") hits = await withFan(settings, hits, settings.screenSize);
@@ -106,7 +109,7 @@ async function finish(
   if (settings.screenScoutEnabled && apiKey && scouts.length && scoutN > 0) {
     try {
       const slice = hits.slice(0, scoutN);
-      const byTicker = await runScouts(settings, apiKey, scouts, slice, vix.regime);
+      const byTicker = await runScouts(settings, apiKey, scouts, slice, vix.regime, trace);
       hits = hits.map((h) => {
         const takes = byTicker.get(h.ticker);
         if (!takes?.length) return h;
@@ -123,6 +126,20 @@ async function finish(
     }
   }
 
+  const packed =
+    universeId === "bybit" ? await fillFan(settings, hits.slice(0, settings.screenSize)) : hits.slice(0, settings.screenSize);
+  const runId = saveScreenRun({
+    universe: universeId,
+    bybitClass,
+    theme: themeText || null,
+    regime: vix.regime,
+    vix: vix.vix,
+    scanned: quotes.length,
+    universeCount,
+    hits: packed,
+  });
+  if (trace.length) insertLlmCalls(null, trace);
+  logEvent("screen", `${universeId} ${packed.length} hits`, String(runId));
   return {
     regime: vix.regime,
     vix: vix.vix,
@@ -132,7 +149,8 @@ async function finish(
     scoutSkipped: Boolean(settings.screenScoutEnabled && !scouted),
     universeId,
     bybitClass,
-    hits: universeId === "bybit" ? await fillFan(settings, hits.slice(0, settings.screenSize)) : hits.slice(0, settings.screenSize),
+    hits: packed,
+    runId,
   };
 }
 
@@ -163,14 +181,24 @@ async function annotateHit(settings: Settings, hit: ScreenHit): Promise<ScreenHi
   }
 }
 
-async function themeTickers(settings: Settings, apiKey: string, theme: string): Promise<string[]> {
-  const json = (await chatJson(
-    settings,
-    apiKey,
-    "Return ONLY JSON. No markdown.",
-    `Theme: ${theme}
-Return {"tickers":["AAPL",...]} up to 25 US-listed equity tickers that match. Use Yahoo-style symbols (BRK.B not BRK-B). No funds, no invented tickers.`,
-  )) as { tickers?: unknown[] };
+async function themeTickers(
+  settings: Settings,
+  apiKey: string,
+  theme: string,
+  universeId: ScreenUniverse,
+  trace: LlmTrace[],
+): Promise<string[]> {
+  const prompt =
+    universeId === "bybit"
+      ? `Theme: ${theme}
+Return {"tickers":["BTCUSDT","XAUUSDT","TSLAUSDT"]} up to 25 Bybit linear perpetual symbols (crypto, stock perps, commodities, ETFs, forex). Use the exchange symbol, not a Yahoo equity ticker.`
+      : `Theme: ${theme}
+Return {"tickers":["AAPL",...]} up to 25 US-listed equity tickers that match. Use Yahoo-style symbols (BRK.B not BRK-B). No funds, no invented tickers.`;
+  const json = (await chatJson(settings, apiKey, "Return ONLY JSON. No markdown.", prompt, {
+    model: settings.modelScout.trim() || settings.model,
+    role: "theme",
+    trace,
+  })) as { tickers?: unknown[] };
   const out: string[] = [];
   const seen = new Set<string>();
   for (const raw of json.tickers ?? []) {
@@ -189,6 +217,7 @@ async function runScouts(
   scouts: Agent[],
   hits: ScreenHit[],
   regime: string,
+  trace: LlmTrace[],
 ): Promise<Map<string, ScreenScoutTake[]>> {
   const lang =
     settings.language === "tr"
@@ -207,7 +236,12 @@ ${scouts.map((a) => `- ${a.id} | ${a.name} | ${a.kind} | ${a.role}\n  CHARTER: $
 
 Tape:
 ${hits.map((h) => describeQuote(h)).join("\n")}`,
-    { maxTokens: Math.max(settings.maxTokens, 4000) },
+    {
+      maxTokens: Math.max(settings.maxTokens, 4000),
+      model: settings.modelScout.trim() || settings.model,
+      role: "scout",
+      trace,
+    },
   )) as { rows?: unknown[] };
 
   const map = new Map<string, ScreenScoutTake[]>();

@@ -1,27 +1,44 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { LAYER_ORDER } from "../src/shared/agents";
-import { looksLikeBybitSymbol } from "../src/shared/bybit";
-import { layerMap, synthesize } from "../src/shared/engine";
+import { diffTickers } from "../src/shared/screen";
 import { timeframeById } from "../src/shared/forecast";
-import type { AgentTake, AutoresearchProposal, CroResult } from "../src/shared/types";
+import type { AutoresearchProposal } from "../src/shared/types";
+import { currentVenue } from "./bybit";
 import {
+  agentMarkRows,
+  agentScore,
+  deleteAgent,
+  exportBundle,
+  getAgent,
+  getDebate,
   getSettings,
   getWeights,
+  lastLlmError,
+  lastMarkedAt,
   listAgents,
   listCommits,
+  listDebates,
+  listEquity,
+  listEvents,
+  listScreenRuns,
+  listTakes,
   latestDebate,
+  nextDueAt,
+  pendingProposal as loadPending,
   resetBook,
   resolveApiKey,
   saveSettings,
+  screenTickers,
   setApiKeyOverride,
   upsertAgent,
+  weightSeries,
 } from "./db";
-import { persistDebate, runCio, runCro, runLayer } from "./debate";
+import { runDeskDebate } from "./desk";
 import { loadForecastChart } from "./forecast";
 import { fetchBriefing } from "./market";
 import { listModels } from "./openrouter";
 import { bookDebate, closePos, snapshotBook } from "./paper";
+import { nextScreenAt, startScheduler } from "./scheduler";
 import { markSession, proposeAutoresearch, resolveAutoresearch } from "./scoring";
 import { runScreen } from "./screen";
 import {
@@ -50,7 +67,6 @@ if (process.env.NODE_ENV === "production" && !AUTH_TOKEN) {
   process.exit(1);
 }
 
-let pendingProposal: AutoresearchProposal | null = null;
 let debateBusy = false;
 
 function mime(path: string): string {
@@ -139,9 +155,23 @@ function sse(send: (emit: (event: string, data: unknown) => void) => Promise<voi
   });
 }
 
+function statusCard() {
+  const settings = getSettings();
+  return {
+    venue: currentVenue(),
+    openRouter: Boolean(resolveApiKey()),
+    lastLlmError: lastLlmError(),
+    lastMark: lastMarkedAt(),
+    nextDue: nextDueAt(),
+    schedule: settings.screenSchedule,
+    nextScreen: nextScreenAt(settings),
+  };
+}
+
 async function statePayload() {
   const settings = getSettings();
   const book = await snapshotBook();
+  const pending: AutoresearchProposal | null = loadPending();
   return {
     settings,
     keyConfigured: Boolean(resolveApiKey()),
@@ -150,8 +180,12 @@ async function statePayload() {
     weights: getWeights(),
     commits: listCommits(),
     book,
-    pendingProposal,
+    pendingProposal: pending,
     latest: latestDebate(),
+    equity: listEquity(120),
+    events: listEvents(40),
+    nextDue: nextDueAt(),
+    status: statusCard(),
   };
 }
 
@@ -185,6 +219,22 @@ const server = Bun.serve({
 
       if (url.pathname === "/api/state" && req.method === "GET") {
         return json(await statePayload());
+      }
+
+      if (url.pathname === "/api/status" && req.method === "GET") {
+        return json(statusCard());
+      }
+
+      if (url.pathname === "/api/events" && req.method === "GET") {
+        return json({ events: listEvents(80) });
+      }
+
+      if (url.pathname === "/api/equity" && req.method === "GET") {
+        return json({ equity: listEquity(180) });
+      }
+
+      if (url.pathname === "/api/export" && req.method === "GET") {
+        return json(exportBundle());
       }
 
       if (url.pathname === "/api/settings" && req.method === "GET") {
@@ -229,7 +279,7 @@ const server = Bun.serve({
 
       if (url.pathname === "/api/chart" && req.method === "GET") {
         const symbol = sanitizeTicker(String(url.searchParams.get("symbol") ?? ""));
-        if (!symbol || !looksLikeBybitSymbol(symbol)) return fail("Invalid ticker");
+        if (!symbol) return fail("Invalid ticker");
         const rawInterval = url.searchParams.get("interval");
         if (rawInterval && !timeframeById(rawInterval)) return fail("Invalid interval");
         const ip = clientIp(req);
@@ -250,6 +300,52 @@ const server = Bun.serve({
             bybitClass: body.bybitClass,
           }),
         );
+      }
+
+      if (url.pathname === "/api/screens" && req.method === "GET") {
+        return json({ runs: listScreenRuns(30) });
+      }
+
+      if (url.pathname === "/api/screens/diff" && req.method === "GET") {
+        const a = Number(url.searchParams.get("a"));
+        const b = Number(url.searchParams.get("b"));
+        if (!a || !b) return fail("run ids required");
+        return json(diffTickers(screenTickers(a), screenTickers(b)));
+      }
+
+      if (url.pathname === "/api/debates" && req.method === "GET") {
+        const limit = Math.min(80, Math.max(1, Number(url.searchParams.get("limit") ?? 40) || 40));
+        const ticker = sanitizeTicker(String(url.searchParams.get("ticker") ?? "")) ?? undefined;
+        return json({ debates: listDebates(limit, ticker || undefined) });
+      }
+
+      const debateMatch = url.pathname.match(/^\/api\/debates\/(\d+)$/);
+      if (debateMatch && req.method === "GET") {
+        const debate = getDebate(Number(debateMatch[1]));
+        if (!debate) return fail("Debate not found", 404);
+        return json({ debate, takes: listTakes(debate.id) });
+      }
+
+      const cardMatch = url.pathname.match(/^\/api\/agents\/([a-z0-9-]+)\/card$/);
+      if (cardMatch && req.method === "GET") {
+        const agent = getAgent(cardMatch[1]);
+        if (!agent) return fail("Invalid agent", 404);
+        const score = agentScore(agent.id);
+        return json({
+          agent,
+          weight: getWeights()[agent.id] ?? agent.baseWeight,
+          hitRate: score.n ? score.hits / score.n : 0,
+          avgContribution: score.avg,
+          n: score.n,
+          takes: agentMarkRows(agent.id),
+          series: weightSeries(agent.id),
+        });
+      }
+
+      const agentDelete = url.pathname.match(/^\/api\/agents\/([a-z0-9-]+)$/);
+      if (agentDelete && req.method === "DELETE") {
+        deleteAgent(agentDelete[1]);
+        return json({ agents: listAgents() });
       }
 
       if (url.pathname === "/api/agents" && req.method === "PUT") {
@@ -283,32 +379,45 @@ const server = Bun.serve({
         const settings = getSettings();
         const weights = getWeights();
         debateBusy = true;
-
         return sse(async (emit) => {
           try {
-            const briefing = await fetchBriefing(ticker, settings);
-            emit("briefing", briefing);
-            const takes: AgentTake[] = [];
-            for (const layer of LAYER_ORDER) {
-              const batch = await runLayer(settings, key, briefing, weights, layer, takes);
-              takes.push(...batch);
-              emit("layer", { layer, takes: batch });
+            await runDeskDebate({ ticker, settings, apiKey: key, weights, emit });
+          } finally {
+            debateBusy = false;
+          }
+        });
+      }
+
+      if (url.pathname === "/api/debate/batch" && req.method === "POST") {
+        const key = resolveApiKey();
+        if (!key) return fail("OPENROUTER_API_KEY missing", 400);
+        if (debateBusy) return fail("A debate is already running", 429);
+        const ip = clientIp(req);
+        const body = await readBody(req);
+        const tickers = (Array.isArray(body.tickers) ? body.tickers : [])
+          .map((t) => sanitizeTicker(String(t ?? "")))
+          .filter((t): t is string => Boolean(t))
+          .slice(0, 12);
+        if (!tickers.length) return fail("Invalid ticker");
+        debateBusy = true;
+        return sse(async (emit) => {
+          try {
+            for (let i = 0; i < tickers.length; i++) {
+              if (!rateLimit(`debate:${ip}`, 8, 60 * 60 * 1000)) {
+                emit("progress", { index: i, ticker: tickers[i], status: "rate-limited", total: tickers.length });
+                break;
+              }
+              emit("progress", { index: i, ticker: tickers[i], status: "start", total: tickers.length });
+              const settings = getSettings();
+              await runDeskDebate({
+                ticker: tickers[i],
+                settings,
+                apiKey: key,
+                weights: getWeights(),
+                emit: (event, data) => emit(event, { ...(data as object), batchIndex: i }),
+              });
+              emit("progress", { index: i, ticker: tickers[i], status: "done", total: tickers.length });
             }
-            const cro: CroResult = await runCro(settings, key, briefing, takes);
-            emit("cro", cro);
-            const synthesis = synthesize(takes, weights, cro.veto ? 0 : cro.capPct, layerMap(listAgents()));
-            const bullets = await runCio(
-              settings,
-              key,
-              briefing,
-              takes,
-              cro,
-              synthesis.direction,
-              synthesis.sizePct,
-            );
-            const { debateId } = persistDebate({ briefing, takes, cro, bullets, weights });
-            emit("cio", { debateId, synthesis, bullets, cro, takes, briefing });
-            emit("done", { debateId });
           } finally {
             debateBusy = false;
           }
@@ -335,8 +444,8 @@ const server = Bun.serve({
       }
 
       if (url.pathname === "/api/mark" && req.method === "POST") {
-        const book = await markSession(getSettings());
-        return json({ book, weights: getWeights() });
+        const marked = await markSession(getSettings());
+        return json(marked);
       }
 
       if (url.pathname === "/api/autoresearch" && req.method === "POST") {
@@ -344,16 +453,14 @@ const server = Bun.serve({
         if (!key) return fail("OPENROUTER_API_KEY missing", 400);
         const ip = clientIp(req);
         if (!rateLimit(`auto:${ip}`, 4, 60 * 60 * 1000)) return fail("Too many requests", 429);
-        pendingProposal = await proposeAutoresearch(getSettings(), key);
-        return json({ proposal: pendingProposal });
+        const proposal = await proposeAutoresearch(getSettings(), key);
+        return json({ proposal });
       }
 
       if (url.pathname === "/api/autoresearch/resolve" && req.method === "POST") {
-        if (!pendingProposal) return fail("No pending proposal");
         const body = await readBody(req);
         const kind = body.kind === "revert" ? "revert" : "keep";
-        resolveAutoresearch(pendingProposal, kind, getSettings());
-        pendingProposal = null;
+        resolveAutoresearch(kind, getSettings());
         return json(await statePayload());
       }
 
@@ -368,4 +475,5 @@ const server = Bun.serve({
   },
 });
 
+startScheduler();
 console.log(`atlas-gic ${SERVE_WEB ? "web+api" : "api"} http://${HOST}:${server.port}${AUTH_TOKEN ? " (gated)" : ""}`);

@@ -1,5 +1,14 @@
 import type { ModelOption, Settings } from "../src/shared/types";
 
+export interface LlmTrace {
+  role: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  durationMs: number;
+  error: string | null;
+}
+
 export function parseJsonObject(text: string): unknown {
   const trimmed = text.trim();
   const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -15,11 +24,23 @@ export async function chatJson(
   apiKey: string,
   system: string,
   user: string,
-  opts?: { maxTokens?: number },
+  opts?: { maxTokens?: number; model?: string; role?: string; trace?: LlmTrace[] },
 ): Promise<unknown> {
+  const model = opts?.model?.trim() || settings.model;
+  const started = Date.now();
+  const note = (error: string | null, promptTokens = 0, completionTokens = 0) => {
+    opts?.trace?.push({
+      role: opts.role ?? "chat",
+      model,
+      promptTokens,
+      completionTokens,
+      durationMs: Date.now() - started,
+      error,
+    });
+  };
   const attempt = async (withFormat: boolean) => {
     const body: Record<string, unknown> = {
-      model: settings.model,
+      model,
       temperature: settings.temperature,
       max_tokens: Math.min(8000, Math.max(256, opts?.maxTokens ?? settings.maxTokens)),
       messages: [
@@ -46,17 +67,34 @@ export async function chatJson(
     }
     const data = JSON.parse(text) as {
       choices?: Array<{ message?: { content?: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
     const content = data.choices?.[0]?.message?.content ?? "";
     if (!content) throw new Error("OpenRouter returned an empty message");
-    return parseJsonObject(content);
+    return {
+      parsed: parseJsonObject(content),
+      promptTokens: Number(data.usage?.prompt_tokens ?? 0) || 0,
+      completionTokens: Number(data.usage?.completion_tokens ?? 0) || 0,
+    };
   };
 
   try {
-    return await attempt(true);
+    const ok = await attempt(true);
+    note(null, ok.promptTokens, ok.completionTokens);
+    return ok.parsed;
   } catch (err) {
     const status = (err as { status?: number }).status;
-    if (status === 400 || err instanceof SyntaxError) return await attempt(false);
+    if (status === 400 || err instanceof SyntaxError) {
+      try {
+        const ok = await attempt(false);
+        note(null, ok.promptTokens, ok.completionTokens);
+        return ok.parsed;
+      } catch (retryErr) {
+        note(retryErr instanceof Error ? retryErr.message.slice(0, 180) : "model error");
+        throw retryErr;
+      }
+    }
+    note(err instanceof Error ? err.message.slice(0, 180) : "model error");
     throw err;
   }
 }
