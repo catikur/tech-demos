@@ -1,18 +1,5 @@
 {
-  "proposed": [
-    {
-      "id": "2047900034990240013-openbb",
-      "title": "OpenBB — open-source financial data platform / Bloomberg-style research terminal",
-      "url": "https://x.com/PrakashS720/status/2047900034990240013",
-      "github": "https://github.com/OpenBB-finance/OpenBB",
-      "date": "2026-09-23",
-      "source": "daily-x-tech-scout",
-      "slug": "openbb-lite",
-      "folder": "Trade",
-      "stars": 73393,
-      "note": "owner approved after earlier dismiss-as-skip; restored"
-    }
-  ],
+  "proposed": [],
   "skipped": [
     {
       "id": "2098941338297458746-hyperframes",
@@ -115,6 +102,18 @@
       "source": "daily-x-tech-scout",
       "slug": "kronos",
       "folder": "Ai"
+    },
+    {
+      "id": "2047900034990240013-openbb",
+      "title": "OpenBB — open-source financial data platform / Bloomberg-style research terminal",
+      "url": "https://x.com/PrakashS720/status/2047900034990240013",
+      "github": "https://github.com/OpenBB-finance/OpenBB",
+      "date": "2026-09-23",
+      "pr": "https://github.com/catikur/tech-demos/pull/17",
+      "source": "daily-x-tech-scout",
+      "slug": "openbb-lite",
+      "folder": "Trade",
+      "stars": 73393
     }
   ]
 }
