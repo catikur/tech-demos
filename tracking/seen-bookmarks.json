@@ -1,17 +1,5 @@
 {
-  "proposed": [
-    {
-      "id": "2047953530464375209-lean",
-      "title": "QuantConnect Lean — open-source algorithmic trading engine",
-      "url": "https://x.com/tom_doerr/status/2047953530464375209",
-      "github": "https://github.com/QuantConnect/Lean",
-      "date": "2026-09-24",
-      "source": "daily-x-tech-scout",
-      "slug": "lean-lite",
-      "folder": "Trade",
-      "stars": 21748
-    }
-  ],
+  "proposed": [],
   "skipped": [
     {
       "id": "2098941338297458746-hyperframes",
@@ -72,6 +60,17 @@
       "source": "manual-scout",
       "slug": "obsidian-second-brain",
       "reason": "owner chose atlas-gic instead"
+    },
+    {
+      "id": "2047953530464375209-lean",
+      "title": "QuantConnect Lean — open-source algo trading engine",
+      "url": "https://x.com/tom_doerr/status/2047953530464375209",
+      "github": "https://github.com/QuantConnect/Lean",
+      "date": "2026-09-24",
+      "source": "daily-x-tech-scout",
+      "slug": "lean-lite",
+      "folder": "Trade",
+      "reason": "owner dismissed Approve/Tweak/Skip without answering"
     }
   ],
   "built": [
