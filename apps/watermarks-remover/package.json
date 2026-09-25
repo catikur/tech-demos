@@ -1,0 +1,18 @@
+{
+  "name": "watermarks-remover",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "bun test",
+    "gen:samples": "bun run scripts/gen-samples.ts"
+  },
+  "devDependencies": {
+    "bun-types": "^1.4.2",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0"
+  }
+}
