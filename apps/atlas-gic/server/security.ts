@@ -1,0 +1,174 @@
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual as tse } from "node:crypto";
+import { join, normalize } from "node:path";
+import { pinOpenRouterBase } from "../src/shared/settings";
+import { sanitizeTicker } from "../src/shared/ticker";
+
+export { sanitizeTicker };
+
+export const AUTH_COOKIE = "atlas_session";
+export const allowedOpenRouterBase = pinOpenRouterBase;
+
+const hits = new Map<string, number[]>();
+
+export function safeStaticPath(dist: string, pathname: string): string | null {
+  let rel = pathname === "/" || pathname === "" ? "index.html" : pathname;
+  try {
+    rel = decodeURIComponent(rel);
+  } catch {
+    return null;
+  }
+  if (rel.includes("\0")) return null;
+  rel = rel.replace(/^\/+/, "");
+  if (rel.split(/[/\\]/).some((p) => p === "..")) return null;
+  const root = normalize(dist);
+  const resolved = normalize(join(root, rel));
+  const prefix = root.endsWith("/") ? root : `${root}/`;
+  if (resolved !== root && !resolved.startsWith(prefix)) return null;
+  return resolved;
+}
+
+export function publicErrorMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/openrouter/i.test(message) || /sk-or/i.test(message) || /authorization/i.test(message) || /bearer/i.test(message)) {
+    return "Upstream model request failed";
+  }
+  const client =
+    /required|missing|not found|Already booked|STAND DOWN|Need at least|disabled|quantity is 0|Not enough cash|Could not identify|incomplete patch|Unauthorized|Too many|Invalid ticker|Invalid agent|Invalid interval|No pending|Theme returned|No Bybit|Unknown Bybit|Unknown perp|Bybit|Bitget|CRO\/CIO|Name cap|No debates due|Seeded agents|cannot be removed|cannot be disabled|proposal is open|already running/i.test(
+      message,
+    );
+  if (client && message.length <= 180) return message;
+  return "Request failed";
+}
+
+function keySecret(): Buffer | null {
+  const token = process.env.ATLAS_AUTH_TOKEN?.trim();
+  if (!token) return null;
+  return createHash("sha256").update(`atlas-gic-key-v1:${token}`).digest();
+}
+
+export function sealSecret(plain: string): string {
+  const key = keySecret();
+  if (!key) return plain;
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const enc = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc:v1:${iv.toString("hex")}:${tag.toString("hex")}:${enc.toString("hex")}`;
+}
+
+export function openSecret(stored: string): string {
+  if (!stored.startsWith("enc:v1:")) return stored;
+  const key = keySecret();
+  if (!key) return "";
+  const parts = stored.split(":");
+  if (parts.length !== 5) return "";
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(parts[2], "hex"));
+  decipher.setAuthTag(Buffer.from(parts[3], "hex"));
+  return Buffer.concat([decipher.update(Buffer.from(parts[4], "hex")), decipher.final()]).toString("utf8");
+}
+
+export function maskKeyPublic(key: string | null | undefined): string | null {
+  if (!key) return null;
+  return "configured";
+}
+
+export function timingSafeEqual(a: string, b: string): boolean {
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ba.length !== bb.length) return false;
+  return tse(ba, bb);
+}
+
+export function sessionCookieValue(token: string): string {
+  return createHmac("sha256", token).update("atlas-gic-session-v1").digest("hex");
+}
+
+export function verifySession(cookie: string | null | undefined, token: string): boolean {
+  if (!cookie || !token) return false;
+  return timingSafeEqual(cookie, sessionCookieValue(token));
+}
+
+export function parseCookieHeader(header: string | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!header) return out;
+  for (const part of header.split(";")) {
+    const i = part.indexOf("=");
+    if (i === -1) continue;
+    const k = part.slice(0, i).trim();
+    const v = part.slice(i + 1).trim();
+    if (!k) continue;
+    try {
+      out[k] = decodeURIComponent(v);
+    } catch {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+export function isAuthed(req: Request, token: string | null): boolean {
+  if (!token) return false;
+  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  if (bearer && timingSafeEqual(bearer, token)) return true;
+  const cookie = parseCookieHeader(req.headers.get("cookie"))[AUTH_COOKIE];
+  return verifySession(cookie, token);
+}
+
+export function sessionSetCookie(token: string, secure: boolean): string {
+  const parts = [
+    `${AUTH_COOKIE}=${sessionCookieValue(token)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Strict",
+    "Max-Age=604800",
+  ];
+  if (secure) parts.push("Secure");
+  return parts.join("; ");
+}
+
+export function sessionClearCookie(secure: boolean): string {
+  const parts = [`${AUTH_COOKIE}=`, "Path=/", "HttpOnly", "SameSite=Strict", "Max-Age=0"];
+  if (secure) parts.push("Secure");
+  return parts.join("; ");
+}
+
+export function rateLimit(key: string, max: number, windowMs: number, now = Date.now()): boolean {
+  const arr = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
+  if (arr.length >= max) {
+    hits.set(key, arr);
+    return false;
+  }
+  arr.push(now);
+  hits.set(key, arr);
+  return true;
+}
+
+export function clientIp(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    const first = xff.split(",")[0]?.trim() ?? "";
+    if (first && first.length <= 64) return first;
+  }
+  return "unknown";
+}
+
+export function readJsonLimit(text: string, maxBytes = 64_000): Record<string, unknown> {
+  if (text.length > maxBytes) throw new Error("Request too large");
+  if (!text) return {};
+  const parsed = JSON.parse(text) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid JSON");
+  return parsed as Record<string, unknown>;
+}
+
+export function securityHeaders(json = false): Record<string, string> {
+  const headers: Record<string, string> = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-store",
+    "Content-Security-Policy":
+      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+  };
+  if (json) headers["Content-Type"] = "application/json";
+  return headers;
+}
