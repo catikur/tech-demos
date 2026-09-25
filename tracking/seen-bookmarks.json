@@ -1,17 +1,5 @@
 {
-  "proposed": [
-    {
-      "id": "2050544663132524614-vibe-trading",
-      "title": "Vibe-Trading (HKUDS) — personal NL→strategy→backtest trading agent",
-      "url": "https://x.com/gusik4ever/status/2050544663132524614",
-      "github": "https://github.com/HKUDS/Vibe-Trading",
-      "date": "2026-09-25",
-      "source": "daily-x-tech-scout",
-      "slug": "vibe-trading",
-      "folder": "Trade",
-      "stars": 34002
-    }
-  ],
+  "proposed": [],
   "skipped": [
     {
       "id": "2098941338297458746-hyperframes",
@@ -83,6 +71,17 @@
       "slug": "lean-lite",
       "folder": "Trade",
       "reason": "owner dismissed Approve/Tweak/Skip without answering"
+    },
+    {
+      "id": "2050544663132524614-vibe-trading",
+      "title": "Vibe-Trading (HKUDS) — personal NL→strategy→backtest trading agent",
+      "url": "https://x.com/gusik4ever/status/2050544663132524614",
+      "github": "https://github.com/HKUDS/Vibe-Trading",
+      "date": "2026-09-25",
+      "source": "daily-x-tech-scout",
+      "slug": "vibe-trading",
+      "folder": "Trade",
+      "stars": 34002
     }
   ],
   "built": [
