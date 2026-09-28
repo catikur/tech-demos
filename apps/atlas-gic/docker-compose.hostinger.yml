@@ -1,0 +1,48 @@
+# Hostinger VPS (srv1709361). Port 80/443 already belong to /opt/conforcus-web Caddy —
+# do not start another Caddy here. Join that stack's network and add a site block:
+#   atlas.conforcus.com { reverse_proxy atlas-gic:3000 }
+# Local deploys should use docker-compose.yml (loopback :3047) instead.
+
+name: atlas-gic
+
+services:
+  atlas-gic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: atlas-gic
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      NODE_ENV: production
+      PUBLIC_URL: "https://atlas.conforcus.com"
+    volumes:
+      - atlas-gic-data:/app/data
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r => { if (!r.ok) process.exit(1) })",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      default: {}
+      web:
+        aliases:
+          - atlas-gic
+
+networks:
+  web:
+    external: true
+    name: conforcus-web_default
+
+volumes:
+  atlas-gic-data:
