@@ -306,6 +306,11 @@ export interface AgentContext {
    * the client must not set this. `null` / omitted = unrestricted (local demo).
    */
   accountIds?: string[] | null;
+  /**
+   * The question this turn is answering. Set by the agent loop so a side-effect
+   * gate can see it. Clients do not send this.
+   */
+  ask?: string;
 }
 
 /* ---------- feature DTOs ---------- */

@@ -35,6 +35,10 @@ export async function buildCatchUp(spaceId: string | null, fromAt: number, toAt:
       score += 1;
       reasons.push(t.category);
     }
+    if (t.labels.includes("needs-reply")) {
+      score += 2;
+      reasons.push("needs a reply");
+    }
     if (automated) score -= 1;
     items.push({
       source: { kind: "thread", id: t.id, label: t.subject },

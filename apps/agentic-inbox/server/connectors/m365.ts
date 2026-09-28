@@ -7,6 +7,7 @@ import { env } from "../env.ts";
 import { accounts, chats, events, meetings, threads } from "../db/repo.ts";
 import { microsoftAccessToken, microsoftCredentials } from "../auth/microsoft.ts";
 import { categorize, isBlankText, parseVtt, splitHtmlBody } from "../sync/normalize.ts";
+import { JEV_JUDGED, scheduleMailJudgement } from "../agent/jev-mail.ts";
 import { emptyStats, type Connector, type SendChatInput, type SendMailInput, type SyncStats } from "./types.ts";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
@@ -194,6 +195,7 @@ export class M365Connector implements Connector {
     };
     threads.upsertMessage(message);
     stats.messages++;
+    if (!existing?.labels.includes(JEV_JUDGED)) scheduleMailJudgement(threadId, { subject, from, body });
   }
 
   /* ---------------- calendar ---------------- */

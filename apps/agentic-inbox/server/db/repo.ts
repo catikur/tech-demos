@@ -19,6 +19,7 @@ import type {
   ProposedDraft,
   Space,
   Thread,
+  ThreadCategory,
   ThreadSummary,
   Topic,
   Transcript,
@@ -374,6 +375,10 @@ export const threads = {
         t.lastAt,
         json.stringify(t.participants),
       );
+  },
+  /** Category and labels only, so a late Jev decision cannot clobber unread or timestamps. */
+  setJudgement(id: string, category: ThreadCategory, labels: string[]): void {
+    getDb().query("UPDATE threads SET category = ?, labels = ? WHERE id = ?").run(category, json.stringify(labels), id);
   },
   upsertMessage(m: EmailMessage & { externalId?: string | null }): void {
     const body = isBlankText(m.body) ? "" : m.body;

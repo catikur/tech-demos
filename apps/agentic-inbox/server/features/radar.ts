@@ -25,7 +25,9 @@ export function computeRadar(spaceId: string | null, accountIds?: string[] | nul
     if (!last.isMine) {
       if (isAutomatedSender(last.from)) continue;
       const ask = isAsk(last.body);
-      const urgentCategory = ["support", "project", "billing"].includes(t.category);
+      const needsReply = t.labels.includes("needs-reply");
+      const urgentCategory = ["support", "project", "billing"].includes(t.category) || t.labels.includes("urgent") || needsReply;
+      if (t.labels.includes("no-reply") && !ask && !vip.has(senderEmail(last.from))) continue;
       if (!ask && !urgentCategory) continue;
       const isVip = vip.has(senderEmail(last.from));
       out.push({
@@ -36,7 +38,7 @@ export function computeRadar(spaceId: string | null, accountIds?: string[] | nul
         counterpart: last.from,
         excerpt: truncate(last.body, 150),
         ageMs,
-        score: ageMs / (24 * HOUR) + (isVip ? 3 : 0) + (ask ? 2 : 0) + (urgentCategory ? 1.5 : 0) + (t.labels.includes("urgent") ? 2 : 0),
+        score: ageMs / (24 * HOUR) + (isVip ? 3 : 0) + (ask ? 2 : 0) + (urgentCategory ? 1.5 : 0) + (needsReply ? 2 : 0) + (t.labels.includes("urgent") ? 2 : 0),
         vip: isVip,
         suggestedReply: templateNudge(last.from, t.subject, "waiting_on_me"),
       });

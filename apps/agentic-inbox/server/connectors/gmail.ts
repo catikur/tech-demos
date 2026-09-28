@@ -4,6 +4,7 @@ import { env } from "../env.ts";
 import { accounts, events, threads } from "../db/repo.ts";
 import { googleAccessToken } from "../auth/google.ts";
 import { categorize, htmlToText, isBlankText, splitHtmlBody } from "../sync/normalize.ts";
+import { JEV_JUDGED, preserveJevLabels, scheduleMailJudgement } from "../agent/jev-mail.ts";
 import { looksLikeHtml } from "../../shared/html.ts";
 import { localId } from "./m365.ts";
 import { emptyStats, type Connector, type SendMailInput, type SyncStats } from "./types.ts";
@@ -247,7 +248,10 @@ export class GmailConnector implements Connector {
       accountId: account.id,
       subject,
       category: existing?.category ?? categorize(subject, normalized[0].from, normalized[0].body, { listUnsubscribe }),
-      labels: [...new Set(msgs.flatMap((m: any) => (m.labelIds ?? []).filter((l: string) => !/^(UNREAD|INBOX|SENT|IMPORTANT|CATEGORY_|Label_)/.test(l)).map((l: string) => l.toLowerCase())))],
+      labels: preserveJevLabels(
+        existing?.labels,
+        msgs.flatMap((m: any) => (m.labelIds ?? []).filter((l: string) => !/^(UNREAD|INBOX|SENT|IMPORTANT|CATEGORY_|Label_)/.test(l)).map((l: string) => l.toLowerCase())),
+      ),
       unread,
       lastAt,
       participants: [...participants.values()],
@@ -256,6 +260,10 @@ export class GmailConnector implements Connector {
     for (const m of normalized) {
       threads.upsertMessage(m);
       stats.messages++;
+    }
+    if (!existing?.labels.includes(JEV_JUDGED)) {
+      const sample = [...normalized].sort((a, b) => b.at - a.at)[0];
+      if (sample) scheduleMailJudgement(threadId, { subject, from: sample.from, body: sample.body, listUnsubscribe });
     }
   }
 
