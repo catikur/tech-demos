@@ -1,17 +1,5 @@
 {
-  "proposed": [
-    {
-      "id": "2103190313624039620-jev",
-      "title": "Jev (TypeSafe AI) — System One decision model for agent harnesses",
-      "url": "https://x.com/Av1dlive/status/2103190313624039620",
-      "github": "https://github.com/codejunkie99/keel",
-      "docs": "https://learnjev.com/tutorials/agent-harness",
-      "date": "2026-09-28",
-      "source": "daily-x-tech-scout",
-      "slug": "jev-harness",
-      "folder": "unfiled"
-    }
-  ],
+  "proposed": [],
   "skipped": [
     {
       "id": "2098941338297458746-hyperframes",
@@ -94,6 +82,18 @@
       "slug": "vibe-trading",
       "folder": "Trade",
       "stars": 34002
+    },
+    {
+      "id": "2103190313624039620-jev",
+      "title": "Jev (TypeSafe AI) — System One decision model for agent harnesses",
+      "url": "https://x.com/Av1dlive/status/2103190313624039620",
+      "github": "https://github.com/codejunkie99/keel",
+      "docs": "https://learnjev.com/tutorials/agent-harness",
+      "date": "2026-09-28",
+      "source": "daily-x-tech-scout",
+      "slug": "jev-harness",
+      "folder": "unfiled",
+      "reason": "owner dismissed Approve/Tweak/Skip without answering"
     }
   ],
   "built": [
