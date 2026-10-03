@@ -19,11 +19,13 @@ import { TopicsView } from "./views/TopicsView.tsx";
 import { RadarView } from "./views/RadarView.tsx";
 import { PeopleView } from "./views/PeopleView.tsx";
 import { BriefingView } from "./views/BriefingView.tsx";
+import { HomeView } from "./views/HomeView.tsx";
 import { LoginView, type SessionView } from "./components/LoginView.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
 import { Icon, type IconName } from "./components/Icon.tsx";
 
 export type ViewId =
+  | "home"
   | "briefing"
   | "inbox"
   | "calendar"
@@ -37,6 +39,7 @@ export type ViewId =
   | "settings";
 
 const NAV: { id: ViewId; labelKey: string; icon: IconName }[] = [
+  { id: "home", labelKey: "nav.home", icon: "radar" },
   { id: "briefing", labelKey: "nav.briefing", icon: "sun" },
   { id: "inbox", labelKey: "nav.inbox", icon: "inbox" },
   { id: "calendar", labelKey: "nav.calendar", icon: "calendar" },
@@ -50,8 +53,8 @@ const NAV: { id: ViewId; labelKey: string; icon: IconName }[] = [
   { id: "settings", labelKey: "nav.settings", icon: "settings" },
 ];
 
-const PRIMARY: ViewId[] = ["briefing", "inbox", "calendar", "commitments"];
-const MORE_IDS = new Set<ViewId>(["chats", "meetings", "catchup", "radar", "topics", "people", "settings"]);
+const PRIMARY: ViewId[] = ["home", "inbox", "calendar", "commitments"];
+const MORE_IDS = new Set<ViewId>(["briefing", "chats", "meetings", "catchup", "radar", "topics", "people", "settings"]);
 
 export interface Selection {
   threadId: string | null;
@@ -66,7 +69,7 @@ export function App() {
   const session = useData<SessionView>(() => api.get("/api/session"), []);
   const status = useStatus();
   const [spaceId, setSpaceId] = useActiveSpace();
-  const [view, setView] = useState<ViewId>("briefing");
+  const [view, setView] = useState<ViewId>("home");
   const [selection, setSelection] = useState<Selection>(emptySelection);
   const [composerPrefill, setComposerPrefill] = useState<{ threadId: string; body: string } | null>(null);
   const [agentOpen, setAgentOpen] = useState(false);
@@ -239,6 +242,7 @@ export function App() {
               </button>
             </div>
           )}
+          {view === "home" && <HomeView spaceId={spaceId} spaces={spaces} onOpenSource={openSource} />}
           {view === "briefing" && (
             <BriefingView
               spaceId={spaceId}

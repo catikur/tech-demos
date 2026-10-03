@@ -81,6 +81,7 @@ catch_up · search_topics · response_radar · get_person`.
 - Provider: **OpenRouter** only (`OPENROUTER_API_KEY`, OpenAI-compatible `/chat/completions` and `/embeddings`).
   Chat and embedding models can also be picked in **Settings → Agent**. With no key the **rule-based fallback** answers the
   same intents so the UI never dead-ends. Tests set `LLM_PROVIDER=mock`. Hybrid search falls back to a local hashed embedder.
+- **Jev** (default `typesafe/jev-1.13`) is the decision layer, not the writer. The same OpenRouter key calls `POST /api/alpha/decisions`. Pick the model in **Settings → Agent → Jev** (or `JEV_MODEL`); a saved value wins over the env var, so a newer OpenRouter id can be switched without a redeploy. It classifies new mail (category, needs-reply, urgent), picks the agent tool for a question, and holds `create_commitment` / `push_commitment_to_todo` when the question did not ask for that write. Draft text and answers still come from the chat model. No key, `LLM_PROVIDER=mock`, or a decisions error keeps the previous heuristic / full tool catalogue.
 - Third-party text is wrapped as `<<external content>>` and the system prompt treats it as
   data (prompt-injection guard).
 - Drafts are proposals: **Confirm & send / Edit in composer / Discard**. Sends and tool

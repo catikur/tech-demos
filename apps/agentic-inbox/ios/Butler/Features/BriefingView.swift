@@ -12,13 +12,8 @@ struct BriefingView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     header(data, reload: reload)
                     doNow(data)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 12)], alignment: .leading, spacing: 12) {
-                        events(data)
-                        unread(data)
-                        due(data)
-                        drafts(data, reload: reload)
-                    }
-                    meetings(data)
+                    events(data)
+                    ready(data, reload: reload)
                 }
                 .padding(16)
                 .padding(.bottom, 80)
@@ -56,18 +51,13 @@ struct BriefingView: View {
 
     private func doNow(_ data: MorningBriefing) -> some View {
         Card {
-            Text("Şimdi yap").font(.subheadline.weight(.bold))
-            Text("\(data.waitingOnMe.count + data.dueCommitments.count) aksiyon sende · \(data.events.count) toplantı · \(data.unread.count) okunmamış · \(data.drafts.count) taslak")
-                .font(.body).foregroundStyle(Theme.text)
-            ForEach(data.dueCommitments.prefix(4)) { c in
-                row(title: c.text, sub: c.displayName)
-            }
-            ForEach(data.waitingOnMe.prefix(6)) { r in
+            Text("Şimdi").font(.subheadline.weight(.bold))
+            ForEach(data.waitingOnMe.prefix(5)) { r in
                 Button { app.open(r.source) } label: {
-                    row(title: "Yanıtla: \(r.source.label)", sub: Address.name(r.counterpart))
+                    row(title: "\(Address.name(r.counterpart)) — \(r.source.label)", sub: r.excerpt)
                 }.buttonStyle(.plain)
             }
-            if data.waitingOnMe.isEmpty && data.dueCommitments.isEmpty {
+            if data.waitingOnMe.isEmpty {
                 Text("Sende bekleyen aksiyon yok.").font(.footnote).foregroundStyle(Theme.faint)
             }
         }
@@ -85,31 +75,10 @@ struct BriefingView: View {
         }
     }
 
-    private func unread(_ data: MorningBriefing) -> some View {
+    private func ready(_ data: MorningBriefing, reload: @escaping () -> Void) -> some View {
         Card {
-            SectionTitle(text: "Gece gelenler", count: data.unread.count)
-            if data.unread.isEmpty { Text("Okunmamış posta yok.").font(.footnote).foregroundStyle(Theme.faint) }
-            ForEach(data.unread.prefix(8)) { t in
-                Button { app.open(SourceRef(kind: .thread, id: t.id, label: t.subject)) } label: {
-                    row(title: t.subject, sub: Address.name(t.lastFrom))
-                }.buttonStyle(.plain)
-            }
-        }
-    }
-
-    private func due(_ data: MorningBriefing) -> some View {
-        Card {
-            SectionTitle(text: "Bugün biten sözler", count: data.dueCommitments.count)
-            Text("İş taahhütleri @conforcus.com içinde paylaşılır.").font(.caption).foregroundStyle(Theme.faint)
-            if data.dueCommitments.isEmpty { Text("Bugün biten söz yok.").font(.footnote).foregroundStyle(Theme.faint) }
-            ForEach(data.dueCommitments) { c in row(title: c.text, sub: c.displayName) }
-        }
-    }
-
-    private func drafts(_ data: MorningBriefing, reload: @escaping () -> Void) -> some View {
-        Card {
-            SectionTitle(text: "Butler taslakları", count: data.drafts.count)
-            if data.drafts.isEmpty { Text("Onay bekleyen taslak yok.").font(.footnote).foregroundStyle(Theme.faint) }
+            SectionTitle(text: "Hazır", count: data.drafts.count + data.dueCommitments.count)
+            if data.drafts.isEmpty && data.dueCommitments.isEmpty { Text("Onay bekleyen taslak veya yaklaşan söz yok.").font(.footnote).foregroundStyle(Theme.faint) }
             ForEach(data.drafts) { d in
                 VStack(alignment: .leading, spacing: 6) {
                     Text(d.subject).font(.subheadline.weight(.semibold))
@@ -127,18 +96,8 @@ struct BriefingView: View {
                 }
                 .padding(.vertical, 4)
             }
-        }
-    }
-
-    private func meetings(_ data: MorningBriefing) -> some View {
-        Card {
-            SectionTitle(text: "Son toplantılar", count: data.recentMeetings.count)
-            Text("Transkript varsa takip taslağı bir dokunuş uzakta.").font(.caption).foregroundStyle(Theme.faint)
-            if data.recentMeetings.isEmpty { Text("Yeni toplantı yok.").font(.footnote).foregroundStyle(Theme.faint) }
-            ForEach(data.recentMeetings) { m in
-                Button { app.open(SourceRef(kind: .meeting, id: m.id, label: m.title)) } label: {
-                    row(title: m.title, sub: "\(Fmt.dateTime(m.start)) · \(m.hasTranscript ? "transkript" : "yalnız takvim")")
-                }.buttonStyle(.plain)
+            ForEach(data.dueCommitments.prefix(5)) { c in
+                row(title: c.text, sub: c.displayName)
             }
         }
     }

@@ -127,6 +127,20 @@ public extension ButlerAPI {
 
     // MARK: briefing, drafts, radar, catch-up, topics, digests
 
+    func home(space: String?) async throws -> HomeDashboard { try await get("/api/home", query: spaceQuery(space)) }
+
+    func mailTags() async throws -> [MailTag] { try await get("/api/mail-tags") }
+
+    func saveMailTags(_ tags: [MailTag]) async throws -> [MailTag] {
+        struct Body: Encodable { var tags: [MailTag] }
+        return try await patch("/api/mail-tags", body: Body(tags: tags))
+    }
+
+    func scanMailTags(space: String?) async throws -> Int {
+        struct Out: Decodable { var queued: Int }
+        return (try await post("/api/mail-tags/scan", query: spaceQuery(space)) as Out).queued
+    }
+
     func briefing(space: String?) async throws -> MorningBriefing { try await get("/api/briefing", query: spaceQuery(space)) }
 
     func generateDrafts(space: String?) async throws -> Int {
@@ -232,20 +246,22 @@ public extension ButlerAPI {
 
     func llmConfig() async throws -> LlmConfigView { try await get("/api/llm/config") }
 
-    func updateLlm(apiKey: String?? = nil, model: String?? = nil, embedModel: String?? = nil) async throws -> LlmConfigView {
+    func updateLlm(apiKey: String?? = nil, model: String?? = nil, embedModel: String?? = nil, jevModel: String?? = nil) async throws -> LlmConfigView {
         struct Body: Encodable {
             var apiKey: String??
             var model: String??
             var embedModel: String??
+            var jevModel: String??
             func encode(to encoder: Encoder) throws {
                 var c = encoder.container(keyedBy: Keys.self)
                 if let apiKey { try c.encode(apiKey, forKey: .apiKey) }
                 if let model { try c.encode(model, forKey: .model) }
                 if let embedModel { try c.encode(embedModel, forKey: .embedModel) }
+                if let jevModel { try c.encode(jevModel, forKey: .jevModel) }
             }
-            enum Keys: String, CodingKey { case apiKey, model, embedModel }
+            enum Keys: String, CodingKey { case apiKey, model, embedModel, jevModel }
         }
-        return try await patch("/api/llm/config", body: Body(apiKey: apiKey, model: model, embedModel: embedModel))
+        return try await patch("/api/llm/config", body: Body(apiKey: apiKey, model: model, embedModel: embedModel, jevModel: jevModel))
     }
 
     func org(space: String?) async throws -> OrgSettingsView { try await get("/api/org", query: spaceQuery(space)) }

@@ -6,6 +6,7 @@ import { fmtDateTime, useData } from "../state.ts";
 import { SpaceRules } from "../components/SpaceRules.tsx";
 import { LlmSettings } from "../components/LlmSettings.tsx";
 import { OrgSettings } from "../components/OrgSettings.tsx";
+import { MailTagsPanel } from "../components/MailTagsPanel.tsx";
 import type { SessionView } from "../components/LoginView.tsx";
 
 function providerLabel(provider: Account["provider"]): string {
@@ -128,6 +129,9 @@ export function SettingsView({ status, onChanged }: { status: AppStatus | null; 
             {t("settings.oauthReadme")}
           </p>
         )}
+
+        <h2>{t("tags.name")}</h2>
+        <MailTagsPanel spaceId={null} />
 
         <h2>{t("settings.agentBackend")}</h2>
         <p>

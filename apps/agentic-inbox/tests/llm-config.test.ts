@@ -11,8 +11,10 @@ import {
   EMBED_MODEL_SETTING,
   setStoredApiKey,
   setStoredEmbedModel,
+  setStoredJevModel,
   setStoredModel,
 } from "../server/agent/config.ts";
+import { jevModel } from "../server/agent/jev.ts";
 import { fetchOpenRouterModels, parseOpenRouterModels, resetModelCache } from "../server/agent/models.ts";
 import { llmRoutes } from "../server/api/llm.ts";
 import { chunks } from "../server/db/repo.ts";
@@ -60,6 +62,7 @@ describe("llm config: settings override env", () => {
     bootstrap();
     delete process.env.OPENROUTER_MODEL;
     delete process.env.OPENROUTER_EMBED_MODEL;
+    delete process.env.JEV_MODEL;
     delete process.env.OPENROUTER_API_KEY;
     resetProviderCache();
   });
@@ -89,6 +92,19 @@ describe("llm config: settings override env", () => {
     setStoredEmbedModel(null);
     expect(llmConfig()).toMatchObject({ embedModel: "openai/text-embedding-3-large", embedModelSource: "env" });
     expect(settings.get(EMBED_MODEL_SETTING)).toBeNull();
+  });
+
+  test("jev model: default → env → settings, and the decisions client follows it", () => {
+    expect(llmConfig().jevModel).toBe("typesafe/jev-1.13");
+    expect(llmConfig().jevModelSource).toBe("default");
+    expect(jevModel()).toBe("typesafe/jev-1.13");
+    process.env.JEV_MODEL = "typesafe/jev-1.14";
+    expect(llmConfig()).toMatchObject({ jevModel: "typesafe/jev-1.14", jevModelSource: "env" });
+    setStoredJevModel("~typesafe/jev-latest");
+    expect(jevModel()).toBe("~typesafe/jev-latest");
+    setStoredJevModel(null);
+    expect(jevModel()).toBe("typesafe/jev-1.14");
+    delete process.env.JEV_MODEL;
   });
 
   test("api key: stored encrypted at rest, masked for the UI, env fallback", () => {
@@ -189,6 +205,7 @@ describe("llm routes against a fake OpenRouter", () => {
   beforeEach(() => {
     openMemoryDb();
     bootstrap();
+    delete process.env.JEV_MODEL;
     resetProviderCache();
     resetModelCache();
     seen.length = 0;
@@ -251,6 +268,17 @@ describe("llm routes against a fake OpenRouter", () => {
 
     const reset = await (await call(llmRoutes["/api/llm/config"].PATCH, "PATCH", { embedModel: null })).json();
     expect(reset).toMatchObject({ embedModel: "openai/text-embedding-3-small", embedModelSource: "default" });
+  });
+
+  test("PATCH stores a Jev model id and clearing falls back to the default", async () => {
+    const before = await (await call(llmRoutes["/api/llm/config"].GET, "GET")).json();
+    expect(before).toMatchObject({ jevModel: "typesafe/jev-1.13", jevModelSource: "default", envJevModel: null });
+    const saved = await (await call(llmRoutes["/api/llm/config"].PATCH, "PATCH", { jevModel: "~typesafe/jev-latest" })).json();
+    expect(saved).toMatchObject({ jevModel: "~typesafe/jev-latest", jevModelSource: "settings" });
+    expect(jevModel()).toBe("~typesafe/jev-latest");
+    expect((await call(llmRoutes["/api/llm/config"].PATCH, "PATCH", { jevModel: "not a model" })).status).toBe(400);
+    const reset = await (await call(llmRoutes["/api/llm/config"].PATCH, "PATCH", { jevModel: null })).json();
+    expect(reset).toMatchObject({ jevModel: "typesafe/jev-1.13", jevModelSource: "default" });
   });
 
   test("GET /api/llm/models fetches, caches, and refreshes on demand", async () => {
