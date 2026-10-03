@@ -375,6 +375,34 @@ export interface ProposedDraft {
   createdAt: number;
 }
 
+export interface HomeLine {
+  source: SourceRef;
+  title: string;
+  detail: string;
+}
+
+export interface HomeCard {
+  id: "waiting" | "reply" | "meetings" | "due" | "drafts";
+  count: number;
+  lines: HomeLine[];
+}
+
+export interface HomeDashboard {
+  generatedAt: number;
+  /** Next meeting still ahead today, if any. A door into the brief, not a sixth dump. */
+  nextMeeting: { id: string; title: string; start: number } | null;
+  cards: HomeCard[];
+}
+
+export interface MailTag {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  /** Built-in filters (newsletter, security) cannot be deleted. */
+  system: boolean;
+}
+
 export interface MorningBriefing {
   generatedAt: number;
   fromAt: number;

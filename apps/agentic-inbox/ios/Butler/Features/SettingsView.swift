@@ -39,6 +39,7 @@ struct SettingsView: View {
 
             Section {
                 NavigationLink("Ajan (OpenRouter)") { LlmSettingsView() }
+                NavigationLink("Posta etiketleri") { MailTagsView() }
                 NavigationLink("Kurumsal asistan") { OrgAssistantView() }
                 if let llm = app.status?.llm {
                     Text("Sağlayıcı: \(llm.provider)\(llm.model.map { " · \($0)" } ?? "")").font(.footnote).foregroundStyle(Theme.faint)
@@ -239,5 +240,60 @@ struct OrgAssistantView: View {
     private func run(_ key: String, _ work: @escaping () async throws -> Void) {
         busy = key
         Task { defer { busy = nil }; do { try await work(); message = "Kaydedildi." } catch { message = error.localizedDescription } }
+    }
+}
+
+struct MailTagsView: View {
+    @Environment(AppModel.self) private var app
+    @State private var name = ""
+    @State private var detail = ""
+    @State private var note: String?
+
+    var body: some View {
+        Loading(load: { try await app.api!.mailTags() }) { tags, reload in
+            Form {
+                Section {
+                    Text("Jev yalnızca bu listedeki etiketleri basar. Bülten ve güvenlik kapatılamaz.").font(.footnote).foregroundStyle(Theme.faint)
+                    ForEach(tags) { tag in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(tag.name).font(.subheadline.weight(.semibold))
+                            Text(tag.description).font(.caption).foregroundStyle(Theme.faint)
+                            if !tag.system {
+                                HStack {
+                                    Button(tag.enabled ? "Kapat" : "Aç") {
+                                        Task { _ = try? await app.api!.saveMailTags(tags.map { $0.id == tag.id ? MailTag(id: tag.id, name: tag.name, description: tag.description, enabled: !tag.enabled, system: tag.system) : $0 }); reload() }
+                                    }
+                                    Button("Sil", role: .destructive) {
+                                        Task { _ = try? await app.api!.saveMailTags(tags.filter { $0.id != tag.id }); reload() }
+                                    }
+                                }.font(.footnote)
+                            }
+                        }
+                    }
+                }
+                Section {
+                    TextField("Ad", text: $name)
+                    TextField("Ne demek", text: $detail)
+                    Button("Ekle") {
+                        Task {
+                            let next = tags + [MailTag(id: name, name: name, description: detail, enabled: true, system: false)]
+                            _ = try? await app.api!.saveMailTags(next)
+                            name = ""; detail = ""; reload()
+                        }
+                    }.disabled(name.trimmingCharacters(in: .whitespaces).count < 2)
+                    Button("Henüz etiketlenmemiş postayı tara") {
+                        Task {
+                            let n = try? await app.api!.scanMailTags(space: app.spaceId)
+                            note = "\(n ?? 0) sıraya alındı"
+                        }
+                    }
+                    if let note { Text(note).font(.footnote).foregroundStyle(Theme.dim) }
+                }
+            }
+            .scrollContentBackground(.hidden)
+        }
+        .screenBackground()
+        .navigationTitle("Posta etiketleri")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

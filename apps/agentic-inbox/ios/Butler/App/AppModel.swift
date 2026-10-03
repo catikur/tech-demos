@@ -5,12 +5,12 @@ import SwiftUI
 
 /// Where the user is in the cockpit; mirrors the web `ViewId`.
 enum Tab: String, CaseIterable, Identifiable {
-    case briefing, inbox, calendar, board, more
+    case home, inbox, calendar, board, more
     var id: String { rawValue }
 }
 
 enum MoreDestination: String, CaseIterable, Identifiable {
-    case chats, meetings, catchup, radar, topics, people, settings
+    case briefing, chats, meetings, catchup, radar, topics, people, settings
     var id: String { rawValue }
 }
 
@@ -41,7 +41,7 @@ final class AppModel {
     var status: AppStatus?
     var bootError: String?
     var booting = true
-    var tab: Tab = .briefing
+    var tab: Tab = .home
     var agentOpen = false
     var notificationsOpen = false
     var jump: JumpRequest?

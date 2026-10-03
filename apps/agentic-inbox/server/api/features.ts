@@ -1,5 +1,5 @@
 import type { BunRequest } from "bun";
-import type { Commitment, MemoryKind } from "../../shared/types.ts";
+import type { Commitment, MailTag, MemoryKind } from "../../shared/types.ts";
 import { audit, commitments, events, meetings, memories, notes, people, proposedDrafts, spaces, topics } from "../db/repo.ts";
 import { extractForSpace } from "../features/commitments.ts";
 import { completeTodoTask, pushCommitmentToTodo } from "../features/ms-tasks.ts";
@@ -12,6 +12,9 @@ import { findPerson, personProfile } from "../features/people.ts";
 import { parseDue } from "../features/text.ts";
 import { produceDigest } from "../features/digests.ts";
 import { buildMorningBriefing } from "../features/briefing.ts";
+import { buildHome } from "../features/home.ts";
+import { listMailTags, saveMailTags } from "../features/mail-tags.ts";
+import { scanUnjudgedMail } from "../agent/jev-mail.ts";
 import { postMorningBriefing } from "../features/briefing-teams.ts";
 import { orgSettingsView, patchOrgConfig, savePlaud } from "../features/org-config.ts";
 import { syncSharePointVault } from "../features/vault.ts";
@@ -157,10 +160,32 @@ export const featureRoutes = {
     const to = num(q.get("to"), Date.now());
     const preset = q.get("preset");
     const from = preset === "seen" ? (lastSeen(spaceId) ?? to - 24 * 3_600_000) : num(q.get("from"), to - 24 * 3_600_000);
-    const result = await buildCatchUp(spaceId, from, to, { polish: q.get("polish") !== "0", accountIds: visibleAccountIds(req) });
+    const result = await buildCatchUp(spaceId, from, to, { polish: q.get("polish") === "1", accountIds: visibleAccountIds(req) });
     return ok(result);
   }),
   "/api/catchup/seen": { POST: h((req) => (markSeen(spaceParam(req)), ok({ ok: true }))) },
+
+  "/api/mail-tags": {
+    GET: h(() => ok(listMailTags())),
+    PATCH: h(async (req) => {
+      const body = await readJson<{ tags?: MailTag[] }>(req);
+      if (!Array.isArray(body.tags)) badRequest("tags required");
+      return ok(saveMailTags(body.tags));
+    }),
+  },
+  "/api/mail-tags/scan": {
+    POST: h((req) => ok({ queued: scanUnjudgedMail(spaceParam(req)) })),
+  },
+
+  /* ---------- home dashboard ---------- */
+  "/api/home": h((req) =>
+    ok(
+      buildHome(spaceParam(req), {
+        accountIds: visibleAccountIds(req),
+        ownerEmail: viewerEmail(req),
+      }),
+    ),
+  ),
 
   /* ---------- morning briefing + overnight drafts ---------- */
   "/api/briefing": h((req) =>

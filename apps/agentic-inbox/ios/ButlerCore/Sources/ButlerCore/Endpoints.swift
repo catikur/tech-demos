@@ -127,6 +127,20 @@ public extension ButlerAPI {
 
     // MARK: briefing, drafts, radar, catch-up, topics, digests
 
+    func home(space: String?) async throws -> HomeDashboard { try await get("/api/home", query: spaceQuery(space)) }
+
+    func mailTags() async throws -> [MailTag] { try await get("/api/mail-tags") }
+
+    func saveMailTags(_ tags: [MailTag]) async throws -> [MailTag] {
+        struct Body: Encodable { var tags: [MailTag] }
+        return try await patch("/api/mail-tags", body: Body(tags: tags))
+    }
+
+    func scanMailTags(space: String?) async throws -> Int {
+        struct Out: Decodable { var queued: Int }
+        return (try await post("/api/mail-tags/scan", query: spaceQuery(space)) as Out).queued
+    }
+
     func briefing(space: String?) async throws -> MorningBriefing { try await get("/api/briefing", query: spaceQuery(space)) }
 
     func generateDrafts(space: String?) async throws -> Int {

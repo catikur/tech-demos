@@ -1,33 +1,58 @@
 import type { ThreadCategory } from "../../shared/types.ts";
 import { audit, threads } from "../db/repo.ts";
 import { categorize } from "../sync/normalize.ts";
-import { asChoice, asNoul, asScore, jevDecide, jevEnabled, type JevAnswer } from "./jev.ts";
+import { listMailTags } from "../features/mail-tags.ts";
+import { asChoice, asNoul, asScore, jevDecide, jevEnabled, type JevAnswer, type JevQuestion } from "./jev.ts";
 
 /** Labels Jev may attach. `jev:judged` means this thread was decided (or confidently skipped). */
 export const JEV_JUDGED = "jev:judged";
 export const NEEDS_REPLY = "needs-reply";
 export const NO_REPLY = "no-reply";
 
-const CATEGORY_CRITERIA: Record<ThreadCategory, string> = {
-  newsletter: "Bulk mailing, digest, or marketing. A personal reply is not expected.",
-  support: "A problem, bug, outage, or request for help.",
-  invite: "A calendar invitation, RSVP, or meeting update.",
-  billing: "Invoice, payment, receipt, quote, or subscription charge.",
-  recruiting: "Hiring, a role, or a candidate.",
-  personal: "A personal note from a person, not a work process.",
-  security: "Sign-in, password, verification code, or security alert.",
-  project: "Project work: a spec, review, roadmap, release, or draft.",
-  other: "None of the other categories fit.",
-};
+const CATEGORIES = ["newsletter", "support", "invite", "billing", "recruiting", "personal", "security", "project", "other"] as ThreadCategory[];
 
-const CATEGORIES = Object.keys(CATEGORY_CRITERIA) as ThreadCategory[];
+function tagQuestions(): Record<string, JevQuestion> {
+  const enabled = listMailTags().filter((t) => t.enabled).slice(0, 12);
+  const criteria: Record<string, string> = {};
+  for (const tag of enabled) criteria[tag.id] = tag.description || tag.name;
+  const questions: Record<string, JevQuestion> = {
+    category: {
+      type: "choice",
+      instructions: "Which single tag best fits this mail? Use `subject`, `from`, and `body`. Pick only from the criteria.",
+      criteria,
+    },
+    needs_reply: {
+      type: "noul",
+      instructions: "Does this mail need a reply or a decision from the recipient, rather than being informational?",
+      criteria: {
+        true: "A person is waiting on an answer, a decision, or a confirmation.",
+        false: "It is informational, automated, or already complete.",
+      },
+    },
+    urgency: {
+      type: "score",
+      instructions: "How soon does the recipient need to act?",
+      criteria: ["Can wait", "This week", "Today"],
+    },
+  };
+  for (const tag of enabled.slice(0, 8)) {
+    questions[`tag_${tag.id}`] = {
+      type: "noul",
+      instructions: `Does this mail also match the tag "${tag.name}" (${tag.description || tag.id})?`,
+      criteria: { true: "The tag fits this mail.", false: "The tag does not fit." },
+    };
+  }
+  return questions;
+}
 
 export function isThreadCategory(value: string): value is ThreadCategory {
   return (CATEGORIES as string[]).includes(value);
 }
 
 export function preserveJevLabels(existing: string[] | undefined, fresh: string[]): string[] {
-  const kept = (existing ?? []).filter((label) => label === NEEDS_REPLY || label === NO_REPLY || label === JEV_JUDGED || label === "urgent");
+  const kept = (existing ?? []).filter(
+    (label) => label === NEEDS_REPLY || label === NO_REPLY || label === JEV_JUDGED || label === "urgent" || label.startsWith("tag:"),
+  );
   return [...new Set([...fresh, ...kept])];
 }
 
@@ -54,24 +79,7 @@ export async function judgeMail(sample: {
       list_unsubscribe: Boolean(sample.listUnsubscribe),
     },
     {
-      category: {
-        type: "choice",
-        instructions: "Which category best fits this mail? Use `subject`, `from`, and `body`.",
-        criteria: CATEGORY_CRITERIA,
-      },
-      needs_reply: {
-        type: "noul",
-        instructions: "Does this mail need a reply or a decision from the recipient, rather than being informational?",
-        criteria: {
-          true: "A person is waiting on an answer, a decision, or a confirmation.",
-          false: "It is informational, automated, or already complete.",
-        },
-      },
-      urgency: {
-        type: "score",
-        instructions: "How soon does the recipient need to act?",
-        criteria: ["Can wait", "This week", "Today"],
-      },
+      ...tagQuestions(),
     },
   );
   if (!answers) return { category: heuristic, labels: [], judged: false };
@@ -89,7 +97,24 @@ export function applyMailAnswers(heuristic: ThreadCategory, answers: Record<stri
   }
   const urgency = asScore(answers.urgency);
   if (urgency && urgency.score >= 1.5 && (urgency.confidence ?? 0) >= 0.4) labels.push("urgent");
+  for (const tag of listMailTags().filter((t) => t.enabled).slice(0, 8)) {
+    const n = asNoul(answers[`tag_${tag.id}`]);
+    if (n !== null && n >= 0.72) labels.push(`tag:${tag.id}`);
+  }
   return { category, labels, judged: true };
+}
+
+export function scanUnjudgedMail(spaceId: string | null, limit = 40): number {
+  const list = threads.list(spaceId, { limit: 200 }).filter((t) => !t.labels.includes(JEV_JUDGED)).slice(0, limit);
+  let n = 0;
+  for (const t of list) {
+    const full = threads.get(t.id);
+    const last = full?.messages.at(-1);
+    if (!last) continue;
+    scheduleMailJudgement(t.id, { subject: t.subject, from: last.from, body: last.body });
+    n++;
+  }
+  return n;
 }
 
 const MAX_QUEUE = 50;

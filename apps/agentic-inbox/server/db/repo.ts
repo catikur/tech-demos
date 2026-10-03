@@ -462,6 +462,38 @@ export const threads = {
     }
     return rows.length;
   },
+  /** One query for catch-up. Caps the window so a week of mail cannot stall the request. */
+  recentForCatchup(
+    spaceId: string | null,
+    since: number,
+    until: number,
+    accountIds?: string[] | null,
+    limit = 200,
+  ): { id: string; from: string; body: string; at: number; threadId: string; subject: string; spaceId: string; category: string; labels: string[]; unread: boolean }[] {
+    const s = scope(spaceId, "t.space_id");
+    const a = accountScope(accountIds, "t.account_id");
+    return (
+      getDb()
+        .query(
+          `SELECT m.from_addr, m.body, m.at, t.id AS thread_id, t.subject, t.space_id, t.category, t.labels, t.unread
+           FROM messages m JOIN threads t ON t.id = m.thread_id
+           WHERE m.at >= ? AND m.at <= ? AND m.is_mine = 0${s.sql}${a.sql}
+           ORDER BY m.at DESC LIMIT ?`,
+        )
+        .all(since, until, ...s.params, ...a.params, limit) as Row[]
+    ).map((r) => ({
+      id: r.thread_id,
+      from: r.from_addr ?? "",
+      body: r.body ?? "",
+      at: r.at,
+      threadId: r.thread_id,
+      subject: r.subject,
+      spaceId: r.space_id,
+      category: r.category,
+      labels: json.parse<string[]>(r.labels, []),
+      unread: !!r.unread,
+    }));
+  },
   messagesSince(spaceId: string | null, since: number, accountIds?: string[] | null): (EmailMessage & { subject: string; spaceId: string })[] {
     const s = scope(spaceId, "t.space_id");
     const a = accountScope(accountIds, "t.account_id");
