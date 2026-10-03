@@ -43,7 +43,15 @@ struct AgentSheet: View {
                             }
                         }.padding(14)
                     }
-                    .onChange(of: items.count) { _, _ in withAnimation { proxy.scrollTo(running ? "typing" : items.last?.id, anchor: .bottom) } }
+                    .onChange(of: items.count) { _, _ in
+                        withAnimation {
+                            if running {
+                                proxy.scrollTo("typing", anchor: .bottom)
+                            } else if let lastID = items.last?.id {
+                                proxy.scrollTo(lastID, anchor: .bottom)
+                            }
+                        }
+                    }
                 }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
