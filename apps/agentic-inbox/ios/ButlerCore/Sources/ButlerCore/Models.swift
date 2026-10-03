@@ -500,6 +500,9 @@ public struct LlmConfigView: Codable, Hashable, Sendable {
     public var embedModel: String
     public var embedModelSource: String
     public var envEmbedModel: String?
+    public var jevModel: String
+    public var jevModelSource: String
+    public var envJevModel: String?
     public var mockForced: Bool
 }
 

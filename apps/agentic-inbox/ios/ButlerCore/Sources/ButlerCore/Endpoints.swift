@@ -232,20 +232,22 @@ public extension ButlerAPI {
 
     func llmConfig() async throws -> LlmConfigView { try await get("/api/llm/config") }
 
-    func updateLlm(apiKey: String?? = nil, model: String?? = nil, embedModel: String?? = nil) async throws -> LlmConfigView {
+    func updateLlm(apiKey: String?? = nil, model: String?? = nil, embedModel: String?? = nil, jevModel: String?? = nil) async throws -> LlmConfigView {
         struct Body: Encodable {
             var apiKey: String??
             var model: String??
             var embedModel: String??
+            var jevModel: String??
             func encode(to encoder: Encoder) throws {
                 var c = encoder.container(keyedBy: Keys.self)
                 if let apiKey { try c.encode(apiKey, forKey: .apiKey) }
                 if let model { try c.encode(model, forKey: .model) }
                 if let embedModel { try c.encode(embedModel, forKey: .embedModel) }
+                if let jevModel { try c.encode(jevModel, forKey: .jevModel) }
             }
-            enum Keys: String, CodingKey { case apiKey, model, embedModel }
+            enum Keys: String, CodingKey { case apiKey, model, embedModel, jevModel }
         }
-        return try await patch("/api/llm/config", body: Body(apiKey: apiKey, model: model, embedModel: embedModel))
+        return try await patch("/api/llm/config", body: Body(apiKey: apiKey, model: model, embedModel: embedModel, jevModel: jevModel))
     }
 
     func org(space: String?) async throws -> OrgSettingsView { try await get("/api/org", query: spaceQuery(space)) }

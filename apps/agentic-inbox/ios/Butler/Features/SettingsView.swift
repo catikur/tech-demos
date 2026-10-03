@@ -121,6 +121,7 @@ struct LlmSettingsView: View {
     @State private var apiKey = ""
     @State private var model = ""
     @State private var embedModel = ""
+    @State private var jevModel = ""
     @State private var message: String?
 
     var body: some View {
@@ -131,21 +132,38 @@ struct LlmSettingsView: View {
                     if let masked = cfg.apiKeyMasked { LabeledContent("Anahtar", value: "\(masked) · \(cfg.apiKeySource ?? "")") }
                     LabeledContent("Model", value: "\(cfg.model) · \(cfg.modelSource)")
                     LabeledContent("Gömme modeli", value: "\(cfg.embedModel) · \(cfg.embedModelSource)")
-                } header: { Text("Şu an") } footer: { Text("Anahtar sunucuda şifreli saklanır; .env değerini geçersiz kılar.") }
+                    LabeledContent("Jev", value: "\(cfg.jevModel) · \(cfg.jevModelSource)")
+                } header: { Text("Şu an") } footer: { Text("Anahtar sunucuda şifreli saklanır; .env değerini geçersiz kılar. Jev sohbet modeli değildir: mail sınıfı, araç seçimi ve yazma kapısı.") }
                 Section {
                     SecureField("sk-or-… (boş bırak = değiştirme)", text: $apiKey)
-                    TextField("vendor/model (örn. openai/gpt-4o-mini)", text: $model).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    TextField("sohbet modeli (örn. openai/gpt-4o-mini)", text: $model).textInputAutocapitalization(.never).autocorrectionDisabled()
                     TextField("gömme modeli (örn. openai/text-embedding-3-small)", text: $embedModel).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    TextField("Jev (örn. typesafe/jev-1.13 veya ~typesafe/jev-latest)", text: $jevModel).textInputAutocapitalization(.never).autocorrectionDisabled()
                     Button("Kaydet") {
                         Task {
                             do {
-                                _ = try await app.api!.updateLlm(apiKey: apiKey.isEmpty ? nil : .some(apiKey), model: model.isEmpty ? nil : .some(model), embedModel: embedModel.isEmpty ? nil : .some(embedModel))
-                                apiKey = ""; message = "Kaydedildi."; reload(); await app.refreshStatus()
+                                _ = try await app.api!.updateLlm(
+                                    apiKey: apiKey.isEmpty ? nil : .some(apiKey),
+                                    model: model.isEmpty ? nil : .some(model),
+                                    embedModel: embedModel.isEmpty ? nil : .some(embedModel),
+                                    jevModel: jevModel.isEmpty ? nil : .some(jevModel)
+                                )
+                                apiKey = ""; model = ""; embedModel = ""; jevModel = ""; message = "Kaydedildi."; reload(); await app.refreshStatus()
                             } catch { message = error.localizedDescription }
                         }
-                    }.disabled(apiKey.isEmpty && model.isEmpty && embedModel.isEmpty)
+                    }.disabled(apiKey.isEmpty && model.isEmpty && embedModel.isEmpty && jevModel.isEmpty)
+                    if cfg.jevModelSource == "settings" {
+                        Button("Jev’i varsayılana al") {
+                            Task {
+                                do {
+                                    _ = try await app.api!.updateLlm(jevModel: .some(""))
+                                    message = "Jev varsayılan sürüme döndü."; reload()
+                                } catch { message = error.localizedDescription }
+                            }
+                        }
+                    }
                     if let message { Text(message).font(.footnote).foregroundStyle(Theme.dim) }
-                } header: { Text("Değiştir") } footer: { Text("Gömme modelini değiştirmek arama indeksini sıfırlar; bir sonraki senkronda yeniden kurulur.") }
+                } header: { Text("Değiştir") } footer: { Text("Gömme modelini değiştirmek arama indeksini sıfırlar. Jev kimliği OpenRouter’da yeni sürüm çıkınca buradan değişir; boş bırakılan alan değişmez.") }
             }
             .scrollContentBackground(.hidden)
         }

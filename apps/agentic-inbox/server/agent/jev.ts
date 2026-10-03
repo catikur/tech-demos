@@ -41,8 +41,9 @@ export function setJevTransportForTests(transport: JevFetch | null): void {
   testTransport = transport;
 }
 
+/** Active decision model: Settings, then `JEV_MODEL`, then `typesafe/jev-1.13`. */
 export function jevModel(): string {
-  return process.env.JEV_MODEL?.trim() || "typesafe/jev-1.13";
+  return llmConfig().jevModel;
 }
 
 /** Map the chat base URL onto the Decisions API. A non-v1 base (tests) uses `/decisions`. */
