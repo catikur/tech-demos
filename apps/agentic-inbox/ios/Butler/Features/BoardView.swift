@@ -30,6 +30,7 @@ struct BoardView: View {
     @State private var adding = false
     @State private var busy = false
     @State private var error: String?
+    @State private var hiddenCards = 0
 
     var body: some View {
         Loading(load: { try await app.api!.commitments(space: app.spaceId) }, refreshOn: ["commitments"]) { cards, reload in
@@ -69,12 +70,22 @@ struct BoardView: View {
         .navigationTitle("Pano")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { CockpitToolbar() }
+        .task(id: app.spaceId) { await loadHidden() }
+    }
+
+    private func loadHidden() async {
+        guard let api = app.api else { return }
+        hiddenCards = (try? await api.viewWindow(space: app.spaceId))?.hiddenCommitments ?? 0
     }
 
     private func header(dropped: Int, reload: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("İş panosu").font(Theme.display(24))
             Text("Kartları sürükle veya şerit seç. Butler’ın çıkardığı açık işler.").font(.footnote).foregroundStyle(Theme.faint)
+            if hiddenCards > 0 {
+                Text("\(hiddenCards) kart bu tarih aralığının dışında; silinmedi. Ayarlar → Tarih aralığı.")
+                    .font(.caption).foregroundStyle(Theme.faint)
+            }
             HStack(spacing: 8) {
                 Button(busy ? "Taranıyor…" : "Yeniden tara") {
                     busy = true

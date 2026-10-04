@@ -1393,6 +1393,28 @@ a {
   letter-spacing: 0.05em;
 }
 
+.window-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: end;
+}
+
+.window-dates label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.window-open {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+  padding-bottom: 8px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

@@ -3,6 +3,7 @@ import { newId } from "../db/index.ts";
 import { chats, events, meetings, threads, topics } from "../db/repo.ts";
 import { onPostSync } from "../sync/engine.ts";
 import { normalizeTitle, tokens } from "./text.ts";
+import { inWindow } from "./window.ts";
 
 /**
  * Feature 5 — Topic graph: cluster mail, chats and meetings that talk about the
@@ -34,15 +35,18 @@ export function rebuildTopics(spaceId: string): Topic[] {
   const docs: { ref: SourceRef; title: string; text: string; at: number }[] = [];
   for (const t of threads.list(spaceId, { limit: 400 })) {
     if (t.category === "newsletter" || t.category === "security") continue;
+    if (!inWindow(t.lastAt)) continue;
     const full = threads.get(t.id);
     const body = full?.messages.map((m) => m.body.slice(0, 400)).join(" ") ?? "";
     docs.push({ ref: { kind: "thread", id: t.id, label: t.subject }, title: t.subject, text: `${t.subject} ${t.subject} ${body}`, at: t.lastAt });
   }
   for (const c of chats.list(spaceId)) {
+    if (!inWindow(c.lastAt)) continue;
     const body = chats.messages(c.id).slice(-30).map((m) => m.body).join(" ");
     docs.push({ ref: { kind: "chat", id: c.id, label: c.title }, title: c.title, text: `${c.title} ${body}`, at: c.lastAt });
   }
   for (const m of meetings.list(spaceId, 100)) {
+    if (!inWindow(m.start)) continue;
     const transcript = meetings.transcript(m.id);
     const body = transcript?.lines.map((l) => l.text).join(" ") ?? "";
     docs.push({ ref: { kind: "meeting", id: m.id, label: m.title }, title: m.title, text: `${m.title} ${m.title} ${body}`, at: m.start });
@@ -50,6 +54,7 @@ export function rebuildTopics(spaceId: string): Topic[] {
   const now = Date.now();
   for (const e of events.list(spaceId, now - 14 * 86_400_000, now + 30 * 86_400_000)) {
     if (e.meetingId || e.attendees.length < 2) continue;
+    if (!inWindow(e.start)) continue;
     docs.push({ ref: { kind: "event", id: e.id, label: e.title }, title: e.title, text: `${e.title} ${e.title} ${e.description}`, at: e.start });
   }
 

@@ -437,6 +437,20 @@ public struct ProposedDraft: Codable, Hashable, Identifiable, Sendable {
     public var createdAt: Millis
 }
 
+public struct ViewWindow: Codable, Hashable, Sendable {
+    public var from: Millis
+    public var to: Millis?
+    public var saved: Bool
+    public var hiddenCommitments: Int
+
+    public init(from: Millis, to: Millis?, saved: Bool, hiddenCommitments: Int) {
+        self.from = from
+        self.to = to
+        self.saved = saved
+        self.hiddenCommitments = hiddenCommitments
+    }
+}
+
 public struct MailTag: Codable, Hashable, Identifiable, Sendable {
     public var id: String
     public var name: String

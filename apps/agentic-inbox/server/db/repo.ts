@@ -303,7 +303,7 @@ function rowToThreadBase(r: Row): Omit<Thread, "messages"> {
 }
 
 export const threads = {
-  list(spaceId: string | null, opts: { limit?: number; since?: number; query?: string; accountIds?: string[] | null } = {}): ThreadSummary[] {
+  list(spaceId: string | null, opts: { limit?: number; since?: number; until?: number; query?: string; accountIds?: string[] | null } = {}): ThreadSummary[] {
     const s = scope(spaceId, "t.space_id");
     const a = accountScope(opts.accountIds, "t.account_id");
     const params: any[] = [...s.params, ...a.params];
@@ -311,6 +311,10 @@ export const threads = {
     if (opts.since) {
       where += " AND t.last_at >= ?";
       params.push(opts.since);
+    }
+    if (opts.until) {
+      where += " AND t.last_at <= ?";
+      params.push(opts.until);
     }
     if (opts.query) {
       where += ` AND (t.subject LIKE ? OR t.participants LIKE ? OR EXISTS (SELECT 1 FROM messages m2 WHERE m2.thread_id = t.id AND m2.body LIKE ?))`;
@@ -339,6 +343,11 @@ export const threads = {
       lastFrom: r.last_from ?? "",
       messageCount: r.message_count ?? 0,
     }));
+  },
+  /** Last activity without loading message bodies. */
+  activityAt(id: string): number | null {
+    const r = getDb().query("SELECT last_at FROM threads WHERE id = ?").get(id) as Row | null;
+    return r ? Number(r.last_at) : null;
   },
   get(id: string): Thread | null {
     const r = getDb().query("SELECT * FROM threads WHERE id = ?").get(id) as Row | null;
@@ -628,11 +637,19 @@ function rowToChatMessage(raw: unknown): ChatMessage {
 }
 
 export const chats = {
-  list(spaceId: string | null, query?: string, accountIds?: string[] | null): Chat[] {
+  list(spaceId: string | null, query?: string, accountIds?: string[] | null, bounds?: { since?: number; until?: number | null }): Chat[] {
     const s = scope(spaceId, "c.space_id");
     const a = accountScope(accountIds, "c.account_id");
     const params: any[] = [...s.params, ...a.params];
     let where = `1=1${s.sql}${a.sql}`;
+    if (bounds?.since) {
+      where += " AND c.last_at >= ?";
+      params.push(bounds.since);
+    }
+    if (bounds?.until) {
+      where += " AND c.last_at <= ?";
+      params.push(bounds.until);
+    }
     if (query) {
       where += ` AND (c.title LIKE ? OR EXISTS (SELECT 1 FROM chat_messages m WHERE m.chat_id = c.id AND m.body LIKE ?))`;
       params.push(`%${query}%`, `%${query}%`);
@@ -745,12 +762,22 @@ function rowToMeeting(raw: unknown): Meeting {
 }
 
 export const meetings = {
-  list(spaceId: string | null, limit = 100, accountIds?: string[] | null): Meeting[] {
+  list(spaceId: string | null, limit = 100, accountIds?: string[] | null, bounds?: { since?: number; until?: number | null }): Meeting[] {
     const s = scope(spaceId);
     const a = accountScope(accountIds);
+    const params: any[] = [...s.params, ...a.params];
+    let where = `1=1${s.sql}${a.sql}`;
+    if (bounds?.since) {
+      where += " AND start >= ?";
+      params.push(bounds.since);
+    }
+    if (bounds?.until) {
+      where += " AND start <= ?";
+      params.push(bounds.until);
+    }
     return getDb()
-      .query(`SELECT * FROM meetings WHERE 1=1${s.sql}${a.sql} ORDER BY start DESC LIMIT ?`)
-      .all(...s.params, ...a.params, limit)
+      .query(`SELECT * FROM meetings WHERE ${where} ORDER BY start DESC LIMIT ?`)
+      .all(...params, limit)
       .map(rowToMeeting);
   },
   get(id: string): Meeting | null {

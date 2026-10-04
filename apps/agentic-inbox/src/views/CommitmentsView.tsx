@@ -6,6 +6,10 @@ import { sourceLabel, t } from "../i18n.ts";
 import { fmtDateTime, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
 
+interface ViewWindow {
+  hiddenCommitments: number;
+}
+
 const LANES: BoardLane[] = ["todo", "doing", "waiting", "done"];
 
 function dueLabel(dueAt: number | null): { text: string; cls: string } {
@@ -34,6 +38,11 @@ export function CommitmentsView({
 }) {
   const list = useData<Commitment[]>(
     () => api.get(`/api/commitments?${spaceQuery(spaceId)}`),
+    [spaceId],
+    (ev) => ev.type === "sync" || (ev.type === "data" && ev.entity === "commitments"),
+  );
+  const windowInfo = useData<ViewWindow>(
+    () => api.get(`/api/window?${spaceQuery(spaceId)}`),
     [spaceId],
     (ev) => ev.type === "sync" || (ev.type === "data" && ev.entity === "commitments"),
   );
@@ -198,6 +207,9 @@ export function CommitmentsView({
       <div className="feature-bar">
         <h2 className="kanban-title">{t("commitments.boardTitle")}</h2>
         <span className="muted small">{t("commitments.boardHint")}</span>
+        {(windowInfo.data?.hiddenCommitments ?? 0) > 0 && (
+          <span className="muted small">{t("window.hidden", { n: windowInfo.data!.hiddenCommitments })}</span>
+        )}
         <button className="btn btn-small" disabled={busy} onClick={() => void extract()}>
           {busy ? t("commitments.scanning") : t("commitments.rescan")}
         </button>

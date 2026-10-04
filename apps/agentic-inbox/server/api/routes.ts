@@ -28,6 +28,7 @@ import { microsoftConfigured } from "../auth/microsoft.ts";
 import { googleConfigured } from "../auth/google.ts";
 import { readSession } from "../auth/session.ts";
 import { contactEmails, ensureVisibleAccount, viewerEmail, visibleAccountIds, visibleAccounts } from "../auth/scope.ts";
+import { listBounds } from "../features/window.ts";
 
 type P<T extends string> = BunRequest<T>;
 
@@ -110,10 +111,13 @@ const rawRoutes = {
   /* ---------- mail ---------- */
   "/api/threads": h((req) => {
     const q = query(req);
+    const bounds = listBounds();
+    const asked = q.get("since") ? num(q.get("since"), 0) : 0;
     return ok(
       threads.list(spaceParam(req), {
         query: q.get("q") ?? undefined,
-        since: q.get("since") ? num(q.get("since"), 0) : undefined,
+        since: Math.max(bounds.since, asked),
+        until: bounds.until,
         limit: num(q.get("limit"), 200),
         accountIds: visibleAccountIds(req),
       }),
@@ -157,7 +161,10 @@ const rawRoutes = {
   }),
 
   /* ---------- chats ---------- */
-  "/api/chats": h((req) => ok(chats.list(spaceParam(req), query(req).get("q") ?? undefined, visibleAccountIds(req)))),
+  "/api/chats": h((req) => {
+    const bounds = listBounds();
+    return ok(chats.list(spaceParam(req), query(req).get("q") ?? undefined, visibleAccountIds(req), { since: bounds.since, until: bounds.until }));
+  }),
   "/api/chats/:id": h((req: P<"/api/chats/:id">) => {
     const chat = chats.get(req.params.id) ?? notFound("Chat not found");
     ensureVisibleAccount(req, chat.accountId);
@@ -182,7 +189,10 @@ const rawRoutes = {
   },
 
   /* ---------- meetings ---------- */
-  "/api/meetings": h((req) => ok(meetings.list(spaceParam(req), 100, visibleAccountIds(req)))),
+  "/api/meetings": h((req) => {
+    const bounds = listBounds();
+    return ok(meetings.list(spaceParam(req), 100, visibleAccountIds(req), { since: bounds.since, until: bounds.until }));
+  }),
   "/api/meetings/:id": h((req: P<"/api/meetings/:id">) => {
     const m = meetings.get(req.params.id) ?? notFound("Meeting not found");
     ensureVisibleAccount(req, m.accountId);

@@ -41,7 +41,7 @@ export interface SendChatInput {
 export interface Connector {
   provider: Provider;
   capabilities: Capability[];
-  sync(account: Account, opts: { full?: boolean }): Promise<SyncStats>;
+  sync(account: Account, opts: { full?: boolean; sinceMs?: number }): Promise<SyncStats>;
   sendMail(account: Account, input: SendMailInput): Promise<{ externalId: string | null }>;
   sendChatMessage?(account: Account, input: SendChatInput): Promise<{ externalId: string | null }>;
 }

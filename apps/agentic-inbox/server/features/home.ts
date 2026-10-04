@@ -2,6 +2,7 @@ import type { HomeCard, HomeDashboard, HomeLine, ThreadSummary } from "../../sha
 import { senderName } from "../../shared/types.ts";
 import { commitments, events, proposedDrafts, threads } from "../db/repo.ts";
 import { computeRadar } from "./radar.ts";
+import { commitmentInWindow, listBounds } from "./window.ts";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -36,13 +37,14 @@ export function buildHome(
   const toAt = fromAt + DAY;
   const owner = opts.ownerEmail ?? null;
   const waiting = computeRadar(spaceId, opts.accountIds).filter((r) => r.direction === "waiting_on_me");
+  const bounds = listBounds();
   const replies = threads
-    .list(spaceId, { limit: 80, accountIds: opts.accountIds })
+    .list(spaceId, { limit: 80, accountIds: opts.accountIds, since: bounds.since, until: bounds.until })
     .filter((t) => t.unread && needsReply(t));
   const today = events.list(spaceId, fromAt, toAt, opts.accountIds).filter((e) => e.responseStatus !== "declined");
   const upcoming = today.filter((e) => e.end >= now).sort((a, b) => a.start - b.start);
   const next = upcoming[0] ?? null;
-  const due = commitments.list(spaceId, { status: "open", ownerEmail: owner, shareWork: true }).filter((c) => c.dueAt !== null && c.dueAt <= now + 48 * HOUR);
+  const due = commitments.list(spaceId, { status: "open", ownerEmail: owner, shareWork: true }).filter((c) => c.dueAt !== null && c.dueAt <= now + 48 * HOUR && commitmentInWindow(c));
   const drafts = proposedDrafts.list(spaceId, { status: "pending", ownerEmail: owner || undefined });
 
   const cards: HomeCard[] = [

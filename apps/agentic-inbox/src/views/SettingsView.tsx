@@ -7,6 +7,7 @@ import { SpaceRules } from "../components/SpaceRules.tsx";
 import { LlmSettings } from "../components/LlmSettings.tsx";
 import { OrgSettings } from "../components/OrgSettings.tsx";
 import { MailTagsPanel } from "../components/MailTagsPanel.tsx";
+import { WindowPanel } from "../components/WindowPanel.tsx";
 import type { SessionView } from "../components/LoginView.tsx";
 
 function providerLabel(provider: Account["provider"]): string {
@@ -38,6 +39,9 @@ export function SettingsView({ status, onChanged }: { status: AppStatus | null; 
   return (
     <div className="pane pane-single scroll">
       <div className="settings">
+        <h2>{t("window.title")}</h2>
+        <WindowPanel spaceId={null} onChanged={onChanged} />
+
         <h2>{t("settings.spaces")}</h2>
         <p className="muted">{t("settings.spacesHint")}</p>
         <div className="form-grid">

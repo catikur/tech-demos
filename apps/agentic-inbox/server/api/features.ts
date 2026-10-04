@@ -14,6 +14,8 @@ import { produceDigest } from "../features/digests.ts";
 import { buildMorningBriefing } from "../features/briefing.ts";
 import { buildHome } from "../features/home.ts";
 import { listMailTags, saveMailTags } from "../features/mail-tags.ts";
+import { getViewWindow, hiddenCommitmentCount, saveViewWindow, visibleCommitments } from "../features/window.ts";
+import { rebuildViewWindow } from "../features/window-sync.ts";
 import { scanUnjudgedMail } from "../agent/jev-mail.ts";
 import { postMorningBriefing } from "../features/briefing-teams.ts";
 import { orgSettingsView, patchOrgConfig, savePlaud } from "../features/org-config.ts";
@@ -34,7 +36,7 @@ export const featureRoutes = {
   "/api/commitments": {
     GET: h((req) =>
       ok(
-        commitments.list(spaceParam(req), {
+        visibleCommitments(spaceParam(req), {
           status: query(req).get("status") ?? undefined,
           ownerEmail: viewerEmail(req),
           shareWork: true,
@@ -157,13 +159,44 @@ export const featureRoutes = {
   "/api/catchup": h(async (req) => {
     const q = query(req);
     const spaceId = spaceParam(req);
-    const to = num(q.get("to"), Date.now());
+    const window = getViewWindow();
+    let to = num(q.get("to"), Date.now());
     const preset = q.get("preset");
-    const from = preset === "seen" ? (lastSeen(spaceId) ?? to - 24 * 3_600_000) : num(q.get("from"), to - 24 * 3_600_000);
+    let from = preset === "seen" ? (lastSeen(spaceId) ?? to - 24 * 3_600_000) : num(q.get("from"), to - 24 * 3_600_000);
+    if (from < window.from) from = window.from;
+    if (window.to != null && to > window.to) to = window.to;
+    if (from > to) from = Math.max(window.from, to);
     const result = await buildCatchUp(spaceId, from, to, { polish: q.get("polish") === "1", accountIds: visibleAccountIds(req) });
     return ok(result);
   }),
   "/api/catchup/seen": { POST: h((req) => (markSeen(spaceParam(req)), ok({ ok: true }))) },
+
+  "/api/window": {
+    GET: h((req) => {
+      const w = getViewWindow();
+      return ok({ ...w, hiddenCommitments: hiddenCommitmentCount(spaceParam(req), w) });
+    }),
+    PATCH: h(async (req) => {
+      const body = await readJson<{ from?: unknown; to?: unknown }>(req);
+      const from = parseWindowInstant(body.from, false);
+      if (from == null) badRequest("Başlangıç tarihi gerekli");
+      const openEnded = body.to == null || body.to === "";
+      const to = openEnded ? null : parseWindowInstant(body.to, true);
+      if (!openEnded && to == null) badRequest("Bitiş tarihi geçersiz");
+      try {
+        const saved = saveViewWindow({ from, to });
+        return ok({ ...saved, hiddenCommitments: hiddenCommitmentCount(spaceParam(req), saved) });
+      } catch (err) {
+        badRequest(err instanceof Error ? err.message : String(err));
+      }
+    }),
+  },
+  "/api/window/rebuild": {
+    POST: h(async (req) => {
+      const result = await rebuildViewWindow(visibleAccountIds(req));
+      return ok({ ok: true, ...result, ...getViewWindow(), hiddenCommitments: hiddenCommitmentCount(spaceParam(req)) });
+    }),
+  },
 
   "/api/mail-tags": {
     GET: h(() => ok(listMailTags())),
@@ -297,7 +330,10 @@ export const featureRoutes = {
   },
 
   /* ---------- topics ---------- */
-  "/api/topics": h((req) => ok(topics.list(spaceParam(req)))),
+  "/api/topics": h((req) => {
+    const w = getViewWindow();
+    return ok(topics.list(spaceParam(req)).filter((t) => t.lastAt >= w.from && (w.to == null || t.firstAt <= w.to)));
+  }),
   "/api/topics/rebuild": {
     POST: h((req) => {
       const spaceId = spaceParam(req);
@@ -374,3 +410,19 @@ export const featureRoutes = {
     }),
   },
 };
+
+function parseWindowInstant(value: unknown, endOfDay: boolean): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return Math.floor(value);
+  if (typeof value === "string") {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [y, m, d] = value.split("-").map(Number);
+      return endOfDay ? Date.UTC(y!, m! - 1, d, 23, 59, 59, 999) : Date.UTC(y!, m! - 1, d);
+    }
+    const asNum = Number(value);
+    if (Number.isFinite(asNum) && value.trim() !== "") return Math.floor(asNum);
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}

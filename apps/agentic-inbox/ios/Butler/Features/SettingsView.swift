@@ -11,6 +11,12 @@ struct SettingsView: View {
             if let error { Text(error).foregroundStyle(Theme.danger).listRowBackground(Theme.raised) }
 
             Section {
+                NavigationLink("Tarih aralığı") { WindowSettingsView() }
+            } header: { Text("Tarih aralığı") } footer: {
+                Text("Gelen kutusu, pano, konular ve radar bu aralığı kullanır. Aralık dışındaki kartlar silinmez.")
+            }
+
+            Section {
                 ForEach(app.spaces) { s in NavigationLink(s.kind == .work ? "İş alanı" : "Kişisel alan") { SpaceRulesView(space: s) } }
             } header: { Text("Alanlar") } footer: {
                 Text("İş ve Kişisel katı sınırlardır: ajan, özetler ve bildirimler etkin alanla sınırlıdır. Yalnızca açık bir istek (“her iki alanda da”) sınırı geçer ve denetim kaydına yazılır.")
@@ -240,6 +246,85 @@ struct OrgAssistantView: View {
     private func run(_ key: String, _ work: @escaping () async throws -> Void) {
         busy = key
         Task { defer { busy = nil }; do { try await work(); message = "Kaydedildi." } catch { message = error.localizedDescription } }
+    }
+}
+
+struct WindowSettingsView: View {
+    @Environment(AppModel.self) private var app
+    @State private var from = Date()
+    @State private var to = Date()
+    @State private var openEnd = true
+    @State private var saved = false
+    @State private var hidden = 0
+    @State private var busy: String?
+    @State private var message: String?
+
+    var body: some View {
+        Form {
+            Section {
+                DatePicker("Başlangıç", selection: $from, displayedComponents: .date)
+                Toggle("Bitiş yok (bugün ve sonrası)", isOn: $openEnd)
+                if !openEnd {
+                    DatePicker("Bitiş", selection: $to, in: from..., displayedComponents: .date)
+                }
+                Text(saved ? "Kayıtlı aralık geçerli." : "Kayıtlı aralık yok: son 30 gün gösteriliyor.")
+                    .font(.footnote).foregroundStyle(Theme.faint)
+                if hidden > 0 {
+                    Text("\(hidden) pano kartı bu aralığın dışında; silinmedi.")
+                        .font(.footnote).foregroundStyle(Theme.dim)
+                }
+            } footer: {
+                Text("Yeniden derleme başlangıçtan postayı yeniden okur. Elle taşıdığınız kart aynı şeritte kalır. Aralık dışındakiler gizlenir; aralığı genişletince geri gelir.")
+            }
+            Section {
+                Button(busy == "save" ? "Kaydediliyor…" : "Aralığı kaydet") { run("save", rebuild: false) }
+                    .disabled(busy != nil)
+                Button(busy == "rebuild" ? "Derleniyor…" : "Bu aralığı yeniden derle") { run("rebuild", rebuild: true) }
+                    .disabled(busy != nil)
+                if let message { Text(message).font(.footnote).foregroundStyle(Theme.dim) }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .screenBackground()
+        .navigationTitle("Tarih aralığı")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+    }
+
+    private func load() async {
+        guard let api = app.api else { return }
+        guard let window = try? await api.viewWindow(space: app.spaceId) else { return }
+        from = Date(timeIntervalSince1970: window.from / 1000)
+        openEnd = window.to == nil
+        if let end = window.to { to = Date(timeIntervalSince1970: end / 1000) }
+        saved = window.saved
+        hidden = window.hiddenCommitments
+    }
+
+    private func run(_ key: String, rebuild: Bool) {
+        busy = key
+        message = nil
+        let start = Calendar.current.startOfDay(for: from).millis
+        let end: Double? = openEnd ? nil : ((Calendar.current.date(byAdding: DateComponents(day: 1, second: -1), to: Calendar.current.startOfDay(for: to)) ?? to).millis)
+        Task {
+            defer { busy = nil }
+            guard let api = app.api else { return }
+            do {
+                let savedWindow = try await api.saveViewWindow(space: app.spaceId, from: start, to: end)
+                if rebuild {
+                    let again = try await api.rebuildViewWindow(space: app.spaceId)
+                    saved = again.saved
+                    hidden = again.hiddenCommitments
+                    message = "Aralık yeniden derlendi. Pano şeritleri duruyor."
+                } else {
+                    saved = savedWindow.saved
+                    hidden = savedWindow.hiddenCommitments
+                    message = "Aralık kaydedildi."
+                }
+            } catch {
+                message = error.localizedDescription
+            }
+        }
     }
 }
 

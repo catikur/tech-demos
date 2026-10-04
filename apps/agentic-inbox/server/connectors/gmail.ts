@@ -135,13 +135,13 @@ export class GmailConnector implements Connector {
   provider = "gmail" as const;
   capabilities: Connector["capabilities"] = env.google.calendar ? ["mail", "calendar"] : ["mail"];
 
-  async sync(account: Account, opts: { full?: boolean } = {}): Promise<SyncStats> {
+  async sync(account: Account, opts: { full?: boolean; sinceMs?: number } = {}): Promise<SyncStats> {
     const g = new GoogleClient(account.id);
     const stats = emptyStats();
     const profile = await g.request<{ emailAddress: string; historyId: string }>(`${GMAIL}/profile`);
     const me = profile.emailAddress.toLowerCase();
     const cursors = accounts.cursors(account.id);
-    const startHistoryId = opts.full ? null : cursors["gmail.historyId"];
+    const startHistoryId = opts.full || opts.sinceMs != null ? null : cursors["gmail.historyId"];
 
     let threadIds: string[];
     if (startHistoryId) {
@@ -149,11 +149,11 @@ export class GmailConnector implements Connector {
         threadIds = await this.changedThreadIds(g, startHistoryId);
       } catch (err) {
         // 404 = history too old; fall back to a full window.
-        if (err instanceof GoogleError && err.status === 404) threadIds = await this.recentThreadIds(g);
+        if (err instanceof GoogleError && err.status === 404) threadIds = await this.recentThreadIds(g, opts.sinceMs);
         else throw err;
       }
     } else {
-      threadIds = await this.recentThreadIds(g);
+      threadIds = await this.recentThreadIds(g, opts.sinceMs);
     }
     for (const id of threadIds) {
       try {
@@ -167,16 +167,18 @@ export class GmailConnector implements Connector {
     accounts.setCursor(account.id, "gmail.historyId", profile.historyId);
 
     if (env.google.calendar) {
-      await this.syncCalendar(g, account, me, stats).catch((e) => console.warn(`[gmail] calendar skipped: ${e instanceof Error ? e.message : e}`));
+      await this.syncCalendar(g, account, me, stats, opts.sinceMs).catch((e) => console.warn(`[gmail] calendar skipped: ${e instanceof Error ? e.message : e}`));
     }
     return stats;
   }
 
-  private async recentThreadIds(g: GoogleClient): Promise<string[]> {
+  private async recentThreadIds(g: GoogleClient, sinceMs?: number): Promise<string[]> {
+    const days = sinceMs != null ? Math.min(365 * 5, Math.max(1, Math.ceil((Date.now() - sinceMs) / DAY))) : 30;
     const ids: string[] = [];
     let pageToken: string | undefined;
-    for (let page = 0; page < 3; page++) {
-      const res = await g.request<any>(`${GMAIL}/threads?q=newer_than:30d&maxResults=50${pageToken ? `&pageToken=${pageToken}` : ""}`);
+    const pages = days > 30 ? 8 : 3;
+    for (let page = 0; page < pages; page++) {
+      const res = await g.request<any>(`${GMAIL}/threads?q=newer_than:${days}d&maxResults=50${pageToken ? `&pageToken=${pageToken}` : ""}`);
       ids.push(...(res.threads ?? []).map((t: any) => t.id));
       pageToken = res.nextPageToken;
       if (!pageToken) break;
@@ -267,8 +269,9 @@ export class GmailConnector implements Connector {
     }
   }
 
-  private async syncCalendar(g: GoogleClient, account: Account, me: string, stats: SyncStats): Promise<void> {
-    const timeMin = new Date(Date.now() - 14 * DAY).toISOString();
+  private async syncCalendar(g: GoogleClient, account: Account, me: string, stats: SyncStats, sinceMs?: number): Promise<void> {
+    const lookback = sinceMs != null && sinceMs < Date.now() - 14 * DAY ? sinceMs : Date.now() - 14 * DAY;
+    const timeMin = new Date(lookback).toISOString();
     const timeMax = new Date(Date.now() + 30 * DAY).toISOString();
     const res = await g.request<any>(
       `${GCAL}/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=100`,

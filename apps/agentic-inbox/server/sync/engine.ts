@@ -15,7 +15,7 @@ export function onPostSync(hook: PostSyncHook): void {
 
 const inFlight = new Set<string>();
 
-export async function syncAccount(account: Account, opts: { full?: boolean } = {}): Promise<SyncStats> {
+export async function syncAccount(account: Account, opts: { full?: boolean; sinceMs?: number } = {}): Promise<SyncStats> {
   if (inFlight.has(account.id)) return emptyStats();
   inFlight.add(account.id);
   try {
@@ -44,7 +44,7 @@ export async function syncAccount(account: Account, opts: { full?: boolean } = {
   }
 }
 
-export async function syncAll(opts: { full?: boolean; accountIds?: string[] | null } = {}): Promise<Record<string, SyncStats | { error: string }>> {
+export async function syncAll(opts: { full?: boolean; sinceMs?: number; accountIds?: string[] | null } = {}): Promise<Record<string, SyncStats | { error: string }>> {
   const out: Record<string, SyncStats | { error: string }> = {};
   const list = opts.accountIds == null ? accounts.all() : accounts.all().filter((a) => opts.accountIds!.includes(a.id));
   for (const account of list) {

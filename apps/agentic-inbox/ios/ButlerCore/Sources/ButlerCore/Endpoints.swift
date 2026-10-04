@@ -129,6 +129,19 @@ public extension ButlerAPI {
 
     func home(space: String?) async throws -> HomeDashboard { try await get("/api/home", query: spaceQuery(space)) }
 
+    func viewWindow(space: String?) async throws -> ViewWindow {
+        try await get("/api/window", query: spaceQuery(space))
+    }
+
+    func saveViewWindow(space: String?, from: Double, to: Double?) async throws -> ViewWindow {
+        struct Body: Encodable { var from: Double; var to: Double? }
+        return try await patch("/api/window", query: spaceQuery(space), body: Body(from: from, to: to))
+    }
+
+    func rebuildViewWindow(space: String?) async throws -> ViewWindow {
+        try await post("/api/window/rebuild", query: spaceQuery(space))
+    }
+
     func mailTags() async throws -> [MailTag] { try await get("/api/mail-tags") }
 
     func saveMailTags(_ tags: [MailTag]) async throws -> [MailTag] {

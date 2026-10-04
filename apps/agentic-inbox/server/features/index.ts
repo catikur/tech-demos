@@ -7,6 +7,7 @@ import { registerMockIntent, mockTool, mockSleep, MOCK_PACE } from "../agent/moc
 import { inScope, inAccountScope, outOfScopeMessage } from "../agent/policy.ts";
 import { jevAllowsSideEffect } from "../agent/jev-gate.ts";
 import { parseDue } from "./text.ts";
+import { commitmentInWindow } from "./window.ts";
 import { extractForSpace } from "./commitments.ts";
 import { pushCommitmentToTodo } from "./ms-tasks.ts";
 import { briefForEvent } from "./briefs.ts";
@@ -36,7 +37,7 @@ registerTool({
     status: z.enum(["open", "done", "dropped"]).optional().describe("Default: open"),
   }),
   async run(input, ctx) {
-    let list = commitments.list(ctx.spaceId, { status: input.status ?? "open" });
+    let list = commitments.list(ctx.spaceId, { status: input.status ?? "open" }).filter((c) => commitmentInWindow(c));
     if (input.direction) list = list.filter((c) => c.direction === input.direction);
     if (list.length === 0) return { output: "No matching commitments." };
     return {
