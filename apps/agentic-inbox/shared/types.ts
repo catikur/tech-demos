@@ -215,6 +215,10 @@ export interface Commitment {
   msTaskId?: string | null;
   /** User who extracted/created this; Work-space rows are still shared. */
   ownerEmail?: string;
+  /** Parent card when this row is a subtask. */
+  parentId?: string | null;
+  /** User-set deadlines are locked so a later guess cannot replace them. */
+  dueLocked?: boolean;
 }
 
 export type SourceKind = "thread" | "chat" | "meeting" | "event" | "manual";

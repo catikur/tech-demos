@@ -90,7 +90,12 @@ export function visibleCommitments(
   opts: { status?: string; counterpart?: string; ownerEmail?: string | null; shareWork?: boolean } = {},
   w = getViewWindow(),
 ): Commitment[] {
-  return commitments.list(spaceId, opts).filter((c) => commitmentInWindow(c, w));
+  const all = commitments.list(spaceId, opts);
+  const visibleRoots = new Set(all.filter((c) => !c.parentId && commitmentInWindow(c, w)).map((c) => c.id));
+  return all.filter((c) => {
+    if (c.parentId) return visibleRoots.has(c.parentId);
+    return visibleRoots.has(c.id);
+  });
 }
 
 export function hiddenCommitmentCount(spaceId: string | null = null, w = getViewWindow()): number {

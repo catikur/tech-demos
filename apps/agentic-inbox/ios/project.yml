@@ -58,3 +58,9 @@ targets:
           # Local `bun run dev` demo is plain http; production is https only.
           NSAllowsLocalNetworking: true
         ITSAppUsesNonExemptEncryption: false
+        UIBackgroundModes:
+          - remote-notification
+    entitlements:
+      path: Butler/Butler.entitlements
+      properties:
+        aps-environment: development

@@ -4,6 +4,7 @@ import SwiftUI
 struct CalendarView: View {
     @Environment(AppModel.self) private var app
     @State private var selected: CalendarEvent?
+    @State private var meetingJump: String?
 
     var body: some View {
         Loading(load: {
@@ -41,6 +42,9 @@ struct CalendarView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                RecordedMeetings()
+            }
             .listStyle(.plain)
             .overlay { if events.isEmpty { EmptyState(icon: "calendar", title: "Bu aralıkta etkinlik yok") } }
             .refreshable { reload() }
@@ -50,13 +54,19 @@ struct CalendarView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { CockpitToolbar() }
         .navigationDestination(item: $selected) { EventDetailView(event: $0) }
+        .navigationDestination(isPresented: Binding(get: { meetingJump != nil }, set: { if !$0 { meetingJump = nil } })) {
+            if let meetingJump { MeetingDetailView(meetingId: meetingJump) }
+        }
         .onAppear { consumeJump() }
         .onChange(of: app.jump) { _, _ in consumeJump() }
     }
 
     private func consumeJump() {
-        guard let jump = app.consumeJump(for: .event) else { return }
-        Task { selected = try? await app.api?.event(jump.ref.id) }
+        if let jump = app.consumeJump(for: .event) {
+            Task { selected = try? await app.api?.event(jump.ref.id) }
+            return
+        }
+        if let jump = app.consumeJump(for: .meeting) { meetingJump = jump.ref.id }
     }
 
     /// Cross-space overlaps (meaningful in the "All" view).
@@ -92,11 +102,40 @@ struct EventDetailView: View {
                 SectionTitle(text: "Katılımcılar", count: event.attendees.count)
                 FlowChips(items: event.attendees.map { Address.name($0) })
                 BriefPanel(event: event)
+                if let meetingId = event.meetingId {
+                    NavigationLink("Transkript ve takip") { MeetingDetailView(meetingId: meetingId) }
+                }
             }
             .padding(16)
         }
         .screenBackground()
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct RecordedMeetings: View {
+    @Environment(AppModel.self) private var app
+    var body: some View {
+        Loading(load: { try await app.api!.meetings(space: app.spaceId) }, refreshOn: ["meetings"]) { meetings, _ in
+            if meetings.isEmpty { EmptyView() } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Kayıtlı toplantılar").font(.caption.weight(.bold)).foregroundStyle(Theme.faint)
+                    ScrollView(.horizontal) {
+                        HStack {
+                            ForEach(meetings.prefix(8)) { m in
+                                NavigationLink { MeetingDetailView(meetingId: m.id) } label: {
+                                    Text(m.title).font(.caption).lineLimit(1)
+                                        .padding(.horizontal, 10).padding(.vertical, 6)
+                                        .background(Theme.raised, in: Capsule())
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Theme.bg)
+            }
+        }
     }
 }
 

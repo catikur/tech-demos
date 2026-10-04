@@ -1,6 +1,6 @@
 import type { BunRequest } from "bun";
 import type { Commitment, MailTag, MemoryKind } from "../../shared/types.ts";
-import { audit, commitments, events, meetings, memories, notes, people, proposedDrafts, spaces, topics } from "../db/repo.ts";
+import { audit, commitments, devices, events, meetings, memories, notes, people, proposedDrafts, spaces, threads, topics } from "../db/repo.ts";
 import { extractForSpace } from "../features/commitments.ts";
 import { completeTodoTask, pushCommitmentToTodo } from "../features/ms-tasks.ts";
 import { briefForEvent } from "../features/briefs.ts";
@@ -14,6 +14,7 @@ import { produceDigest } from "../features/digests.ts";
 import { buildMorningBriefing } from "../features/briefing.ts";
 import { buildHome } from "../features/home.ts";
 import { listMailTags, saveMailTags } from "../features/mail-tags.ts";
+import { addThreadToBoard } from "../features/board.ts";
 import { getViewWindow, hiddenCommitmentCount, saveViewWindow, visibleCommitments } from "../features/window.ts";
 import { rebuildViewWindow } from "../features/window-sync.ts";
 import { scanUnjudgedMail } from "../agent/jev-mail.ts";
@@ -44,23 +45,42 @@ export const featureRoutes = {
       ),
     ),
     POST: h(async (req) => {
-      const body = await readJson<{ spaceId: string; direction: Commitment["direction"]; counterpart: string; text: string; due?: string }>(req);
+      const body = await readJson<{ spaceId: string; direction: Commitment["direction"]; counterpart: string; text: string; due?: string; parentId?: string }>(req);
       if (!body.spaceId || !spaces.get(body.spaceId)) badRequest("spaceId required");
       if (!body.text?.trim() || !body.counterpart?.trim()) badRequest("text and counterpart required");
+      const parent = body.parentId ? commitments.get(body.parentId) : null;
+      if (body.parentId && !parent) badRequest("parent not found");
       const person = findPerson(body.spaceId, body.counterpart);
+      const dueAt = body.due ? (Date.parse(body.due) || parseDue(body.due)) : null;
       commitments.insertUnique({
         spaceId: body.spaceId,
         direction: body.direction === "owed_to_me" ? "owed_to_me" : "owed_by_me",
         counterpart: person?.email ?? body.counterpart,
         text: body.text.trim(),
-        dueAt: body.due ? (Date.parse(body.due) || parseDue(body.due)) : null,
+        dueAt,
+        dueLocked: dueAt != null,
         status: "open",
-        source: { kind: "manual", id: "ui", label: "Added manually" },
+        source: parent?.source ?? { kind: "manual", id: "ui", label: "Added manually" },
         confidence: 1,
         ownerEmail: viewerEmail(req) || undefined,
+        parentId: parent?.id ?? null,
       });
       broadcast({ type: "data", entity: "commitments", spaceId: body.spaceId });
       return ok({ ok: true });
+    }),
+  },
+  "/api/commitments/from-thread": {
+    POST: h(async (req) => {
+      const body = await readJson<{ threadId?: string; text?: string }>(req);
+      if (!body.threadId) badRequest("threadId required");
+      try {
+        const card = addThreadToBoard(body.threadId, body.text, viewerEmail(req) || undefined);
+        ensureVisibleAccount(req, threads.accountId(body.threadId));
+        broadcast({ type: "data", entity: "commitments", spaceId: card.spaceId });
+        return ok(card);
+      } catch (err) {
+        badRequest(err instanceof Error ? err.message : String(err));
+      }
     }),
   },
   "/api/commitments/extract": {
@@ -96,7 +116,11 @@ export const featureRoutes = {
   "/api/commitments/:id": {
     PATCH: h(async (req: P<"/api/commitments/:id">) => {
       const c = commitments.get(req.params.id) ?? notFound("Commitment not found");
-      const body = await readJson<{ status?: Commitment["status"]; boardLane?: string }>(req);
+      const body = await readJson<{ status?: Commitment["status"]; boardLane?: string; dueAt?: number | null }>(req);
+      if (body.dueAt !== undefined) {
+        if (body.dueAt !== null && !Number.isFinite(body.dueAt)) badRequest("Invalid dueAt");
+        commitments.setDue(c.id, body.dueAt, true);
+      }
       if (body.boardLane) {
         if (!["todo", "doing", "waiting", "done"].includes(body.boardLane)) badRequest("Invalid boardLane");
         commitments.setLane(c.id, body.boardLane as "todo" | "doing" | "waiting" | "done");
@@ -105,15 +129,16 @@ export const featureRoutes = {
             console.error(`[todo] complete ${c.id}:`, err instanceof Error ? err.message : err),
           );
         }
-      } else {
-        if (!body.status || !["open", "done", "dropped"].includes(body.status)) badRequest("Invalid status");
+      } else if (body.status) {
+        if (!["open", "done", "dropped"].includes(body.status)) badRequest("Invalid status");
         commitments.setStatus(c.id, body.status);
         if (body.status === "done") {
+          commitments.setLane(c.id, "done");
           await completeTodoTask(c.id).catch((err) =>
             console.error(`[todo] complete ${c.id}:`, err instanceof Error ? err.message : err),
           );
         }
-      }
+      } else if (body.dueAt === undefined) badRequest("Invalid status");
       audit.log({ spaceId: c.spaceId, actor: "user", action: `commitment.${body.boardLane ?? body.status}`, detail: c.text });
       broadcast({ type: "data", entity: "commitments", spaceId: c.spaceId });
       return ok(commitments.get(c.id));
@@ -189,6 +214,15 @@ export const featureRoutes = {
       } catch (err) {
         badRequest(err instanceof Error ? err.message : String(err));
       }
+    }),
+  },
+  "/api/devices": {
+    POST: h(async (req) => {
+      const body = await readJson<{ token?: string; platform?: string }>(req);
+      if (!body.token || body.token.trim().length < 8) badRequest("token required");
+      const platform = body.platform === "ios" ? "ios" : "web";
+      devices.save(body.token.trim(), platform, viewerEmail(req) || "");
+      return ok({ ok: true });
     }),
   },
   "/api/window/rebuild": {

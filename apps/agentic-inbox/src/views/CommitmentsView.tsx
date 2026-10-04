@@ -53,10 +53,14 @@ export function CommitmentsView({
   const [overLane, setOverLane] = useState<BoardLane | null>(null);
   const [draftText, setDraftText] = useState("");
   const [draftWho, setDraftWho] = useState("");
+  const [draftDue, setDraftDue] = useState("");
+  const [subtaskDraft, setSubtaskDraft] = useState<Record<string, string>>({});
   const items = list.data ?? [];
-  const dropped = items.filter((c) => c.status === "dropped");
+  const roots = items.filter((c) => !c.parentId);
+  const childrenOf = (id: string) => items.filter((c) => c.parentId === id);
+  const dropped = roots.filter((c) => c.status === "dropped");
   const byLane: Record<BoardLane, Commitment[]> = { todo: [], doing: [], waiting: [], done: [] };
-  for (const c of items) {
+  for (const c of roots) {
     if (c.status === "dropped") continue;
     byLane[laneOf(c)].push(c);
   }
@@ -100,9 +104,11 @@ export function CommitmentsView({
         direction: "owed_by_me",
         counterpart,
         text,
+        due: draftDue || undefined,
       });
       setDraftText("");
       setDraftWho("");
+      setDraftDue("");
       list.reload();
     } finally {
       setBusy(false);
@@ -138,6 +144,60 @@ export function CommitmentsView({
           {spaceId === null && <SpaceBadge spaces={spaces} spaceId={c.spaceId} />}
         </div>
         <p className="card-text">{c.text}</p>
+        <label className="kanban-due">
+          <span className="muted small">{t("commitments.dueLabel")}</span>
+          <input
+            type="date"
+            value={c.dueAt ? new Date(c.dueAt).toISOString().slice(0, 10) : ""}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              const value = e.target.value;
+              const dueAt = value ? new Date(`${value}T17:00:00`).getTime() : null;
+              void api.patch(`/api/commitments/${c.id}`, { dueAt }).then(() => list.reload());
+            }}
+          />
+        </label>
+        {childrenOf(c.id).length > 0 && (
+          <ul className="subtasks">
+            {childrenOf(c.id).map((child) => (
+              <li key={child.id} className={child.status === "done" ? "is-done" : ""}>
+                <span>{child.text}</span>
+                {child.status !== "done" && (
+                  <button className="link-btn" onClick={() => void setLane(child.id, "done")}>
+                    {t("commitments.markDone")}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        <form
+          className="subtask-add"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const text = (subtaskDraft[c.id] ?? "").trim();
+            if (!text) return;
+            void api
+              .post(`/api/commitments?${spaceQuery(spaceId)}`, {
+                spaceId: c.spaceId,
+                direction: c.direction,
+                counterpart: c.counterpart,
+                text,
+                parentId: c.id,
+              })
+              .then(() => {
+                setSubtaskDraft((cur) => ({ ...cur, [c.id]: "" }));
+                list.reload();
+              });
+          }}
+        >
+          <input
+            value={subtaskDraft[c.id] ?? ""}
+            placeholder={t("commitments.subtaskPlaceholder")}
+            onPointerDown={(e) => e.stopPropagation()}
+            onChange={(e) => setSubtaskDraft((cur) => ({ ...cur, [c.id]: e.target.value }))}
+          />
+        </form>
         <div className="card-meta">
           <button className="link-btn" onClick={() => onOpenSource(c.source)}>
             {t("commitments.from", { kind: sourceLabel(c.source.kind), label: c.source.label })}
@@ -226,6 +286,7 @@ export function CommitmentsView({
       >
         <input value={draftText} onChange={(e) => setDraftText(e.target.value)} placeholder={t("commitments.addText")} />
         <input value={draftWho} onChange={(e) => setDraftWho(e.target.value)} placeholder={t("commitments.addWho")} />
+        <input type="date" value={draftDue} onChange={(e) => setDraftDue(e.target.value)} aria-label={t("commitments.dueLabel")} />
         <button className="btn btn-small btn-primary" disabled={busy || !draftText.trim() || !draftWho.trim() || !spaceId}>
           {t("commitments.addCard")}
         </button>

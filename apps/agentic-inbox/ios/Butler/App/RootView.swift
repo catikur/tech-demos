@@ -129,7 +129,6 @@ struct MoreView: View {
     private let items: [(MoreDestination, String, String)] = [
         (.briefing, "Brifing", "sun.max"),
         (.chats, "Sohbetler", "bubble.left.and.bubble.right"),
-        (.meetings, "Toplantılar", "video"),
         (.catchup, "Neyi kaçırdım", "arrow.counterclockwise"),
         (.radar, "Radar", "scope"),
         (.topics, "Konular", "number"),

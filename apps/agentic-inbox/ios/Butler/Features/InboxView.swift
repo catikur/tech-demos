@@ -79,6 +79,7 @@ struct ThreadView: View {
     var prefill: String?
     @Environment(AppModel.self) private var app
     @State private var draft = ""
+    @State private var pinned = false
     @State private var state: SendState = .idle
     @FocusState private var composing: Bool
 
@@ -118,6 +119,11 @@ struct ThreadView: View {
                 .background(Theme.sunken, in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous).stroke(Theme.border))
             HStack {
+                Button(pinned ? "Panoda" : "Panoya ekle") {
+                    Task {
+                        do { _ = try await app.api?.pinThread(thread.id); pinned = true } catch { state = .failed(error.localizedDescription) }
+                    }
+                }.buttonStyle(PrimaryButtonStyle(prominent: false)).disabled(pinned)
                 switch state {
                 case .sent: Label("Gönderildi", systemImage: "checkmark").font(.footnote).foregroundStyle(Theme.ok)
                 case .failed(let msg): Text(msg).font(.footnote).foregroundStyle(Theme.danger).lineLimit(2)

@@ -1393,6 +1393,38 @@ a {
   letter-spacing: 0.05em;
 }
 
+.subtasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.subtasks li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.subtasks li.is-done {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.subtask-add input,
+.kanban-due input {
+  width: 100%;
+}
+
+.kanban-due {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .window-dates {
   display: flex;
   flex-wrap: wrap;

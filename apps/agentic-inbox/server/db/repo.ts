@@ -358,6 +358,10 @@ export const threads = {
       .map(rowToMessage);
     return { ...rowToThreadBase(r), messages };
   },
+  accountId(id: string): string | null {
+    const r = getDb().query("SELECT account_id FROM threads WHERE id = ?").get(id) as Row | null;
+    return r?.account_id ?? null;
+  },
   byExternalId(accountId: string, externalId: string): string | null {
     const r = getDb()
       .query("SELECT id FROM threads WHERE account_id = ? AND external_id = ?")
@@ -850,7 +854,7 @@ export const meetings = {
 function rowToCommitment(raw: unknown): Commitment {
   const r = raw as Row;
   const person = getDb().query("SELECT name FROM people WHERE space_id = ? AND email = ?").get(r.space_id, r.counterpart) as Row | null;
-  return {
+  const out: Commitment = {
     id: r.id,
     spaceId: r.space_id,
     direction: r.direction,
@@ -865,7 +869,17 @@ function rowToCommitment(raw: unknown): Commitment {
     confidence: r.confidence,
     msTaskId: r.ms_task_id ?? null,
     ownerEmail: r.owner_email || undefined,
+    parentId: r.parent_id ?? null,
+    dueLocked: !!r.due_locked,
   };
+  if (out.source.kind === "thread" && threads.activityAt(out.source.id) == null && r.source_external && r.source_account) {
+    const found = threads.byExternalId(r.source_account, r.source_external);
+    if (found) {
+      out.source = { ...out.source, id: found };
+      getDb().query("UPDATE commitments SET source_id = ? WHERE id = ?").run(found, out.id);
+    }
+  }
+  return out;
 }
 
 export const commitments = {
@@ -904,10 +918,12 @@ export const commitments = {
     const exists = getDb().query("SELECT 1 FROM commitments WHERE fingerprint = ?").get(fingerprint);
     if (exists) return false;
     const lane = c.boardLane ?? defaultBoardLane(c);
+    const sourceExternal = c.source.kind === "thread" ? threads.externalId(c.source.id) : null;
+    const sourceAccount = c.source.kind === "thread" ? threads.accountId(c.source.id) : null;
     getDb()
       .query(
-        `INSERT INTO commitments (id, space_id, direction, counterpart, text, due_at, status, board_lane, source_kind, source_id, source_label, created_at, confidence, fingerprint, owner_email)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO commitments (id, space_id, direction, counterpart, text, due_at, status, board_lane, source_kind, source_id, source_label, created_at, confidence, fingerprint, owner_email, parent_id, due_locked, source_external, source_account)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         c.id ?? newId("cm"),
@@ -925,13 +941,32 @@ export const commitments = {
         c.confidence,
         fingerprint,
         owner,
+        c.parentId ?? null,
+        c.dueLocked ? 1 : 0,
+        sourceExternal,
+        sourceAccount,
       );
     return true;
   },
+  setDue(id: string, dueAt: number | null, locked: boolean): void {
+    getDb().query("UPDATE commitments SET due_at = ?, due_locked = ? WHERE id = ?").run(dueAt, locked ? 1 : 0, id);
+  },
+  /** Write a guessed deadline only when the user has not set one. */
+  fillDueIfEmpty(id: string, dueAt: number): boolean {
+    const result = getDb()
+      .query("UPDATE commitments SET due_at = ? WHERE id = ? AND due_at IS NULL AND due_locked = 0")
+      .run(dueAt, id);
+    return result.changes > 0;
+  },
+  children(parentId: string): Commitment[] {
+    return getDb()
+      .query("SELECT * FROM commitments WHERE parent_id = ? ORDER BY created_at ASC")
+      .all(parentId)
+      .map(rowToCommitment);
+  },
   setStatus(id: string, status: Commitment["status"]): void {
-    const lane = status === "done" ? "done" : status === "open" ? null : undefined;
-    if (lane === "done") {
-      getDb().query("UPDATE commitments SET status = ?, board_lane = ? WHERE id = ?").run(status, "done", id);
+    if (status === "done") {
+      commitments.setLane(id, "done");
       return;
     }
     if (status === "open") {
@@ -945,6 +980,9 @@ export const commitments = {
   setLane(id: string, lane: BoardLane): void {
     const next = applyBoardLane(lane);
     getDb().query("UPDATE commitments SET status = ?, board_lane = ? WHERE id = ?").run(next.status, next.boardLane, id);
+    if (lane === "done") {
+      getDb().query("UPDATE commitments SET status = 'done', board_lane = 'done' WHERE parent_id = ?").run(id);
+    }
   },
   setMsTask(id: string, listId: string, taskId: string): void {
     getDb().query("UPDATE commitments SET ms_list_id = ?, ms_task_id = ? WHERE id = ?").run(listId, taskId, id);
@@ -1095,6 +1133,7 @@ export const notifications = {
         "INSERT INTO notifications (id, space_id, kind, title, body, link, read, created_at, owner_email) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
       )
       .run(full.id, full.spaceId, full.kind, full.title, full.body, full.link, full.createdAt, (n.ownerEmail || "").toLowerCase());
+    void import("../features/apns.ts").then((m) => m.pushApns(n.ownerEmail, full.title, full.body)).catch(() => undefined);
     return full;
   },
   markAllRead(spaceId: string | null): void {
@@ -1109,6 +1148,26 @@ export const notifications = {
       .query("SELECT 1 FROM notifications WHERE kind = ? AND title = ? AND created_at >= ? LIMIT 1")
       .get(kind, title, Date.now() - withinMs);
     return !!r;
+  },
+};
+
+export const devices = {
+  save(token: string, platform: string, ownerEmail: string): void {
+    getDb()
+      .query(
+        `INSERT INTO device_tokens (token, platform, owner_email, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(token) DO UPDATE SET platform = excluded.platform, owner_email = excluded.owner_email, updated_at = excluded.updated_at`,
+      )
+      .run(token, platform, ownerEmail.toLowerCase(), Date.now());
+  },
+  forOwner(ownerEmail: string): string[] {
+    const rows = getDb()
+      .query("SELECT token FROM device_tokens WHERE owner_email = ? AND platform = 'ios'")
+      .all(ownerEmail.toLowerCase()) as Row[];
+    return rows.map((r) => r.token);
+  },
+  remove(token: string): void {
+    getDb().query("DELETE FROM device_tokens WHERE token = ?").run(token);
   },
 };
 

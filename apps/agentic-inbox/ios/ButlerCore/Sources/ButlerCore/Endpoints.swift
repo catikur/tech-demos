@@ -112,10 +112,25 @@ public extension ButlerAPI {
         try await patch("/api/commitments/\(id)", body: ["status": status.rawValue])
     }
 
-    func createCommitment(space: String, text: String, counterpart: String, direction: CommitmentDirection = .owedByMe, due: String? = nil) async throws {
-        struct Body: Encodable { var spaceId: String; var direction: String; var counterpart: String; var text: String; var due: String? }
+    func createCommitment(space: String, text: String, counterpart: String, direction: CommitmentDirection = .owedByMe, due: String? = nil, parentId: String? = nil) async throws {
+        struct Body: Encodable { var spaceId: String; var direction: String; var counterpart: String; var text: String; var due: String?; var parentId: String? }
         _ = try await post("/api/commitments", query: spaceQuery(space),
-                           body: Body(spaceId: space, direction: direction.rawValue, counterpart: counterpart, text: text, due: due)) as OkResponse
+                           body: Body(spaceId: space, direction: direction.rawValue, counterpart: counterpart, text: text, due: due, parentId: parentId)) as OkResponse
+    }
+
+    func setDue(_ id: String, dueAt: Double?) async throws -> Commitment {
+        struct Body: Encodable { var dueAt: Double? }
+        return try await patch("/api/commitments/\(id)", body: Body(dueAt: dueAt))
+    }
+
+    func pinThread(_ id: String) async throws -> Commitment {
+        struct Body: Encodable { var threadId: String }
+        return try await post("/api/commitments/from-thread", body: Body(threadId: id))
+    }
+
+    func registerDevice(token: String) async throws {
+        struct Body: Encodable { var token: String; var platform: String }
+        _ = try await post("/api/devices", body: Body(token: token, platform: "ios")) as OkResponse
     }
 
     func extractCommitments(space: String?) async throws -> Int {

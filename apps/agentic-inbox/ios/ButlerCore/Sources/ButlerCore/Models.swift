@@ -302,6 +302,8 @@ public struct Commitment: Codable, Hashable, Identifiable, Sendable {
     public var confidence: Double
     public var msTaskId: String?
     public var ownerEmail: String?
+    public var parentId: String?
+    public var dueLocked: Bool?
 
     /// Mirrors `laneOf()` in the web cockpit: done wins, then stored lane, then direction.
     public var lane: BoardLane {

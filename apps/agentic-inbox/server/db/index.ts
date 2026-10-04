@@ -109,6 +109,19 @@ function migrate(database: Database): void {
     database.exec("UPDATE commitments SET board_lane = 'waiting' WHERE direction = 'owed_to_me' AND status = 'open'");
     database.exec("UPDATE commitments SET board_lane = 'done' WHERE status = 'done'");
   }
+  const cardCols = columnNames(database, "commitments");
+  if (cardCols.size > 0 && !cardCols.has("parent_id")) database.exec("ALTER TABLE commitments ADD COLUMN parent_id TEXT");
+  if (cardCols.size > 0 && !cardCols.has("due_locked")) database.exec("ALTER TABLE commitments ADD COLUMN due_locked INTEGER NOT NULL DEFAULT 0");
+  if (cardCols.size > 0 && !cardCols.has("source_external")) database.exec("ALTER TABLE commitments ADD COLUMN source_external TEXT");
+  if (cardCols.size > 0 && !cardCols.has("source_account")) database.exec("ALTER TABLE commitments ADD COLUMN source_account TEXT");
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS device_tokens (
+      token TEXT PRIMARY KEY,
+      platform TEXT NOT NULL,
+      owner_email TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER NOT NULL
+    );
+  `);
 }
 
 export function getDb(): Database {
