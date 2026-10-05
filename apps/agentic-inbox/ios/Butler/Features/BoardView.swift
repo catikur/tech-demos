@@ -50,9 +50,10 @@ struct BoardView: View {
                     ScrollView(.horizontal) {
                         LazyHStack(alignment: .top, spacing: 12) {
                             ForEach(BoardLane.allCases, id: \.self) { lane in
-                                LaneColumn(lane: lane, cards: live.filter { $0.lane == lane }, all: cards, onChanged: reload,
+                                LaneColumn(lane: lane, cards: live.filter { $0.lane == lane }, all: cards,
                                            onMove: { c, target in move(c, to: target, reload: reload) },
-                                           onStatus: { c, s in setStatus(c, s, reload: reload) })
+                                           onStatus: { c, s in setStatus(c, s, reload: reload) },
+                                           onChanged: reload)
                                     .containerRelativeFrame(.horizontal) { length, _ in min(length * 0.84, 360) }
                             }
                         }
