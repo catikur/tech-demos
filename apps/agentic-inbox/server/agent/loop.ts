@@ -2,6 +2,7 @@ import type { AgentContext, AgentEvent } from "../../shared/types.ts";
 import { audit, spaces, threads, chats, events } from "../db/repo.ts";
 import { listTools, runTool } from "./tools.ts";
 import { zodToJsonSchema, type LlmMessage, type LlmProvider, type LlmToolSpec } from "./llm.ts";
+import { routeTools } from "./jev-route.ts";
 import { memoryBlock } from "../features/memory.ts";
 
 const MAX_STEPS = 8;
@@ -51,7 +52,13 @@ export async function* runLlmAgent(input: string, ctx: AgentContext, provider: L
     { role: "system", content: systemPrompt(ctx) },
     { role: "user", content: input },
   ];
-  const specs = toolSpecs();
+  let specs = toolSpecs();
+  const route = await routeTools(input, ctx, specs);
+  if (route) {
+    specs = route.specs;
+    yield { kind: "thought", text: route.note };
+  }
+  const toolCtx = { ...ctx, ask: input };
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const turn = await provider.chat(messages, specs);
@@ -63,7 +70,7 @@ export async function* runLlmAgent(input: string, ctx: AgentContext, provider: L
     messages.push({ role: "assistant", content: turn.text, toolCalls: turn.toolCalls });
 
     for (const call of turn.toolCalls) {
-      const result = await runTool(call.name, call.arguments, ctx);
+      const result = await runTool(call.name, call.arguments, toolCtx);
       audit.log({ spaceId: ctx.spaceId, actor: "agent", action: `tool.${call.name}`, detail: JSON.stringify(call.arguments).slice(0, 300) });
       yield { kind: "tool", tool: call.name, input: JSON.stringify(call.arguments), output: result.output };
       if (result.draft) yield { kind: "draft", ...result.draft };

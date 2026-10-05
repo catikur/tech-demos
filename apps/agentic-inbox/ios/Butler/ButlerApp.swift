@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct ButlerApp: App {
+    @UIApplicationDelegateAdaptor(PushCoordinator.self) private var push
     @State private var model = AppModel()
 
     var body: some Scene {

@@ -33,9 +33,9 @@ private struct Cockpit: View {
     var body: some View {
         @Bindable var app = app
         TabView(selection: $app.tab) {
-            NavigationStack { BriefingView() }
-                .tabItem { Label("Brifing", systemImage: "sun.max") }
-                .tag(Tab.briefing)
+            NavigationStack { HomeView() }
+                .tabItem { Label("Durum", systemImage: "square.grid.2x2") }
+                .tag(Tab.home)
             NavigationStack { InboxView() }
                 .tabItem { Label("Gelen", systemImage: "tray") }
                 .tag(Tab.inbox)
@@ -127,8 +127,8 @@ struct MoreView: View {
     @Environment(AppModel.self) private var app
 
     private let items: [(MoreDestination, String, String)] = [
+        (.briefing, "Brifing", "sun.max"),
         (.chats, "Sohbetler", "bubble.left.and.bubble.right"),
-        (.meetings, "Toplantılar", "video"),
         (.catchup, "Neyi kaçırdım", "arrow.counterclockwise"),
         (.radar, "Radar", "scope"),
         (.topics, "Konular", "number"),
@@ -164,6 +164,7 @@ struct MoreView: View {
         .toolbar { CockpitToolbar() }
         .navigationDestination(for: MoreDestination.self) { dest in
             switch dest {
+            case .briefing: BriefingView()
             case .chats: ChatsView()
             case .meetings: MeetingsView()
             case .catchup: CatchUpView()
@@ -175,6 +176,7 @@ struct MoreView: View {
         }
         .navigationDestination(isPresented: Binding(get: { app.moreDestination != nil }, set: { if !$0 { app.moreDestination = nil } })) {
             switch app.moreDestination {
+            case .briefing: BriefingView()
             case .chats: ChatsView()
             case .meetings: MeetingsView()
             case .catchup: CatchUpView()

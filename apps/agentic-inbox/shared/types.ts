@@ -215,6 +215,10 @@ export interface Commitment {
   msTaskId?: string | null;
   /** User who extracted/created this; Work-space rows are still shared. */
   ownerEmail?: string;
+  /** Parent card when this row is a subtask. */
+  parentId?: string | null;
+  /** User-set deadlines are locked so a later guess cannot replace them. */
+  dueLocked?: boolean;
 }
 
 export type SourceKind = "thread" | "chat" | "meeting" | "event" | "manual";
@@ -306,6 +310,11 @@ export interface AgentContext {
    * the client must not set this. `null` / omitted = unrestricted (local demo).
    */
   accountIds?: string[] | null;
+  /**
+   * The question this turn is answering. Set by the agent loop so a side-effect
+   * gate can see it. Clients do not send this.
+   */
+  ask?: string;
 }
 
 /* ---------- feature DTOs ---------- */
@@ -368,6 +377,34 @@ export interface ProposedDraft {
   body: string;
   status: DraftStatus;
   createdAt: number;
+}
+
+export interface HomeLine {
+  source: SourceRef;
+  title: string;
+  detail: string;
+}
+
+export interface HomeCard {
+  id: "waiting" | "reply" | "meetings" | "due" | "drafts";
+  count: number;
+  lines: HomeLine[];
+}
+
+export interface HomeDashboard {
+  generatedAt: number;
+  /** Next meeting still ahead today, if any. A door into the brief, not a sixth dump. */
+  nextMeeting: { id: string; title: string; start: number } | null;
+  cards: HomeCard[];
+}
+
+export interface MailTag {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  /** Built-in filters (newsletter, security) cannot be deleted. */
+  system: boolean;
 }
 
 export interface MorningBriefing {

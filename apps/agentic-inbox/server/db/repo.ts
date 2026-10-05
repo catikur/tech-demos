@@ -19,6 +19,7 @@ import type {
   ProposedDraft,
   Space,
   Thread,
+  ThreadCategory,
   ThreadSummary,
   Topic,
   Transcript,
@@ -302,7 +303,7 @@ function rowToThreadBase(r: Row): Omit<Thread, "messages"> {
 }
 
 export const threads = {
-  list(spaceId: string | null, opts: { limit?: number; since?: number; query?: string; accountIds?: string[] | null } = {}): ThreadSummary[] {
+  list(spaceId: string | null, opts: { limit?: number; since?: number; until?: number; query?: string; accountIds?: string[] | null } = {}): ThreadSummary[] {
     const s = scope(spaceId, "t.space_id");
     const a = accountScope(opts.accountIds, "t.account_id");
     const params: any[] = [...s.params, ...a.params];
@@ -310,6 +311,10 @@ export const threads = {
     if (opts.since) {
       where += " AND t.last_at >= ?";
       params.push(opts.since);
+    }
+    if (opts.until) {
+      where += " AND t.last_at <= ?";
+      params.push(opts.until);
     }
     if (opts.query) {
       where += ` AND (t.subject LIKE ? OR t.participants LIKE ? OR EXISTS (SELECT 1 FROM messages m2 WHERE m2.thread_id = t.id AND m2.body LIKE ?))`;
@@ -339,6 +344,11 @@ export const threads = {
       messageCount: r.message_count ?? 0,
     }));
   },
+  /** Last activity without loading message bodies. */
+  activityAt(id: string): number | null {
+    const r = getDb().query("SELECT last_at FROM threads WHERE id = ?").get(id) as Row | null;
+    return r ? Number(r.last_at) : null;
+  },
   get(id: string): Thread | null {
     const r = getDb().query("SELECT * FROM threads WHERE id = ?").get(id) as Row | null;
     if (!r) return null;
@@ -347,6 +357,10 @@ export const threads = {
       .all(id)
       .map(rowToMessage);
     return { ...rowToThreadBase(r), messages };
+  },
+  accountId(id: string): string | null {
+    const r = getDb().query("SELECT account_id FROM threads WHERE id = ?").get(id) as Row | null;
+    return r?.account_id ?? null;
   },
   byExternalId(accountId: string, externalId: string): string | null {
     const r = getDb()
@@ -374,6 +388,10 @@ export const threads = {
         t.lastAt,
         json.stringify(t.participants),
       );
+  },
+  /** Category and labels only, so a late Jev decision cannot clobber unread or timestamps. */
+  setJudgement(id: string, category: ThreadCategory, labels: string[]): void {
+    getDb().query("UPDATE threads SET category = ?, labels = ? WHERE id = ?").run(category, json.stringify(labels), id);
   },
   upsertMessage(m: EmailMessage & { externalId?: string | null }): void {
     const body = isBlankText(m.body) ? "" : m.body;
@@ -456,6 +474,38 @@ export const threads = {
       db.query("DELETE FROM threads WHERE id = ?").run(r.id);
     }
     return rows.length;
+  },
+  /** One query for catch-up. Caps the window so a week of mail cannot stall the request. */
+  recentForCatchup(
+    spaceId: string | null,
+    since: number,
+    until: number,
+    accountIds?: string[] | null,
+    limit = 200,
+  ): { id: string; from: string; body: string; at: number; threadId: string; subject: string; spaceId: string; category: string; labels: string[]; unread: boolean }[] {
+    const s = scope(spaceId, "t.space_id");
+    const a = accountScope(accountIds, "t.account_id");
+    return (
+      getDb()
+        .query(
+          `SELECT m.from_addr, m.body, m.at, t.id AS thread_id, t.subject, t.space_id, t.category, t.labels, t.unread
+           FROM messages m JOIN threads t ON t.id = m.thread_id
+           WHERE m.at >= ? AND m.at <= ? AND m.is_mine = 0${s.sql}${a.sql}
+           ORDER BY m.at DESC LIMIT ?`,
+        )
+        .all(since, until, ...s.params, ...a.params, limit) as Row[]
+    ).map((r) => ({
+      id: r.thread_id,
+      from: r.from_addr ?? "",
+      body: r.body ?? "",
+      at: r.at,
+      threadId: r.thread_id,
+      subject: r.subject,
+      spaceId: r.space_id,
+      category: r.category,
+      labels: json.parse<string[]>(r.labels, []),
+      unread: !!r.unread,
+    }));
   },
   messagesSince(spaceId: string | null, since: number, accountIds?: string[] | null): (EmailMessage & { subject: string; spaceId: string })[] {
     const s = scope(spaceId, "t.space_id");
@@ -591,11 +641,19 @@ function rowToChatMessage(raw: unknown): ChatMessage {
 }
 
 export const chats = {
-  list(spaceId: string | null, query?: string, accountIds?: string[] | null): Chat[] {
+  list(spaceId: string | null, query?: string, accountIds?: string[] | null, bounds?: { since?: number; until?: number | null }): Chat[] {
     const s = scope(spaceId, "c.space_id");
     const a = accountScope(accountIds, "c.account_id");
     const params: any[] = [...s.params, ...a.params];
     let where = `1=1${s.sql}${a.sql}`;
+    if (bounds?.since) {
+      where += " AND c.last_at >= ?";
+      params.push(bounds.since);
+    }
+    if (bounds?.until) {
+      where += " AND c.last_at <= ?";
+      params.push(bounds.until);
+    }
     if (query) {
       where += ` AND (c.title LIKE ? OR EXISTS (SELECT 1 FROM chat_messages m WHERE m.chat_id = c.id AND m.body LIKE ?))`;
       params.push(`%${query}%`, `%${query}%`);
@@ -708,12 +766,22 @@ function rowToMeeting(raw: unknown): Meeting {
 }
 
 export const meetings = {
-  list(spaceId: string | null, limit = 100, accountIds?: string[] | null): Meeting[] {
+  list(spaceId: string | null, limit = 100, accountIds?: string[] | null, bounds?: { since?: number; until?: number | null }): Meeting[] {
     const s = scope(spaceId);
     const a = accountScope(accountIds);
+    const params: any[] = [...s.params, ...a.params];
+    let where = `1=1${s.sql}${a.sql}`;
+    if (bounds?.since) {
+      where += " AND start >= ?";
+      params.push(bounds.since);
+    }
+    if (bounds?.until) {
+      where += " AND start <= ?";
+      params.push(bounds.until);
+    }
     return getDb()
-      .query(`SELECT * FROM meetings WHERE 1=1${s.sql}${a.sql} ORDER BY start DESC LIMIT ?`)
-      .all(...s.params, ...a.params, limit)
+      .query(`SELECT * FROM meetings WHERE ${where} ORDER BY start DESC LIMIT ?`)
+      .all(...params, limit)
       .map(rowToMeeting);
   },
   get(id: string): Meeting | null {
@@ -786,7 +854,7 @@ export const meetings = {
 function rowToCommitment(raw: unknown): Commitment {
   const r = raw as Row;
   const person = getDb().query("SELECT name FROM people WHERE space_id = ? AND email = ?").get(r.space_id, r.counterpart) as Row | null;
-  return {
+  const out: Commitment = {
     id: r.id,
     spaceId: r.space_id,
     direction: r.direction,
@@ -801,7 +869,17 @@ function rowToCommitment(raw: unknown): Commitment {
     confidence: r.confidence,
     msTaskId: r.ms_task_id ?? null,
     ownerEmail: r.owner_email || undefined,
+    parentId: r.parent_id ?? null,
+    dueLocked: !!r.due_locked,
   };
+  if (out.source.kind === "thread" && threads.activityAt(out.source.id) == null && r.source_external && r.source_account) {
+    const found = threads.byExternalId(r.source_account, r.source_external);
+    if (found) {
+      out.source = { ...out.source, id: found };
+      getDb().query("UPDATE commitments SET source_id = ? WHERE id = ?").run(found, out.id);
+    }
+  }
+  return out;
 }
 
 export const commitments = {
@@ -840,10 +918,12 @@ export const commitments = {
     const exists = getDb().query("SELECT 1 FROM commitments WHERE fingerprint = ?").get(fingerprint);
     if (exists) return false;
     const lane = c.boardLane ?? defaultBoardLane(c);
+    const sourceExternal = c.source.kind === "thread" ? threads.externalId(c.source.id) : null;
+    const sourceAccount = c.source.kind === "thread" ? threads.accountId(c.source.id) : null;
     getDb()
       .query(
-        `INSERT INTO commitments (id, space_id, direction, counterpart, text, due_at, status, board_lane, source_kind, source_id, source_label, created_at, confidence, fingerprint, owner_email)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO commitments (id, space_id, direction, counterpart, text, due_at, status, board_lane, source_kind, source_id, source_label, created_at, confidence, fingerprint, owner_email, parent_id, due_locked, source_external, source_account)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         c.id ?? newId("cm"),
@@ -861,13 +941,32 @@ export const commitments = {
         c.confidence,
         fingerprint,
         owner,
+        c.parentId ?? null,
+        c.dueLocked ? 1 : 0,
+        sourceExternal,
+        sourceAccount,
       );
     return true;
   },
+  setDue(id: string, dueAt: number | null, locked: boolean): void {
+    getDb().query("UPDATE commitments SET due_at = ?, due_locked = ? WHERE id = ?").run(dueAt, locked ? 1 : 0, id);
+  },
+  /** Write a guessed deadline only when the user has not set one. */
+  fillDueIfEmpty(id: string, dueAt: number): boolean {
+    const result = getDb()
+      .query("UPDATE commitments SET due_at = ? WHERE id = ? AND due_at IS NULL AND due_locked = 0")
+      .run(dueAt, id);
+    return result.changes > 0;
+  },
+  children(parentId: string): Commitment[] {
+    return getDb()
+      .query("SELECT * FROM commitments WHERE parent_id = ? ORDER BY created_at ASC")
+      .all(parentId)
+      .map(rowToCommitment);
+  },
   setStatus(id: string, status: Commitment["status"]): void {
-    const lane = status === "done" ? "done" : status === "open" ? null : undefined;
-    if (lane === "done") {
-      getDb().query("UPDATE commitments SET status = ?, board_lane = ? WHERE id = ?").run(status, "done", id);
+    if (status === "done") {
+      commitments.setLane(id, "done");
       return;
     }
     if (status === "open") {
@@ -881,6 +980,9 @@ export const commitments = {
   setLane(id: string, lane: BoardLane): void {
     const next = applyBoardLane(lane);
     getDb().query("UPDATE commitments SET status = ?, board_lane = ? WHERE id = ?").run(next.status, next.boardLane, id);
+    if (lane === "done") {
+      getDb().query("UPDATE commitments SET status = 'done', board_lane = 'done' WHERE parent_id = ?").run(id);
+    }
   },
   setMsTask(id: string, listId: string, taskId: string): void {
     getDb().query("UPDATE commitments SET ms_list_id = ?, ms_task_id = ? WHERE id = ?").run(listId, taskId, id);
@@ -1031,6 +1133,7 @@ export const notifications = {
         "INSERT INTO notifications (id, space_id, kind, title, body, link, read, created_at, owner_email) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
       )
       .run(full.id, full.spaceId, full.kind, full.title, full.body, full.link, full.createdAt, (n.ownerEmail || "").toLowerCase());
+    void import("../features/apns.ts").then((m) => m.pushApns(n.ownerEmail, full.title, full.body)).catch(() => undefined);
     return full;
   },
   markAllRead(spaceId: string | null): void {
@@ -1045,6 +1148,26 @@ export const notifications = {
       .query("SELECT 1 FROM notifications WHERE kind = ? AND title = ? AND created_at >= ? LIMIT 1")
       .get(kind, title, Date.now() - withinMs);
     return !!r;
+  },
+};
+
+export const devices = {
+  save(token: string, platform: string, ownerEmail: string): void {
+    getDb()
+      .query(
+        `INSERT INTO device_tokens (token, platform, owner_email, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(token) DO UPDATE SET platform = excluded.platform, owner_email = excluded.owner_email, updated_at = excluded.updated_at`,
+      )
+      .run(token, platform, ownerEmail.toLowerCase(), Date.now());
+  },
+  forOwner(ownerEmail: string): string[] {
+    const rows = getDb()
+      .query("SELECT token FROM device_tokens WHERE owner_email = ? AND platform = 'ios'")
+      .all(ownerEmail.toLowerCase()) as Row[];
+    return rows.map((r) => r.token);
+  },
+  remove(token: string): void {
+    getDb().query("DELETE FROM device_tokens WHERE token = ?").run(token);
   },
 };
 

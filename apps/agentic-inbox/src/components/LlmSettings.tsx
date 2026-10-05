@@ -35,7 +35,15 @@ export function LlmSettings({ onChanged }: { onChanged: () => void }) {
   const [embedTestState, setEmbedTestState] = useState<"idle" | "running" | "ok" | "fail">("idle");
   const [embedTestMessage, setEmbedTestMessage] = useState<string | null>(null);
 
-  const patch = async (body: { apiKey?: string | null; model?: string | null; embedModel?: string | null }) => {
+  const [jevFilter, setJevFilter] = useState("");
+  const [jevPicked, setJevPicked] = useState("");
+  const [jevManual, setJevManual] = useState("");
+  const [jevState, setJevState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [jevError, setJevError] = useState<string | null>(null);
+  const [jevTestState, setJevTestState] = useState<"idle" | "running" | "ok" | "fail">("idle");
+  const [jevTestMessage, setJevTestMessage] = useState<string | null>(null);
+
+  const patch = async (body: { apiKey?: string | null; model?: string | null; embedModel?: string | null; jevModel?: string | null }) => {
     const next = await api.patch<LlmConfigView>("/api/llm/config", body);
     config.reload();
     onChanged();
@@ -133,6 +141,38 @@ export function LlmSettings({ onChanged }: { onChanged: () => void }) {
     }
   };
 
+  const saveJev = async (value: string | null) => {
+    setJevState("saving");
+    setJevError(null);
+    try {
+      await patch({ jevModel: value });
+      setJevState("saved");
+      setJevManual("");
+      setTimeout(() => setJevState("idle"), 2000);
+    } catch (e) {
+      setJevError(e instanceof Error ? e.message : String(e));
+      setJevState("error");
+    }
+  };
+
+  const runJevTest = async () => {
+    setJevTestState("running");
+    setJevTestMessage(null);
+    try {
+      const r = await api.post<{ ok: boolean; model: string; ms?: number; error?: string }>("/api/llm/test-jev");
+      if (r.ok) {
+        setJevTestState("ok");
+        setJevTestMessage(t("llm.testJevOk", { model: r.model, ms: r.ms ?? 0 }));
+      } else {
+        setJevTestState("fail");
+        setJevTestMessage(t("llm.testJevFail", { error: r.error ?? "?" }));
+      }
+    } catch (e) {
+      setJevTestState("fail");
+      setJevTestMessage(t("llm.testJevFail", { error: e instanceof Error ? e.message : String(e) }));
+    }
+  };
+
   const visible = useMemo<ModelInfo[]>(() => {
     const list = catalog?.models ?? [];
     const q = filter.trim().toLowerCase();
@@ -147,10 +187,26 @@ export function LlmSettings({ onChanged }: { onChanged: () => void }) {
     return list.filter((m) => m.embedding && (!q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)));
   }, [catalog, embedFilter]);
 
+  const jevVisible = useMemo<ModelInfo[]>(() => {
+    const known: ModelInfo[] = [
+      { id: "typesafe/jev-1.13", name: "Jev 1.13", contextLength: 32000, promptPerMillion: 0.042, completionPerMillion: 0, tools: false, embedding: false, inputModalities: ["text"] },
+      { id: "~typesafe/jev-latest", name: "Jev latest", contextLength: 32000, promptPerMillion: 0.042, completionPerMillion: 0, tools: false, embedding: false, inputModalities: ["text"] },
+    ];
+    const merged = new Map<string, ModelInfo>();
+    for (const m of [...known, ...(catalog?.models ?? [])]) {
+      const id = m.id.toLowerCase();
+      if (id.includes("jev") || id.startsWith("typesafe/") || id.startsWith("~typesafe/")) merged.set(m.id, m);
+    }
+    const q = jevFilter.trim().toLowerCase();
+    return [...merged.values()].filter((m) => !q || m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q));
+  }, [catalog, jevFilter]);
+
   const pickedInfo = visible.find((m) => m.id === picked) ?? catalog?.models.find((m) => m.id === picked) ?? null;
   const embedPickedInfo = embedVisible.find((m) => m.id === embedPicked) ?? catalog?.models.find((m) => m.id === embedPicked) ?? null;
   const candidate = manual.trim() || picked;
   const embedCandidate = embedManual.trim() || embedPicked;
+  const jevPickedInfo = jevVisible.find((m) => m.id === jevPicked) ?? null;
+  const jevCandidate = jevManual.trim() || jevPicked;
 
   if (!cfg) return <p className="muted">{t("common.loading")}</p>;
 
@@ -321,6 +377,59 @@ export function LlmSettings({ onChanged }: { onChanged: () => void }) {
         </div>
         {embedError && <div className="error-note">{embedError}</div>}
         {embedTestMessage && <div className={embedTestState === "ok" ? "sent-note" : "error-note"}>{embedTestMessage}</div>}
+      </div>
+
+      <div className="form-card">
+        <div className="connect-title">{t("llm.jevTitle")}</div>
+        <p className="muted small" style={{ margin: 0 }}>
+          {t("llm.jevHint")}
+        </p>
+        <p className="small" style={{ margin: 0 }}>
+          <span className="pill pill-agent">{t("llm.jevActive", { model: cfg.jevModel, source: t(`llm.source.${cfg.jevModelSource}`) })}</span>
+        </p>
+        {catalogToolbar()}
+        {catalog && (
+          <>
+            <span className="muted small">{t("llm.jevCount", { n: jevVisible.length })}</span>
+            <input value={jevFilter} onChange={(e) => setJevFilter(e.target.value)} placeholder={t("llm.search")} />
+            <select size={6} value={jevPicked} onChange={(e) => setJevPicked(e.target.value)} data-testid="jev-model-list">
+              <option value="" disabled>
+                {t("llm.pickJev")}
+              </option>
+              {jevVisible.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.id} — {m.name}
+                </option>
+              ))}
+            </select>
+            {jevPickedInfo && (
+              <div className="muted small">
+                <code>{jevPickedInfo.id}</code>
+                {jevPickedInfo.contextLength ? <> · {t("llm.ctx", { n: Math.round(jevPickedInfo.contextLength / 1000) })}</> : null}
+              </div>
+            )}
+          </>
+        )}
+        <label className="form-row">
+          {t("llm.manualJev")}
+          <input value={jevManual} onChange={(e) => setJevManual(e.target.value)} placeholder="typesafe/jev-1.13" />
+        </label>
+        <div className="row-actions">
+          <button className="btn btn-small btn-primary" disabled={jevState === "saving" || !jevCandidate} onClick={() => void saveJev(jevCandidate)}>
+            {t("llm.useJev")}
+          </button>
+          {cfg.jevModelSource === "settings" && (
+            <button className="btn btn-small btn-ghost" disabled={jevState === "saving"} onClick={() => void saveJev(null)}>
+              {t("llm.resetJev")}
+            </button>
+          )}
+          <button className="btn btn-small" disabled={jevTestState === "running" || !cfg.apiKeyConfigured} onClick={() => void runJevTest()}>
+            {jevTestState === "running" ? t("llm.testing") : t("llm.testJev")}
+          </button>
+          {jevState === "saved" && <span className="sent-note">✓ {t("llm.saved")}</span>}
+        </div>
+        {jevError && <div className="error-note">{jevError}</div>}
+        {jevTestMessage && <div className={jevTestState === "ok" ? "sent-note" : "error-note"}>{jevTestMessage}</div>}
       </div>
     </div>
   );

@@ -5,6 +5,8 @@ import { tryComplete } from "../agent/llm.ts";
 import { accounts, chats, commitments, meetings, settings, threads } from "../db/repo.ts";
 import { onPostSync } from "../sync/engine.ts";
 import { contentHash, isAsk, isPromise, jaccard, parseDue, splitSentences, tokens, truncate } from "./text.ts";
+import { fillEmptyDeadlines } from "./deadlines.ts";
+import { closeFinishedWork } from "./close-done.ts";
 
 /**
  * Feature 1 — Commitment ledger.
@@ -90,7 +92,10 @@ function insertIfNovel(c: Omit<Commitment, "id" | "createdAt">, ownerEmail?: str
   for (const e of existing) {
     const sim = jaccard(words, tokens(e.text));
     const sameDay = c.dueAt && e.dueAt && Math.abs(c.dueAt - e.dueAt) < 86_400_000;
-    if (sim >= 0.5 || (sim >= 0.3 && sameDay)) return false;
+    if (sim >= 0.5 || (sim >= 0.3 && sameDay)) {
+      if (c.dueAt && !e.dueAt && !e.dueLocked) commitments.fillDueIfEmpty(e.id, c.dueAt);
+      return false;
+    }
   }
   return commitments.insertUnique({ ...c, ownerEmail });
 }
@@ -316,4 +321,7 @@ export async function extractForSpace(
 onPostSync(async (account: Account) => {
   const n = await extractForSpace(account.spaceId, { ownerEmail: account.ownerEmail || account.email, accountId: account.id });
   if (n > 0) console.log(`[commitments] ${n} new in space ${account.spaceId}`);
+  const filled = await fillEmptyDeadlines(account.spaceId);
+  const closed = closeFinishedWork(account.spaceId);
+  if (filled || closed) console.log(`[commitments] filled ${filled} deadlines, closed ${closed} in ${account.spaceId}`);
 });

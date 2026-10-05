@@ -5,7 +5,9 @@ import { commitments, events, meetings } from "../db/repo.ts";
 import { registerTool, when } from "../agent/tools.ts";
 import { registerMockIntent, mockTool, mockSleep, MOCK_PACE } from "../agent/mock.ts";
 import { inScope, inAccountScope, outOfScopeMessage } from "../agent/policy.ts";
+import { jevAllowsSideEffect } from "../agent/jev-gate.ts";
 import { parseDue } from "./text.ts";
+import { commitmentInWindow } from "./window.ts";
 import { extractForSpace } from "./commitments.ts";
 import { pushCommitmentToTodo } from "./ms-tasks.ts";
 import { briefForEvent } from "./briefs.ts";
@@ -35,7 +37,7 @@ registerTool({
     status: z.enum(["open", "done", "dropped"]).optional().describe("Default: open"),
   }),
   async run(input, ctx) {
-    let list = commitments.list(ctx.spaceId, { status: input.status ?? "open" });
+    let list = commitments.list(ctx.spaceId, { status: input.status ?? "open" }).filter((c) => commitmentInWindow(c));
     if (input.direction) list = list.filter((c) => c.direction === input.direction);
     if (list.length === 0) return { output: "No matching commitments." };
     return {
@@ -57,6 +59,9 @@ registerTool({
   }),
   async run(input, ctx) {
     if (!ctx.spaceId) return { output: "Pick a space first — commitments live in exactly one space." };
+    if (!(await jevAllowsSideEffect(ctx, "create_commitment", input.text))) {
+      return { output: "Jev held this: recording a commitment did not match the current request." };
+    }
     const person = findPerson(ctx.spaceId, input.counterpart);
     const counterpart = person?.email ?? input.counterpart;
     const dueAt = input.due ? (Date.parse(input.due) || parseDue(input.due)) : null;
@@ -82,6 +87,9 @@ registerTool({
     const c = commitments.get(input.id);
     if (!c) return { output: "Commitment not found." };
     if (!inScope(ctx, c.spaceId)) return { output: outOfScopeMessage(ctx) };
+    if (!(await jevAllowsSideEffect(ctx, "push_commitment_to_todo", c.text))) {
+      return { output: "Jev held this: pushing to Microsoft To Do did not match the current request." };
+    }
     try {
       const { taskId } = await pushCommitmentToTodo(c.id);
       return { output: `Created Microsoft To Do task ${taskId} for "${c.text}".` };

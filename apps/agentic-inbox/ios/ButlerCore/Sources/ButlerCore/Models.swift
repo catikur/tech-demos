@@ -302,6 +302,8 @@ public struct Commitment: Codable, Hashable, Identifiable, Sendable {
     public var confidence: Double
     public var msTaskId: String?
     public var ownerEmail: String?
+    public var parentId: String?
+    public var dueLocked: Bool?
 
     /// Mirrors `laneOf()` in the web cockpit: done wins, then stored lane, then direction.
     public var lane: BoardLane {
@@ -437,6 +439,60 @@ public struct ProposedDraft: Codable, Hashable, Identifiable, Sendable {
     public var createdAt: Millis
 }
 
+public struct ViewWindow: Codable, Hashable, Sendable {
+    public var from: Millis
+    public var to: Millis?
+    public var saved: Bool
+    public var hiddenCommitments: Int
+
+    public init(from: Millis, to: Millis?, saved: Bool, hiddenCommitments: Int) {
+        self.from = from
+        self.to = to
+        self.saved = saved
+        self.hiddenCommitments = hiddenCommitments
+    }
+}
+
+public struct MailTag: Codable, Hashable, Identifiable, Sendable {
+    public var id: String
+    public var name: String
+    public var description: String
+    public var enabled: Bool
+    public var system: Bool
+
+    public init(id: String, name: String, description: String, enabled: Bool, system: Bool) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.enabled = enabled
+        self.system = system
+    }
+}
+
+public struct HomeLine: Codable, Hashable, Sendable {
+    public var source: SourceRef
+    public var title: String
+    public var detail: String
+}
+
+public struct HomeCard: Codable, Hashable, Identifiable, Sendable {
+    public var id: String
+    public var count: Int
+    public var lines: [HomeLine]
+}
+
+public struct HomeNextMeeting: Codable, Hashable, Sendable {
+    public var id: String
+    public var title: String
+    public var start: Millis
+}
+
+public struct HomeDashboard: Codable, Hashable, Sendable {
+    public var generatedAt: Millis
+    public var nextMeeting: HomeNextMeeting?
+    public var cards: [HomeCard]
+}
+
 public struct MorningBriefing: Codable, Hashable, Sendable {
     public var generatedAt: Millis
     public var fromAt: Millis
@@ -500,6 +556,9 @@ public struct LlmConfigView: Codable, Hashable, Sendable {
     public var embedModel: String
     public var embedModelSource: String
     public var envEmbedModel: String?
+    public var jevModel: String
+    public var jevModelSource: String
+    public var envJevModel: String?
     public var mockForced: Bool
 }
 

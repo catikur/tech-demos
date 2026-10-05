@@ -152,7 +152,11 @@ CREATE TABLE IF NOT EXISTS commitments (
   fingerprint TEXT UNIQUE,
   ms_task_id TEXT,
   ms_list_id TEXT,
-  owner_email TEXT NOT NULL DEFAULT ''
+  owner_email TEXT NOT NULL DEFAULT '',
+  parent_id TEXT,
+  due_locked INTEGER NOT NULL DEFAULT 0,
+  source_external TEXT,
+  source_account TEXT
 );
 
 CREATE TABLE IF NOT EXISTS topics (
@@ -227,6 +231,13 @@ CREATE TABLE IF NOT EXISTS oauth_states (
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS device_tokens (
+  token TEXT PRIMARY KEY,
+  platform TEXT NOT NULL,
+  owner_email TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS graph_subscriptions (

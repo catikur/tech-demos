@@ -1,6 +1,7 @@
 import type { MorningBriefing } from "../../shared/types.ts";
 import { commitments, events, meetings, proposedDrafts, threads } from "../db/repo.ts";
 import { computeRadar } from "./radar.ts";
+import { commitmentInWindow, inWindow, listBounds } from "./window.ts";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -23,6 +24,7 @@ export function buildMorningBriefing(
   const fromAt = startOfLocalDay(now);
   const toAt = fromAt + DAY;
   const owner = opts.ownerEmail ?? null;
+  const bounds = listBounds();
   const radar = computeRadar(spaceId, opts.accountIds);
   return {
     generatedAt: now,
@@ -30,16 +32,16 @@ export function buildMorningBriefing(
     toAt,
     events: events.list(spaceId, fromAt, toAt, opts.accountIds).filter((e) => e.responseStatus !== "declined"),
     unread: threads
-      .list(spaceId, { limit: 40, since: now - 36 * HOUR, accountIds: opts.accountIds })
+      .list(spaceId, { limit: 40, since: Math.max(now - 36 * HOUR, bounds.since), until: bounds.until, accountIds: opts.accountIds })
       .filter((t) => t.unread && !["newsletter"].includes(t.category)),
     dueCommitments: commitments.list(spaceId, { status: "open", ownerEmail: owner, shareWork: true }).filter((c) => {
-      if (c.dueAt === null) return false;
+      if (c.dueAt === null || !commitmentInWindow(c)) return false;
       return c.dueAt <= now + 48 * HOUR;
     }),
     drafts: proposedDrafts.list(spaceId, { status: "pending", ownerEmail: owner || undefined }),
     recentMeetings: meetings
       .list(spaceId, 20, opts.accountIds)
-      .filter((m) => m.end >= now - 7 * DAY && m.end <= now + DAY),
+      .filter((m) => m.end >= now - 7 * DAY && m.end <= now + DAY && inWindow(m.start)),
     waitingOnMe: radar.filter((r) => r.direction === "waiting_on_me").slice(0, 8),
     waitingOnThem: radar.filter((r) => r.direction === "waiting_on_them").slice(0, 5),
   };

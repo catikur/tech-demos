@@ -30,11 +30,12 @@ struct BoardView: View {
     @State private var adding = false
     @State private var busy = false
     @State private var error: String?
+    @State private var hiddenCards = 0
 
     var body: some View {
         Loading(load: { try await app.api!.commitments(space: app.spaceId) }, refreshOn: ["commitments"]) { cards, reload in
-            let live = cards.filter { $0.status != .dropped }
-            let dropped = cards.filter { $0.status == .dropped }
+            let live = cards.filter { $0.status != .dropped && $0.parentId == nil }
+            let dropped = cards.filter { $0.status == .dropped && $0.parentId == nil }
             VStack(alignment: .leading, spacing: 0) {
                 header(dropped: dropped.count, reload: reload)
                 if let error { ErrorBanner(message: error).padding(.bottom, 8) }
@@ -49,9 +50,10 @@ struct BoardView: View {
                     ScrollView(.horizontal) {
                         LazyHStack(alignment: .top, spacing: 12) {
                             ForEach(BoardLane.allCases, id: \.self) { lane in
-                                LaneColumn(lane: lane, cards: live.filter { $0.lane == lane }, all: live,
+                                LaneColumn(lane: lane, cards: live.filter { $0.lane == lane }, all: cards,
                                            onMove: { c, target in move(c, to: target, reload: reload) },
-                                           onStatus: { c, s in setStatus(c, s, reload: reload) })
+                                           onStatus: { c, s in setStatus(c, s, reload: reload) },
+                                           onChanged: reload)
                                     .containerRelativeFrame(.horizontal) { length, _ in min(length * 0.84, 360) }
                             }
                         }
@@ -69,12 +71,22 @@ struct BoardView: View {
         .navigationTitle("Pano")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { CockpitToolbar() }
+        .task(id: app.spaceId) { await loadHidden() }
+    }
+
+    private func loadHidden() async {
+        guard let api = app.api else { return }
+        hiddenCards = (try? await api.viewWindow(space: app.spaceId))?.hiddenCommitments ?? 0
     }
 
     private func header(dropped: Int, reload: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("İş panosu").font(Theme.display(24))
             Text("Kartları sürükle veya şerit seç. Butler’ın çıkardığı açık işler.").font(.footnote).foregroundStyle(Theme.faint)
+            if hiddenCards > 0 {
+                Text("\(hiddenCards) kart bu tarih aralığının dışında; silinmedi. Ayarlar → Tarih aralığı.")
+                    .font(.caption).foregroundStyle(Theme.faint)
+            }
             HStack(spacing: 8) {
                 Button(busy ? "Taranıyor…" : "Yeniden tara") {
                     busy = true
@@ -111,6 +123,7 @@ private struct LaneColumn: View {
     var all: [Commitment]
     var onMove: (Commitment, BoardLane) -> Void
     var onStatus: (Commitment, CommitmentStatus) -> Void
+    var onChanged: () -> Void = {}
     @State private var targeted = false
 
     var body: some View {
@@ -127,7 +140,7 @@ private struct LaneColumn: View {
                 LazyVStack(spacing: 8) {
                     if cards.isEmpty { Text(lane.emptyHint).font(.footnote).foregroundStyle(Theme.faint).multilineTextAlignment(.center).padding(24) }
                     ForEach(cards) { c in
-                        CommitmentCard(card: c, onMove: { onMove(c, $0) }, onStatus: { onStatus(c, $0) })
+                        CommitmentCard(card: c, children: all.filter { $0.parentId == c.id }, onMove: { onMove(c, $0) }, onStatus: { onStatus(c, $0) }, onChanged: onChanged)
                             .draggable(c.id)
                     }
                 }
@@ -148,11 +161,14 @@ private struct LaneColumn: View {
 
 struct CommitmentCard: View {
     var card: Commitment
+    var children: [Commitment] = []
     var onMove: (BoardLane) -> Void
     var onStatus: (CommitmentStatus) -> Void
+    var onChanged: () -> Void = {}
     @Environment(AppModel.self) private var app
     @State private var pushing = false
     @State private var note: String?
+    @State private var subtask = ""
 
     var body: some View {
         let due = Fmt.dueLabel(card.dueAt)
@@ -170,6 +186,34 @@ struct CommitmentCard: View {
                 }.buttonStyle(.plain)
             }
             if let dueAt = card.dueAt { Text(Fmt.dateTime(dueAt)).font(.caption).foregroundStyle(Theme.faint) }
+            DatePicker("Son tarih", selection: Binding(get: {
+                Date(timeIntervalSince1970: (card.dueAt ?? Date().millis) / 1000)
+            }, set: { date in
+                Task { _ = try? await app.api?.setDue(card.id, dueAt: Calendar.current.date(bySettingHour: 17, minute: 0, second: 0, of: date)?.millis ?? date.millis); onChanged() }
+            }), displayedComponents: .date)
+            .font(.caption)
+            if !children.isEmpty {
+                ForEach(children) { child in
+                    HStack {
+                        Text(child.text).font(.caption).strikethrough(child.status == .done)
+                        Spacer()
+                        if child.status != .done { Button("Tamam") { Task { _ = try? await app.api?.setLane(child.id, lane: .done); onChanged() } }.font(.caption) }
+                    }
+                }
+            }
+            HStack {
+                TextField("Alt görev", text: $subtask)
+                    .font(.caption)
+                Button("Ekle") {
+                    let text = subtask.trimmingCharacters(in: .whitespaces)
+                    guard !text.isEmpty else { return }
+                    Task {
+                        try? await app.api?.createCommitment(space: card.spaceId, text: text, counterpart: card.counterpart, direction: card.direction, parentId: card.id)
+                        subtask = ""
+                        onChanged()
+                    }
+                }.font(.caption).disabled(subtask.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
             HStack(spacing: 6) {
                 Menu {
                     Picker("Taşı", selection: Binding(get: { card.lane }, set: { onMove($0) })) {

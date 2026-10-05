@@ -2,7 +2,8 @@ import type { Account, SourceRef, Topic } from "../../shared/types.ts";
 import { newId } from "../db/index.ts";
 import { chats, events, meetings, threads, topics } from "../db/repo.ts";
 import { onPostSync } from "../sync/engine.ts";
-import { jaccard, normalizeTitle, tokens } from "./text.ts";
+import { normalizeTitle, tokens } from "./text.ts";
+import { inWindow } from "./window.ts";
 
 /**
  * Feature 5 — Topic graph: cluster mail, chats and meetings that talk about the
@@ -34,15 +35,18 @@ export function rebuildTopics(spaceId: string): Topic[] {
   const docs: { ref: SourceRef; title: string; text: string; at: number }[] = [];
   for (const t of threads.list(spaceId, { limit: 400 })) {
     if (t.category === "newsletter" || t.category === "security") continue;
+    if (!inWindow(t.lastAt)) continue;
     const full = threads.get(t.id);
     const body = full?.messages.map((m) => m.body.slice(0, 400)).join(" ") ?? "";
     docs.push({ ref: { kind: "thread", id: t.id, label: t.subject }, title: t.subject, text: `${t.subject} ${t.subject} ${body}`, at: t.lastAt });
   }
   for (const c of chats.list(spaceId)) {
+    if (!inWindow(c.lastAt)) continue;
     const body = chats.messages(c.id).slice(-30).map((m) => m.body).join(" ");
     docs.push({ ref: { kind: "chat", id: c.id, label: c.title }, title: c.title, text: `${c.title} ${body}`, at: c.lastAt });
   }
   for (const m of meetings.list(spaceId, 100)) {
+    if (!inWindow(m.start)) continue;
     const transcript = meetings.transcript(m.id);
     const body = transcript?.lines.map((l) => l.text).join(" ") ?? "";
     docs.push({ ref: { kind: "meeting", id: m.id, label: m.title }, title: m.title, text: `${m.title} ${m.title} ${body}`, at: m.start });
@@ -50,6 +54,7 @@ export function rebuildTopics(spaceId: string): Topic[] {
   const now = Date.now();
   for (const e of events.list(spaceId, now - 14 * 86_400_000, now + 30 * 86_400_000)) {
     if (e.meetingId || e.attendees.length < 2) continue;
+    if (!inWindow(e.start)) continue;
     docs.push({ ref: { kind: "event", id: e.id, label: e.title }, title: e.title, text: `${e.title} ${e.title} ${e.description}`, at: e.start });
   }
 
@@ -70,13 +75,14 @@ export function rebuildTopics(spaceId: string): Topic[] {
       const ckw = [...c.keywords.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k]) => k);
       const shared = item.keywords.filter((k) => ckw.includes(k)).length;
       const sameTitle = c.titles.has(item.title) && item.title.length > 3;
-      const score = sameTitle ? 1 : shared >= 2 ? 0.5 + jaccard(item.keywords, ckw) : jaccard(item.keywords, ckw);
+      // Two shared keywords (or the same title) can join. A lone Jaccard overlap cannot.
+      const score = sameTitle ? 1 : shared >= 2 ? 0.6 : 0;
       if (score > bestScore) {
         bestScore = score;
         best = c;
       }
     }
-    if (best && bestScore >= 0.28) {
+    if (best && bestScore >= 0.6) {
       best.items.push(item);
       for (const k of item.keywords) best.keywords.set(k, (best.keywords.get(k) ?? 0) + 1);
       best.titles.set(item.title, (best.titles.get(item.title) ?? 0) + 1);
@@ -96,7 +102,7 @@ export function rebuildTopics(spaceId: string): Topic[] {
         const a = topKw(clusters[i]);
         const b = topKw(clusters[j]);
         const shared = a.filter((k) => b.includes(k)).length;
-        if (shared >= 2 || jaccard(a, b) >= 0.25) {
+        if (shared >= 3) {
           const [dst, src] = [clusters[i], clusters[j]];
           dst.items.push(...src.items);
           for (const [k, v] of src.keywords) dst.keywords.set(k, (dst.keywords.get(k) ?? 0) + v);
@@ -152,6 +158,16 @@ export function searchTopics(spaceId: string | null, query: string): Topic[] {
     .map((x) => x.t);
 }
 
+const pendingSpaces = new Set<string>();
+let topicTimer: ReturnType<typeof setTimeout> | null = null;
+
 onPostSync((account: Account) => {
-  rebuildTopics(account.spaceId);
+  pendingSpaces.add(account.spaceId);
+  if (topicTimer) return;
+  topicTimer = setTimeout(() => {
+    topicTimer = null;
+    const ids = [...pendingSpaces];
+    pendingSpaces.clear();
+    for (const id of ids) rebuildTopics(id);
+  }, 20_000);
 });

@@ -12,14 +12,20 @@ ios/
   ButlerCore/        SwiftPM package: models, API client, SSE parser, HTML hygiene (Linux-testable)
 ```
 
-## Build
+## Build (iPhone and iPad)
+
+The target is universal (`TARGETED_DEVICE_FAMILY` 1 and 2, iOS 17). This repo stops at the Xcode project: pick your team, sign, and run. No Mac-side signing is done here.
 
 ```sh
 brew install xcodegen
 cd apps/agentic-inbox/ios
 xcodegen generate
-open Butler.xcodeproj          # pick a team for signing, run on simulator or device
+open Butler.xcodeproj
 ```
+
+In Xcode: select the Butler scheme, set Signing & Capabilities → Team, then choose an iPhone or iPad destination (simulator or device) and Run. Archive the same scheme for a device install.
+
+The phone talks to the same server as the web cockpit, including the Jev decision model. Change that model under Ayarlar → Ajan (OpenRouter) — `typesafe/jev-1.13` or `~typesafe/jev-latest`, or whatever id OpenRouter publishes next. That setting is stored on the server, so the phone and the web share it.
 
 First launch asks for the server. Production: `https://butler.conforcus.com`. Local demo:
 run the server with `SEED_DEMO=1 LOGIN_REQUIRED=0 bun run dev` and enter `http://<mac-ip>:3000`

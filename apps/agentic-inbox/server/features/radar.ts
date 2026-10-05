@@ -3,6 +3,7 @@ import { senderEmail, senderName } from "../../shared/types.ts";
 import { chats, people, threads } from "../db/repo.ts";
 import { templateNudge } from "../agent/drafts.ts";
 import { isAsk, isAutomatedSender, truncate } from "./text.ts";
+import { inWindow, listBounds } from "./window.ts";
 
 /**
  * Feature 6 — Response-debt radar: what is waiting on you (aging, VIP-first)
@@ -16,7 +17,8 @@ export function computeRadar(spaceId: string | null, accountIds?: string[] | nul
   const vip = people.vipEmails(spaceId);
   const out: RadarItem[] = [];
 
-  for (const summary of threads.list(spaceId, { limit: 400, accountIds })) {
+  const bounds = listBounds();
+  for (const summary of threads.list(spaceId, { limit: 400, accountIds, since: bounds.since, until: bounds.until })) {
     if (["newsletter", "security"].includes(summary.category)) continue;
     const t = threads.get(summary.id);
     if (!t || t.messages.length === 0) continue;
@@ -25,7 +27,9 @@ export function computeRadar(spaceId: string | null, accountIds?: string[] | nul
     if (!last.isMine) {
       if (isAutomatedSender(last.from)) continue;
       const ask = isAsk(last.body);
-      const urgentCategory = ["support", "project", "billing"].includes(t.category);
+      const needsReply = t.labels.includes("needs-reply");
+      const urgentCategory = ["support", "project", "billing"].includes(t.category) || t.labels.includes("urgent") || needsReply;
+      if (t.labels.includes("no-reply") && !ask && !vip.has(senderEmail(last.from))) continue;
       if (!ask && !urgentCategory) continue;
       const isVip = vip.has(senderEmail(last.from));
       out.push({
@@ -36,7 +40,7 @@ export function computeRadar(spaceId: string | null, accountIds?: string[] | nul
         counterpart: last.from,
         excerpt: truncate(last.body, 150),
         ageMs,
-        score: ageMs / (24 * HOUR) + (isVip ? 3 : 0) + (ask ? 2 : 0) + (urgentCategory ? 1.5 : 0) + (t.labels.includes("urgent") ? 2 : 0),
+        score: ageMs / (24 * HOUR) + (isVip ? 3 : 0) + (ask ? 2 : 0) + (urgentCategory ? 1.5 : 0) + (needsReply ? 2 : 0) + (t.labels.includes("urgent") ? 2 : 0),
         vip: isVip,
         suggestedReply: templateNudge(last.from, t.subject, "waiting_on_me"),
       });
@@ -58,7 +62,7 @@ export function computeRadar(spaceId: string | null, accountIds?: string[] | nul
     }
   }
 
-  for (const c of chats.list(spaceId, undefined, accountIds)) {
+  for (const c of chats.list(spaceId, undefined, accountIds, { since: bounds.since, until: bounds.until })) {
     const msgs = chats.messages(c.id);
     const last = msgs[msgs.length - 1];
     if (!last) continue;

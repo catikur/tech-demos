@@ -2,15 +2,16 @@ import AuthenticationServices
 import ButlerCore
 import Observation
 import SwiftUI
+import UserNotifications
 
 /// Where the user is in the cockpit; mirrors the web `ViewId`.
 enum Tab: String, CaseIterable, Identifiable {
-    case briefing, inbox, calendar, board, more
+    case home, inbox, calendar, board, more
     var id: String { rawValue }
 }
 
 enum MoreDestination: String, CaseIterable, Identifiable {
-    case chats, meetings, catchup, radar, topics, people, settings
+    case briefing, chats, meetings, catchup, radar, topics, people, settings
     var id: String { rawValue }
 }
 
@@ -41,7 +42,7 @@ final class AppModel {
     var status: AppStatus?
     var bootError: String?
     var booting = true
-    var tab: Tab = .briefing
+    var tab: Tab = .home
     var agentOpen = false
     var notificationsOpen = false
     var jump: JumpRequest?
@@ -92,6 +93,11 @@ final class AppModel {
     private func afterSignIn() async {
         await refreshStatus()
         startEventLoop()
+        DeviceTokenBox.deliver = { [weak self] token in
+            try? await self?.api?.registerDevice(token: token)
+        }
+        if let token = DeviceTokenBox.latest { try? await api?.registerDevice(token: token) }
+        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
     }
 
     func refreshStatus() async {
@@ -156,6 +162,14 @@ final class AppModel {
         }
     }
 
+    private func showLocalAlert(_ title: String) async {
+        let content = UNMutableNotificationContent()
+        content.title = "Butler"
+        content.body = title
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        try? await UNUserNotificationCenter.current().add(request)
+    }
+
     func signOut() async {
         try? await api?.signOut()
         token = nil
@@ -179,6 +193,7 @@ final class AppModel {
                         self?.lastEvent = (ev, counter)
                         if case .data(let entity, _) = ev, entity == "accounts" || entity == "llm" { await self?.refreshStatus() }
                         if case .sync = ev { await self?.refreshStatus() }
+                        if case .notification(_, let title) = ev { await self?.showLocalAlert(title) }
                     }
                 } catch {
                     // fall through to reconnect
@@ -197,7 +212,7 @@ final class AppModel {
         case .thread: tab = .inbox
         case .event: tab = .calendar
         case .chat: tab = .more; moreDestination = .chats
-        case .meeting: tab = .more; moreDestination = .meetings
+        case .meeting: tab = .calendar
         case .manual: tab = .board
         }
         jump = JumpRequest(ref: ref, prefill: prefill)

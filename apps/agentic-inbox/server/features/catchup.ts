@@ -13,10 +13,8 @@ export async function buildCatchUp(spaceId: string | null, fromAt: number, toAt:
   const vip = people.vipEmails(spaceId);
   const items: CatchUpItem[] = [];
 
-  for (const m of threads.messagesSince(spaceId, fromAt, opts.accountIds)) {
-    if (m.at > toAt || m.isMine) continue;
-    const t = threads.list(m.spaceId, { limit: 500, accountIds: opts.accountIds }).find((x) => x.id === m.threadId);
-    if (!t) continue;
+  for (const m of threads.recentForCatchup(spaceId, fromAt, toAt, opts.accountIds, 200)) {
+    const t = m;
     const ask = isAsk(m.body);
     const senderVip = vip.has(senderEmail(m.from));
     const automated = isAutomatedSender(m.from) || t.category === "newsletter";
@@ -35,9 +33,13 @@ export async function buildCatchUp(spaceId: string | null, fromAt: number, toAt:
       score += 1;
       reasons.push(t.category);
     }
+    if (t.labels.includes("needs-reply")) {
+      score += 2;
+      reasons.push("needs a reply");
+    }
     if (automated) score -= 1;
     items.push({
-      source: { kind: "thread", id: t.id, label: t.subject },
+      source: { kind: "thread", id: t.threadId, label: t.subject },
       spaceId: m.spaceId,
       title: `${senderName(m.from)} — ${t.subject}`,
       excerpt: truncate(m.body, 140),
@@ -107,12 +109,12 @@ export async function buildCatchUp(spaceId: string | null, fromAt: number, toAt:
   const mentions = items.filter((i) => i.score < 4 && i.source.kind === "chat");
   const fyi = items.filter((i) => i.score < 4 && i.source.kind === "thread");
   const sections: CatchUpSection[] = [
-    { title: "Needs your response", items: needsResponse },
-    { title: "Meetings you missed or that ended", items: meetingItems.sort((a, b) => b.at - a.at) },
-    { title: "Chats & mentions", items: mentions },
-    { title: "FYI", items: fyi },
+    { title: "Cevapla", items: needsResponse },
+    { title: "Toplantı", items: meetingItems.sort((a, b) => b.at - a.at) },
+    { title: "Sohbet", items: mentions },
+    { title: "Bilgi", items: fyi },
     {
-      title: "Commitments surfaced",
+      title: "Taahhüt",
       items: surfaced.map((c) => ({
         source: c.source,
         spaceId: c.spaceId,
@@ -127,9 +129,9 @@ export async function buildCatchUp(spaceId: string | null, fromAt: number, toAt:
 
   const hours = Math.round((toAt - fromAt) / 3_600_000);
   let summary = [
-    `**${items.length}** new item(s) in the last ${hours}h: ${needsResponse.length} need a response, ${meetingItems.length} meeting(s), ${surfaced.length} commitment(s) surfaced.`,
+    `Son ${hours} saatte ${items.length} kayıt: ${needsResponse.length} cevap bekliyor, ${meetingItems.length} toplantı, ${surfaced.length} taahhüt.`,
     "",
-    ...needsResponse.slice(0, 4).map((i) => `- ${i.title}: ${i.excerpt} _(${i.reason})_`),
+    ...needsResponse.slice(0, 4).map((i) => `- ${i.title}: ${i.excerpt}`),
   ].join("\n");
   if (opts.polish !== false && items.length > 0) {
     const polished = await tryComplete(
