@@ -26,6 +26,7 @@ extension BoardLane {
 /// context menu, or drag & drop between columns.
 struct BoardView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showDropped = false
     @State private var adding = false
     @State private var busy = false
@@ -46,14 +47,20 @@ struct BoardView: View {
                             ForEach(dropped) { c in CommitmentCard(card: c, onMove: { move(c, to: $0, reload: reload) }, onStatus: { setStatus(c, $0, reload: reload) }) }
                         }.padding(12)
                     }
+                } else if sizeClass == .regular {
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(BoardLane.allCases, id: \.self) { lane in
+                            laneColumn(lane, live: live, all: cards, reload: reload)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 90)
                 } else {
                     ScrollView(.horizontal) {
                         LazyHStack(alignment: .top, spacing: 12) {
                             ForEach(BoardLane.allCases, id: \.self) { lane in
-                                LaneColumn(lane: lane, cards: live.filter { $0.lane == lane }, all: cards,
-                                           onMove: { c, target in move(c, to: target, reload: reload) },
-                                           onStatus: { c, s in setStatus(c, s, reload: reload) },
-                                           onChanged: reload)
+                                laneColumn(lane, live: live, all: cards, reload: reload)
                                     .containerRelativeFrame(.horizontal) { length, _ in min(length * 0.84, 360) }
                             }
                         }
@@ -101,6 +108,13 @@ struct BoardView: View {
             if app.spaceId == nil { Text("Kart eklemek için üstten bir alan seç (İş / Kişisel).").font(.caption).foregroundStyle(Theme.faint) }
         }
         .padding(16)
+    }
+
+    private func laneColumn(_ lane: BoardLane, live: [Commitment], all: [Commitment], reload: @escaping () -> Void) -> some View {
+        LaneColumn(lane: lane, cards: live.filter { $0.lane == lane }, all: all,
+                   onMove: { c, target in move(c, to: target, reload: reload) },
+                   onStatus: { c, s in setStatus(c, s, reload: reload) },
+                   onChanged: reload)
     }
 
     private func move(_ card: Commitment, to lane: BoardLane, reload: @escaping () -> Void) {
