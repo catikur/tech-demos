@@ -54,7 +54,7 @@ const rawRoutes = {
     return ok(status);
   }),
 
-  "/api/events-stream": h(() => sseResponse()),
+  "/api/events-stream": h((req) => sseResponse(req)),
 
   /* ---------- spaces ---------- */
   "/api/spaces": h(() => ok(spaces.all())),
@@ -211,8 +211,8 @@ const rawRoutes = {
   "/api/notifications/read": {
     POST: h(async (req) => {
       const body = await readJson<{ id?: string }>(req).catch(() => ({}) as { id?: string });
-      if (body.id) notifications.markRead(body.id);
-      else notifications.markAllRead(spaceParam(req));
+      if (body.id) notifications.markRead(body.id, viewerEmail(req));
+      else notifications.markAllRead(spaceParam(req), viewerEmail(req));
       return ok({ ok: true });
     }),
   },

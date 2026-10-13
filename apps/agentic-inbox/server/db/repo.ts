@@ -1109,21 +1109,44 @@ function rowToNotification(raw: unknown): Notification {
   };
 }
 
+function notificationScope(spaceId: string | null, ownerEmail?: string | null): { sql: string; params: any[] } {
+  const params: any[] = [];
+  let sql = "";
+  if (spaceId) {
+    sql += " AND (space_id = ? OR space_id IS NULL)";
+    params.push(spaceId);
+  }
+  if (ownerEmail) {
+    const email = ownerEmail.toLowerCase();
+    sql += ` AND (
+      lower(owner_email) = ?
+      OR (
+        owner_email = ''
+        AND space_id IN (
+          SELECT a.space_id FROM accounts a
+          JOIN spaces s ON s.id = a.space_id
+          WHERE s.kind = 'work' AND (lower(a.owner_email) = ? OR (a.owner_email = '' AND lower(a.email) = ?))
+        )
+      )
+    )`;
+    params.push(email, email, email);
+  }
+  return { sql, params };
+}
+
 export const notifications = {
   list(spaceId: string | null, limit = 50, ownerEmail?: string | null): Notification[] {
-    const s = spaceId ? { sql: " AND (space_id = ? OR space_id IS NULL)", params: [spaceId] } : { sql: "", params: [] as string[] };
-    const owner = ownerEmail ? { sql: " AND (owner_email = '' OR owner_email = ?)", params: [ownerEmail.toLowerCase()] } : { sql: "", params: [] as string[] };
+    const scope = notificationScope(spaceId, ownerEmail);
     return getDb()
-      .query(`SELECT * FROM notifications WHERE 1=1${s.sql}${owner.sql} ORDER BY created_at DESC LIMIT ?`)
-      .all(...s.params, ...owner.params, limit)
+      .query(`SELECT * FROM notifications WHERE 1=1${scope.sql} ORDER BY created_at DESC LIMIT ?`)
+      .all(...scope.params, limit)
       .map(rowToNotification);
   },
   unreadCount(spaceId: string | null, ownerEmail?: string | null): number {
-    const s = spaceId ? { sql: " AND (space_id = ? OR space_id IS NULL)", params: [spaceId] } : { sql: "", params: [] as string[] };
-    const owner = ownerEmail ? { sql: " AND (owner_email = '' OR owner_email = ?)", params: [ownerEmail.toLowerCase()] } : { sql: "", params: [] as string[] };
+    const scope = notificationScope(spaceId, ownerEmail);
     const r = getDb()
-      .query(`SELECT COUNT(*) AS c FROM notifications WHERE read = 0${s.sql}${owner.sql}`)
-      .get(...s.params, ...owner.params) as Row;
+      .query(`SELECT COUNT(*) AS c FROM notifications WHERE read = 0${scope.sql}`)
+      .get(...scope.params) as Row;
     return r.c;
   },
   push(n: Omit<Notification, "id" | "read" | "createdAt"> & { ownerEmail?: string }): Notification {
@@ -1136,12 +1159,13 @@ export const notifications = {
     void import("../features/apns.ts").then((m) => m.pushApns(n.ownerEmail, full.title, full.body)).catch(() => undefined);
     return full;
   },
-  markAllRead(spaceId: string | null): void {
-    const s = spaceId ? { sql: " AND (space_id = ? OR space_id IS NULL)", params: [spaceId] } : { sql: "", params: [] as string[] };
-    getDb().query(`UPDATE notifications SET read = 1 WHERE read = 0${s.sql}`).run(...s.params);
+  markAllRead(spaceId: string | null, ownerEmail?: string | null): void {
+    const scope = notificationScope(spaceId, ownerEmail);
+    getDb().query(`UPDATE notifications SET read = 1 WHERE read = 0${scope.sql}`).run(...scope.params);
   },
-  markRead(id: string): void {
-    getDb().query("UPDATE notifications SET read = 1 WHERE id = ?").run(id);
+  markRead(id: string, ownerEmail?: string | null): void {
+    const scope = notificationScope(null, ownerEmail);
+    getDb().query(`UPDATE notifications SET read = 1 WHERE id = ?${scope.sql}`).run(id, ...scope.params);
   },
   existsRecent(kind: string, title: string, withinMs: number): boolean {
     const r = getDb()

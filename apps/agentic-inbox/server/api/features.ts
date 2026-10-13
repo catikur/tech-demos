@@ -50,6 +50,14 @@ export const featureRoutes = {
       if (!body.text?.trim() || !body.counterpart?.trim()) badRequest("text and counterpart required");
       const parent = body.parentId ? commitments.get(body.parentId) : null;
       if (body.parentId && !parent) badRequest("parent not found");
+      if (parent?.source.kind === "thread") {
+        const sourceThread = threads.get(parent.source.id);
+        if (sourceThread) ensureVisibleAccount(req, sourceThread.accountId);
+      }
+      const viewer = viewerEmail(req);
+      if (parent && viewer && parent.ownerEmail && parent.ownerEmail.toLowerCase() !== viewer && spaces.get(parent.spaceId)?.kind !== "work") {
+        notFound("Commitment not found");
+      }
       const person = findPerson(body.spaceId, body.counterpart);
       const dueAt = body.due ? (Date.parse(body.due) || parseDue(body.due)) : null;
       commitments.insertUnique({
@@ -73,14 +81,11 @@ export const featureRoutes = {
     POST: h(async (req) => {
       const body = await readJson<{ threadId?: string; text?: string }>(req);
       if (!body.threadId) badRequest("threadId required");
-      try {
-        const card = addThreadToBoard(body.threadId, body.text, viewerEmail(req) || undefined);
-        ensureVisibleAccount(req, threads.accountId(body.threadId));
-        broadcast({ type: "data", entity: "commitments", spaceId: card.spaceId });
-        return ok(card);
-      } catch (err) {
-        badRequest(err instanceof Error ? err.message : String(err));
-      }
+      const thread = threads.get(body.threadId) ?? notFound("Thread not found");
+      ensureVisibleAccount(req, thread.accountId);
+      const card = addThreadToBoard(body.threadId, body.text, viewerEmail(req) || undefined);
+      broadcast({ type: "data", entity: "commitments", spaceId: card.spaceId });
+      return ok(card);
     }),
   },
   "/api/commitments/extract": {

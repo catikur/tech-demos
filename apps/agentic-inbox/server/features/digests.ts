@@ -45,14 +45,17 @@ export async function produceDigest(space: Space, period: "daily" | "weekly", op
 
   const digest = digests.insert({ spaceId: space.id, period, fromAt, toAt: now, bodyMarkdown: body });
   if (opts.notify !== false) {
+    const mailbox = accounts.bySpace(space.id)[0];
+    const ownerEmail = space.kind === "work" ? undefined : mailbox?.ownerEmail || mailbox?.email;
     notifications.push({
       spaceId: space.id,
       kind: "digest",
       title: `${period === "weekly" ? "Weekly" : "Daily"} digest ready — ${space.name}`,
       body: catchup.summaryMarkdown.replace(/[*_#]/g, "").split("\n")[0].slice(0, 160),
       link: `digest:${digest.id}`,
+      ownerEmail,
     });
-    broadcast({ type: "notification", spaceId: space.id, title: "Digest ready" });
+    broadcast({ type: "notification", spaceId: space.id, title: "Digest ready", ownerEmail });
   }
   if (opts.mail ?? env.sync.digestEmailToSelf) {
     const account = accounts.bySpace(space.id)[0];

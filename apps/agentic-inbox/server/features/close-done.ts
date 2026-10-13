@@ -44,7 +44,7 @@ export function closeFinishedWork(spaceId: string): number {
         link: `commitment:${card.id}`,
         ownerEmail: card.ownerEmail,
       });
-      broadcast({ type: "notification", spaceId: card.spaceId, title: note.title });
+      broadcast({ type: "notification", spaceId: card.spaceId, title: note.title, ownerEmail: card.ownerEmail });
     }
   }
   if (closed) broadcast({ type: "data", entity: "commitments", spaceId });
