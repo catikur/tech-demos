@@ -35,7 +35,7 @@ function notifyUnlessQuiet(spaceId: string, n: Parameters<typeof notifications.p
   const space = spaces.get(spaceId);
   if (space && inQuietHours(space)) return false;
   notifications.push(n);
-  broadcast({ type: "notification", spaceId, title: n.title });
+  broadcast({ type: "notification", spaceId, title: n.title, ownerEmail: n.ownerEmail });
   return true;
 }
 
@@ -115,6 +115,7 @@ export async function tick(now = Date.now()): Promise<void> {
         title: `${overdue ? "Overdue" : "Due soon"}: ${c.direction === "owed_by_me" ? "you owe" : "owed to you"} — ${c.counterpartName ?? c.counterpart}`,
         body: c.text,
         link: `commitment:${c.id}`,
+        ownerEmail: c.ownerEmail,
       });
       if (sent) settings.set(key, "1");
     }

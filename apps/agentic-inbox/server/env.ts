@@ -64,6 +64,7 @@ export const env = {
       siteUrl: (process.env.OPENROUTER_SITE_URL ?? baseUrl).replace(/\/$/, ""),
       appName: process.env.OPENROUTER_APP_NAME ?? "Agentic Inbox",
       embedModel: process.env.OPENROUTER_EMBED_MODEL ?? "openai/text-embedding-3-small",
+      jevModel: process.env.JEV_MODEL ?? "typesafe/jev-1.13",
     };
   },
   sync: {

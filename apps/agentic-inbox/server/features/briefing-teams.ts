@@ -57,37 +57,18 @@ function upcomingEvents(brief: MorningBriefing) {
   return (upcoming.length ? upcoming : brief.events).slice(0, 6);
 }
 
-function actionItems(brief: MorningBriefing): string[] {
+function nowItems(brief: MorningBriefing): string[] {
+  return brief.waitingOnMe.slice(0, 5).map((r) => `${who(r)} — ${line(r.source.label, 70)} — ${line(r.excerpt || "cevap bekliyor", 60)} (${ageTr(r.ageMs)})`);
+}
+
+function readyItems(brief: MorningBriefing): string[] {
   const out: string[] = [];
-  const seen = new Set<string>();
-  const push = (raw: string) => {
-    const t = line(raw);
-    const key = t.toLowerCase();
-    if (!t || seen.has(key)) return;
-    seen.add(key);
-    out.push(t);
-  };
-  for (const c of owedByMe(brief).slice(0, 6)) {
+  for (const d of brief.drafts.slice(0, 4)) out.push(`Taslak: ${line(d.subject || "(konu yok)", 90)}`);
+  for (const c of [...owedByMe(brief), ...owedToMe(brief)].slice(0, 4)) {
     const due = c.dueAt ? ` · ${clock(c.dueAt)}` : "";
-    push(`${c.text} → ${who(c)}${due}`);
+    out.push(`${c.direction === "owed_by_me" ? "Sen" : who(c)}: ${line(c.text, 80)}${due}`);
   }
-  for (const r of brief.waitingOnMe.slice(0, 6)) {
-    push(`Yanıtla: ${line(r.source.label, 80)} — ${who(r)} (${ageTr(r.ageMs)})`);
-  }
-  return out.slice(0, 7);
-}
-
-function waitingItems(brief: MorningBriefing): string[] {
-  const out: string[] = [];
-  for (const c of owedToMe(brief).slice(0, 4)) out.push(`${who(c)}: ${line(c.text, 90)}`);
-  for (const r of brief.waitingOnThem.slice(0, 4)) {
-    out.push(`${who(r)} — ${line(r.source.label, 80)} (${ageTr(r.ageMs)})`);
-  }
-  return out.slice(0, 5);
-}
-
-function draftItems(brief: MorningBriefing): string[] {
-  return brief.drafts.slice(0, 5).map((d) => line(d.subject || "(konu yok)", 90));
+  return out.slice(0, 6);
 }
 
 function eventItems(brief: MorningBriefing): string[] {
@@ -95,24 +76,21 @@ function eventItems(brief: MorningBriefing): string[] {
 }
 
 function briefSections(brief: MorningBriefing): BriefSection[] {
-  const actions = actionItems(brief);
-  const events = eventItems(brief);
-  const waiting = waitingItems(brief);
-  const drafts = draftItems(brief);
   const sections: BriefSection[] = [];
-  if (actions.length) sections.push({ title: "Şimdi yap", items: actions });
-  if (events.length) sections.push({ title: "Bugün", items: events });
-  if (waiting.length) sections.push({ title: "Beklediklerin", items: waiting });
-  if (drafts.length) sections.push({ title: "Onayla (Butler)", items: drafts });
+  const now = nowItems(brief);
+  const today = eventItems(brief);
+  const ready = readyItems(brief);
+  if (now.length) sections.push({ title: "Şimdi", items: now });
+  if (today.length) sections.push({ title: "Bugün", items: today });
+  if (ready.length) sections.push({ title: "Hazır", items: ready });
   return sections;
 }
 
 function summaryLine(brief: MorningBriefing, sections: BriefSection[]): string {
   const bits: string[] = [];
-  const nAct = sections.find((s) => s.title === "Şimdi yap")?.items.length ?? 0;
+  const nAct = sections.find((s) => s.title === "Şimdi")?.items.length ?? 0;
   if (nAct) bits.push(`${nAct} aksiyon sende`);
   if (brief.events.length) bits.push(`${brief.events.length} toplantı`);
-  if (brief.unread.length) bits.push(`${brief.unread.length} okunmamış`);
   if (brief.drafts.length) bits.push(`${brief.drafts.length} taslak hazır`);
   return bits.length ? bits.join(" · ") : "Sakin bir gün — acil aksiyon yok.";
 }
@@ -133,7 +111,7 @@ export function formatTeamsBriefing(brief: MorningBriefing, _channelTitle?: stri
   return lines.join("\n").trim().slice(0, 8_000);
 }
 
-const SECTION_TITLES = /^(Şimdi yap|Bugün|Beklediklerin|Onayla \(Butler\))$/i;
+const SECTION_TITLES = /^(Şimdi|Bugün|Hazır)$/i;
 
 export function briefingTextToHtml(text: string): string {
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -169,7 +147,7 @@ export function briefingTextToHtml(text: string): string {
 function looksLikeBrief(text: string): boolean {
   const t = text.trim();
   if (t.length < 40 || t.length > 8_000) return false;
-  return /Özet:|Şimdi yap|Bugün/i.test(t);
+  return /Özet:|Şimdi|Bugün/i.test(t);
 }
 
 export async function postMorningBriefing(
@@ -196,7 +174,7 @@ export async function postMorningBriefing(
   const brief = buildMorningBriefing(spaceId, { now, ownerEmail: opts.ownerEmail ?? null });
   let preview = formatTeamsBriefing(brief, channel.title);
   const llm = await tryComplete(
-    "You write a Turkish executive morning brief for Microsoft Teams. Use only the facts. No invented items. Short. Action first. Keep the headings Şimdi yap / Bugün / Beklediklerin / Onayla (Butler) when those lists are non-empty. Start with 'Butler ·' and an 'Özet:' line. Plain text, numbered lists, no markdown tables.",
+    "You write a Turkish executive morning brief for Microsoft Teams. Use only the facts. No invented items. Short. Action first. Keep the headings Şimdi / Bugün / Hazır when those lists are non-empty. Start with 'Butler ·' and an 'Özet:' line. Plain text, numbered lists, no markdown tables.",
     preview,
     700,
   );

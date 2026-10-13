@@ -34,6 +34,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.conforcus.butler
         PRODUCT_NAME: Butler
+        # 1 = iPhone, 2 = iPad. Universal; signing and the run destination stay in Xcode.
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: false
         INFOPLIST_KEY_UILaunchScreen_Generation: true
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
@@ -55,3 +58,9 @@ targets:
           # Local `bun run dev` demo is plain http; production is https only.
           NSAllowsLocalNetworking: true
         ITSAppUsesNonExemptEncryption: false
+        UIBackgroundModes:
+          - remote-notification
+    entitlements:
+      path: Butler/Butler.entitlements
+      properties:
+        aps-environment: development

@@ -11,6 +11,12 @@ struct SettingsView: View {
             if let error { Text(error).foregroundStyle(Theme.danger).listRowBackground(Theme.raised) }
 
             Section {
+                NavigationLink("Tarih aralığı") { WindowSettingsView() }
+            } header: { Text("Tarih aralığı") } footer: {
+                Text("Gelen kutusu, pano, konular ve radar bu aralığı kullanır. Aralık dışındaki kartlar silinmez.")
+            }
+
+            Section {
                 ForEach(app.spaces) { s in NavigationLink(s.kind == .work ? "İş alanı" : "Kişisel alan") { SpaceRulesView(space: s) } }
             } header: { Text("Alanlar") } footer: {
                 Text("İş ve Kişisel katı sınırlardır: ajan, özetler ve bildirimler etkin alanla sınırlıdır. Yalnızca açık bir istek (“her iki alanda da”) sınırı geçer ve denetim kaydına yazılır.")
@@ -39,6 +45,7 @@ struct SettingsView: View {
 
             Section {
                 NavigationLink("Ajan (OpenRouter)") { LlmSettingsView() }
+                NavigationLink("Posta etiketleri") { MailTagsView() }
                 NavigationLink("Kurumsal asistan") { OrgAssistantView() }
                 if let llm = app.status?.llm {
                     Text("Sağlayıcı: \(llm.provider)\(llm.model.map { " · \($0)" } ?? "")").font(.footnote).foregroundStyle(Theme.faint)
@@ -121,6 +128,7 @@ struct LlmSettingsView: View {
     @State private var apiKey = ""
     @State private var model = ""
     @State private var embedModel = ""
+    @State private var jevModel = ""
     @State private var message: String?
 
     var body: some View {
@@ -131,21 +139,38 @@ struct LlmSettingsView: View {
                     if let masked = cfg.apiKeyMasked { LabeledContent("Anahtar", value: "\(masked) · \(cfg.apiKeySource ?? "")") }
                     LabeledContent("Model", value: "\(cfg.model) · \(cfg.modelSource)")
                     LabeledContent("Gömme modeli", value: "\(cfg.embedModel) · \(cfg.embedModelSource)")
-                } header: { Text("Şu an") } footer: { Text("Anahtar sunucuda şifreli saklanır; .env değerini geçersiz kılar.") }
+                    LabeledContent("Jev", value: "\(cfg.jevModel) · \(cfg.jevModelSource)")
+                } header: { Text("Şu an") } footer: { Text("Anahtar sunucuda şifreli saklanır; .env değerini geçersiz kılar. Jev sohbet modeli değildir: mail sınıfı, araç seçimi ve yazma kapısı.") }
                 Section {
                     SecureField("sk-or-… (boş bırak = değiştirme)", text: $apiKey)
-                    TextField("vendor/model (örn. openai/gpt-4o-mini)", text: $model).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    TextField("sohbet modeli (örn. openai/gpt-4o-mini)", text: $model).textInputAutocapitalization(.never).autocorrectionDisabled()
                     TextField("gömme modeli (örn. openai/text-embedding-3-small)", text: $embedModel).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    TextField("Jev (örn. typesafe/jev-1.13 veya ~typesafe/jev-latest)", text: $jevModel).textInputAutocapitalization(.never).autocorrectionDisabled()
                     Button("Kaydet") {
                         Task {
                             do {
-                                _ = try await app.api!.updateLlm(apiKey: apiKey.isEmpty ? nil : .some(apiKey), model: model.isEmpty ? nil : .some(model), embedModel: embedModel.isEmpty ? nil : .some(embedModel))
-                                apiKey = ""; message = "Kaydedildi."; reload(); await app.refreshStatus()
+                                _ = try await app.api!.updateLlm(
+                                    apiKey: apiKey.isEmpty ? nil : .some(apiKey),
+                                    model: model.isEmpty ? nil : .some(model),
+                                    embedModel: embedModel.isEmpty ? nil : .some(embedModel),
+                                    jevModel: jevModel.isEmpty ? nil : .some(jevModel)
+                                )
+                                apiKey = ""; model = ""; embedModel = ""; jevModel = ""; message = "Kaydedildi."; reload(); await app.refreshStatus()
                             } catch { message = error.localizedDescription }
                         }
-                    }.disabled(apiKey.isEmpty && model.isEmpty && embedModel.isEmpty)
+                    }.disabled(apiKey.isEmpty && model.isEmpty && embedModel.isEmpty && jevModel.isEmpty)
+                    if cfg.jevModelSource == "settings" {
+                        Button("Jev’i varsayılana al") {
+                            Task {
+                                do {
+                                    _ = try await app.api!.updateLlm(jevModel: .some(""))
+                                    message = "Jev varsayılan sürüme döndü."; reload()
+                                } catch { message = error.localizedDescription }
+                            }
+                        }
+                    }
                     if let message { Text(message).font(.footnote).foregroundStyle(Theme.dim) }
-                } header: { Text("Değiştir") } footer: { Text("Gömme modelini değiştirmek arama indeksini sıfırlar; bir sonraki senkronda yeniden kurulur.") }
+                } header: { Text("Değiştir") } footer: { Text("Gömme modelini değiştirmek arama indeksini sıfırlar. Jev kimliği OpenRouter’da yeni sürüm çıkınca buradan değişir; boş bırakılan alan değişmez.") }
             }
             .scrollContentBackground(.hidden)
         }
@@ -221,5 +246,139 @@ struct OrgAssistantView: View {
     private func run(_ key: String, _ work: @escaping () async throws -> Void) {
         busy = key
         Task { defer { busy = nil }; do { try await work(); message = "Kaydedildi." } catch { message = error.localizedDescription } }
+    }
+}
+
+struct WindowSettingsView: View {
+    @Environment(AppModel.self) private var app
+    @State private var from = Date()
+    @State private var to = Date()
+    @State private var openEnd = true
+    @State private var saved = false
+    @State private var hidden = 0
+    @State private var busy: String?
+    @State private var message: String?
+
+    var body: some View {
+        Form {
+            Section {
+                DatePicker("Başlangıç", selection: $from, displayedComponents: .date)
+                Toggle("Bitiş yok (bugün ve sonrası)", isOn: $openEnd)
+                if !openEnd {
+                    DatePicker("Bitiş", selection: $to, in: from..., displayedComponents: .date)
+                }
+                Text(saved ? "Kayıtlı aralık geçerli." : "Kayıtlı aralık yok: son 30 gün gösteriliyor.")
+                    .font(.footnote).foregroundStyle(Theme.faint)
+                if hidden > 0 {
+                    Text("\(hidden) pano kartı bu aralığın dışında; silinmedi.")
+                        .font(.footnote).foregroundStyle(Theme.dim)
+                }
+            } footer: {
+                Text("Yeniden derleme başlangıçtan postayı yeniden okur. Elle taşıdığınız kart aynı şeritte kalır. Aralık dışındakiler gizlenir; aralığı genişletince geri gelir.")
+            }
+            Section {
+                Button(busy == "save" ? "Kaydediliyor…" : "Aralığı kaydet") { run("save", rebuild: false) }
+                    .disabled(busy != nil)
+                Button(busy == "rebuild" ? "Derleniyor…" : "Bu aralığı yeniden derle") { run("rebuild", rebuild: true) }
+                    .disabled(busy != nil)
+                if let message { Text(message).font(.footnote).foregroundStyle(Theme.dim) }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .screenBackground()
+        .navigationTitle("Tarih aralığı")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+    }
+
+    private func load() async {
+        guard let api = app.api else { return }
+        guard let window = try? await api.viewWindow(space: app.spaceId) else { return }
+        from = Date(timeIntervalSince1970: window.from / 1000)
+        openEnd = window.to == nil
+        if let end = window.to { to = Date(timeIntervalSince1970: end / 1000) }
+        saved = window.saved
+        hidden = window.hiddenCommitments
+    }
+
+    private func run(_ key: String, rebuild: Bool) {
+        busy = key
+        message = nil
+        let start = Calendar.current.startOfDay(for: from).millis
+        let end: Double? = openEnd ? nil : ((Calendar.current.date(byAdding: DateComponents(day: 1, second: -1), to: Calendar.current.startOfDay(for: to)) ?? to).millis)
+        Task {
+            defer { busy = nil }
+            guard let api = app.api else { return }
+            do {
+                let savedWindow = try await api.saveViewWindow(space: app.spaceId, from: start, to: end)
+                if rebuild {
+                    let again = try await api.rebuildViewWindow(space: app.spaceId)
+                    saved = again.saved
+                    hidden = again.hiddenCommitments
+                    message = "Aralık yeniden derlendi. Pano şeritleri duruyor."
+                } else {
+                    saved = savedWindow.saved
+                    hidden = savedWindow.hiddenCommitments
+                    message = "Aralık kaydedildi."
+                }
+            } catch {
+                message = error.localizedDescription
+            }
+        }
+    }
+}
+
+struct MailTagsView: View {
+    @Environment(AppModel.self) private var app
+    @State private var name = ""
+    @State private var detail = ""
+    @State private var note: String?
+
+    var body: some View {
+        Loading(load: { try await app.api!.mailTags() }) { tags, reload in
+            Form {
+                Section {
+                    Text("Jev yalnızca bu listedeki etiketleri basar. Bülten ve güvenlik kapatılamaz.").font(.footnote).foregroundStyle(Theme.faint)
+                    ForEach(tags) { tag in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(tag.name).font(.subheadline.weight(.semibold))
+                            Text(tag.description).font(.caption).foregroundStyle(Theme.faint)
+                            if !tag.system {
+                                HStack {
+                                    Button(tag.enabled ? "Kapat" : "Aç") {
+                                        Task { _ = try? await app.api!.saveMailTags(tags.map { $0.id == tag.id ? MailTag(id: tag.id, name: tag.name, description: tag.description, enabled: !tag.enabled, system: tag.system) : $0 }); reload() }
+                                    }
+                                    Button("Sil", role: .destructive) {
+                                        Task { _ = try? await app.api!.saveMailTags(tags.filter { $0.id != tag.id }); reload() }
+                                    }
+                                }.font(.footnote)
+                            }
+                        }
+                    }
+                }
+                Section {
+                    TextField("Ad", text: $name)
+                    TextField("Ne demek", text: $detail)
+                    Button("Ekle") {
+                        Task {
+                            let next = tags + [MailTag(id: name, name: name, description: detail, enabled: true, system: false)]
+                            _ = try? await app.api!.saveMailTags(next)
+                            name = ""; detail = ""; reload()
+                        }
+                    }.disabled(name.trimmingCharacters(in: .whitespaces).count < 2)
+                    Button("Henüz etiketlenmemiş postayı tara") {
+                        Task {
+                            let n = try? await app.api!.scanMailTags(space: app.spaceId)
+                            note = "\(n ?? 0) sıraya alındı"
+                        }
+                    }
+                    if let note { Text(note).font(.footnote).foregroundStyle(Theme.dim) }
+                }
+            }
+            .scrollContentBackground(.hidden)
+        }
+        .screenBackground()
+        .navigationTitle("Posta etiketleri")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

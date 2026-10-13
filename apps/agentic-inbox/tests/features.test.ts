@@ -112,10 +112,10 @@ describe("features over the demo mailbox", () => {
 
   test("catch-up ranks direct asks and mentions first", async () => {
     const c = await buildCatchUp(WORK_SPACE_ID, Date.now() - 24 * 3_600_000, Date.now(), { polish: false });
-    const needs = c.sections.find((s) => s.title === "Needs your response")!;
+    const needs = c.sections.find((s) => s.title === "Cevapla")!;
     expect(needs.items.length).toBeGreaterThan(2);
     expect(needs.items[0].reason).toMatch(/mentions you|asks you/);
-    expect(c.summaryMarkdown).toContain("need a response");
+    expect(c.summaryMarkdown).toContain("cevap bekliyor");
   });
 
   test("follow-up: decisions and actions from the transcript become a draft to attendees", async () => {

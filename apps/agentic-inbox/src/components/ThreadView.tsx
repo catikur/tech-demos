@@ -1,6 +1,7 @@
 import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { Thread } from "../../shared/types.ts";
 import { senderEmail, senderName } from "../../shared/types.ts";
+import { api } from "../api/client.ts";
 import { t } from "../i18n.ts";
 import { fmtDateTime } from "../state.ts";
 import { PersonChip } from "./PersonChip.tsx";
@@ -58,6 +59,7 @@ export function ThreadView({
   onSend: (threadId: string, body: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState("");
+  const [pinned, setPinned] = useState<string | null>(null);
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [sendError, setSendError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -156,7 +158,16 @@ export function ThreadView({
         <BackButton onBack={onBack} />
         <h2 className="detail-title">{thread.subject.trim() && thread.subject !== "(no subject)" ? thread.subject : t("inbox.noSubject")}</h2>
         <span className="badge badge-soft">{t("inbox.participants", { n: thread.participants.length })}</span>
+        <button
+          className="btn btn-small"
+          onClick={() => {
+            void api.post(`/api/commitments/from-thread`, { threadId: thread.id }).then(() => setPinned(t("commitments.pinned")));
+          }}
+        >
+          {t("commitments.pin")}
+        </button>
       </div>
+      {pinned && <p className="small" style={{ margin: "0 16px" }}>{pinned}</p>}
       {!counterpart.isMine && counterpartMail.includes("@") && <PersonChip spaceId={thread.spaceId} email={counterpartMail} />}
       <div className="messages" ref={scrollRef}>
         {messages.map((m) => (

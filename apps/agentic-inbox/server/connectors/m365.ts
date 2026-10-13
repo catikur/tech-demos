@@ -7,6 +7,7 @@ import { env } from "../env.ts";
 import { accounts, chats, events, meetings, threads } from "../db/repo.ts";
 import { microsoftAccessToken, microsoftCredentials } from "../auth/microsoft.ts";
 import { categorize, isBlankText, parseVtt, splitHtmlBody } from "../sync/normalize.ts";
+import { JEV_JUDGED, scheduleMailJudgement } from "../agent/jev-mail.ts";
 import { emptyStats, type Connector, type SendChatInput, type SendMailInput, type SyncStats } from "./types.ts";
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
@@ -107,7 +108,7 @@ export class M365Connector implements Connector {
 
   constructor(private readonly clientFactory: (accountId: string) => GraphLike = (id) => new GraphClient(id)) {}
 
-  async sync(account: Account, opts: { full?: boolean } = {}): Promise<SyncStats> {
+  async sync(account: Account, opts: { full?: boolean; sinceMs?: number } = {}): Promise<SyncStats> {
     const g = this.clientFactory(account.id);
     const stats = emptyStats();
     const meRaw = await g.request<any>("/me?$select=id,mail,userPrincipalName,displayName");
@@ -116,8 +117,8 @@ export class M365Connector implements Connector {
       for (const key of Object.keys(accounts.cursors(account.id))) accounts.setCursor(account.id, key, null);
     }
     const notes: string[] = [];
-    await this.syncMail(g, account, me, stats);
-    await this.syncCalendar(g, account, me, stats);
+    await this.syncMail(g, account, me, stats, opts.sinceMs);
+    await this.syncCalendar(g, account, me, stats, opts.sinceMs);
     await this.syncChats(g, account, me, stats).catch((e) => notes.push(`chats: ${describe(e)}`));
     await this.syncChannels(g, account, me, stats).catch((e) => notes.push(`channels: ${describe(e)}`));
     await this.syncMeetings(g, account, me, stats).catch((e) => notes.push(`meetings: ${describe(e)}`));
@@ -127,15 +128,14 @@ export class M365Connector implements Connector {
 
   /* ---------------- mail ---------------- */
 
-  private async syncMail(g: GraphLike, account: Account, me: Me, stats: SyncStats): Promise<void> {
+  private async syncMail(g: GraphLike, account: Account, me: Me, stats: SyncStats, sinceMs?: number): Promise<void> {
     const select = "$select=id,conversationId,subject,from,toRecipients,ccRecipients,body,receivedDateTime,sentDateTime,isRead";
     for (const folder of ["inbox", "sentitems"]) {
       const cursorKey = `mail.${folder}`;
       const cursors = accounts.cursors(account.id);
-      const since = new Date(Date.now() - 30 * DAY).toISOString();
-      const first =
-        cursors[cursorKey] ??
-        `/me/mailFolders/${folder}/messages/delta?${select}&$top=50&$filter=receivedDateTime ge ${since}`;
+      const since = new Date(sinceMs ?? Date.now() - 30 * DAY).toISOString();
+      const fresh = `/me/mailFolders/${folder}/messages/delta?${select}&$top=50&$filter=receivedDateTime ge ${since}`;
+      const first = sinceMs != null ? fresh : (cursors[cursorKey] ?? fresh);
       const { items, deltaLink } = await g.collect<any>(first, { prefer: 'outlook.body-content-type="text"' });
       for (const m of items) {
         if (m["@removed"]) {
@@ -194,12 +194,14 @@ export class M365Connector implements Connector {
     };
     threads.upsertMessage(message);
     stats.messages++;
+    if (!existing?.labels.includes(JEV_JUDGED)) scheduleMailJudgement(threadId, { subject, from, body });
   }
 
   /* ---------------- calendar ---------------- */
 
-  private async syncCalendar(g: GraphLike, account: Account, me: Me, stats: SyncStats): Promise<void> {
-    const start = new Date(Date.now() - 14 * DAY).toISOString();
+  private async syncCalendar(g: GraphLike, account: Account, me: Me, stats: SyncStats, sinceMs?: number): Promise<void> {
+    const lookback = sinceMs != null && sinceMs < Date.now() - 14 * DAY ? sinceMs : Date.now() - 14 * DAY;
+    const start = new Date(lookback).toISOString();
     const end = new Date(Date.now() + 30 * DAY).toISOString();
     const url =
       `/me/calendarView?startDateTime=${start}&endDateTime=${end}&$top=100` +

@@ -2,6 +2,7 @@ import type { Account } from "../../shared/types.ts";
 import { llmConfig } from "../agent/config.ts";
 import { chats, chunks, meetings, threads } from "../db/repo.ts";
 import { onPostSync } from "../sync/engine.ts";
+import { hasNewCorrespondence } from "./sync-gate.ts";
 import { contentHash, tokens, truncate } from "./text.ts";
 
 export const EMBED_DIM = 256;
@@ -178,7 +179,8 @@ export async function hybridSearch(
   return [...scored.values()].sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
-onPostSync(async (account: Account) => {
+onPostSync(async (account: Account, stats) => {
+  if (!hasNewCorrespondence(stats)) return;
   const n = await indexChunks(account.spaceId);
   if (n > 0) console.log(`[embed] ${n} new chunks in space ${account.spaceId}`);
 });

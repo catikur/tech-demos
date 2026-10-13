@@ -1,4 +1,4 @@
-import type { CalendarEvent, Space } from "../../shared/types.ts";
+import type { CalendarEvent, Meeting, Space } from "../../shared/types.ts";
 import { senderName } from "../../shared/types.ts";
 import { api, spaceQuery } from "../api/client.ts";
 import { dateLocale, t } from "../i18n.ts";
@@ -6,6 +6,12 @@ import { fmtDateTime, untilLabel, useData } from "../state.ts";
 import { SpaceBadge } from "../components/SpaceSwitcher.tsx";
 import { RichBody } from "../components/RichBody.tsx";
 import { BackButton } from "../components/BackButton.tsx";
+
+function LinkedMeeting({ meetingId, render }: { meetingId: string; render?: (meeting: Meeting) => React.ReactNode }) {
+  const detail = useData<Meeting | null>(() => api.get(`/api/meetings/${meetingId}`), [meetingId]);
+  if (!detail.data) return null;
+  return <>{render?.(detail.data)}</>;
+}
 
 function dayKey(at: number): string {
   return new Date(at).toLocaleDateString(dateLocale, { weekday: "long", day: "2-digit", month: "long" });
@@ -21,12 +27,18 @@ export function CalendarView({
   selectedId,
   onSelect,
   renderDetailExtras,
+  selectedMeetingId = null,
+  onSelectMeeting,
+  renderMeetingExtras,
 }: {
   spaceId: string | null;
   spaces: Space[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   renderDetailExtras?: (event: CalendarEvent) => React.ReactNode;
+  selectedMeetingId?: string | null;
+  onSelectMeeting?: (id: string | null) => void;
+  renderMeetingExtras?: (meeting: Meeting) => React.ReactNode;
 }) {
   const now = Date.now();
   const list = useData<CalendarEvent[]>(
@@ -34,8 +46,18 @@ export function CalendarView({
     [spaceId],
     (ev) => ev.type === "sync" || (ev.type === "data" && ev.entity === "events"),
   );
+  const meetings = useData<Meeting[]>(
+    () => api.get(`/api/meetings?${spaceQuery(spaceId)}`),
+    [spaceId],
+    (ev) => ev.type === "sync" || (ev.type === "data" && ev.entity === "meetings"),
+  );
+  const meetingDetail = useData<Meeting | null>(
+    () => (selectedMeetingId ? api.get(`/api/meetings/${selectedMeetingId}`) : Promise.resolve(null)),
+    [selectedMeetingId],
+  );
   const events = list.data ?? [];
-  const selected = events.find((e) => e.id === selectedId) ?? null;
+  const selected = selectedMeetingId ? null : (events.find((e) => e.id === selectedId) ?? null);
+  const recorded = meetings.data ?? [];
 
   const groups = new Map<string, CalendarEvent[]>();
   for (const e of events) {
@@ -58,7 +80,7 @@ export function CalendarView({
   }
 
   return (
-    <div className={`split split-2 ${selectedId ? "has-selection" : ""}`}>
+    <div className={`split split-2 ${selectedId || selectedMeetingId ? "has-selection" : ""}`}>
       <section className="pane pane-list pane-wide">
         <div className="pane-header">
           <h2>{t("calendar.title")}</h2>
@@ -75,7 +97,10 @@ export function CalendarView({
                   <button
                     key={e.id}
                     className={`event-row ${e.id === selectedId ? "is-selected" : ""} ${past ? "is-past" : ""}`}
-                    onClick={() => onSelect(e.id)}
+                    onClick={() => {
+                      onSelectMeeting?.(null);
+                      onSelect(e.id);
+                    }}
                   >
                     <span className="event-time">{clock(e.start)}</span>
                     <span className="event-main">
@@ -93,10 +118,52 @@ export function CalendarView({
               })}
             </div>
           ))}
+          {recorded.length > 0 && (
+            <div className="day-group">
+              <div className="day-label">{t("calendar.recorded")}</div>
+              {recorded.map((m) => (
+                <button
+                  key={m.id}
+                  className={`event-row ${m.id === selectedMeetingId ? "is-selected" : ""}`}
+                  onClick={() => {
+                    onSelect(null);
+                    onSelectMeeting?.(m.id);
+                  }}
+                >
+                  <span className="event-time">{clock(m.start)}</span>
+                  <span className="event-main">
+                    <span className="event-title">{m.title}</span>
+                    <span className="event-meta">
+                      {m.hasTranscript && <span className="pill pill-agent">{t("calendar.transcript")}</span>}
+                      {m.hasRecording && <span className="pill">{t("meetings.recording")}</span>}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </section>
       <section className="pane pane-detail">
-        {!selected ? (
+        {selectedMeetingId && meetingDetail.data ? (
+          <div className="detail scroll">
+            <div className="pane-header">
+              <BackButton onBack={() => onSelectMeeting?.(null)} />
+              <h2 className="detail-title">{meetingDetail.data.title}</h2>
+            </div>
+            <div className="detail-meta">
+              <div>{fmtDateTime(meetingDetail.data.start)}</div>
+              {meetingDetail.data.joinUrl && (
+                <div>
+                  <a href={meetingDetail.data.joinUrl} target="_blank" rel="noreferrer">
+                    {t("calendar.join")}
+                  </a>
+                </div>
+              )}
+            </div>
+            {renderMeetingExtras?.(meetingDetail.data)}
+          </div>
+        ) : !selected ? (
           <div className="empty-state">
             <div className="empty-icon">📅</div>
             <p>{t("calendar.select")}</p>
@@ -133,6 +200,7 @@ export function CalendarView({
               ))}
             </ul>
             {renderDetailExtras?.(selected)}
+            {selected.meetingId && <LinkedMeeting meetingId={selected.meetingId} render={renderMeetingExtras} />}
           </div>
         )}
       </section>

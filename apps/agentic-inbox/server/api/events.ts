@@ -3,17 +3,35 @@
  * refreshes views when a sync finishes or a notification arrives.
  */
 
+import { viewerEmail } from "../auth/scope.ts";
+import { accounts, spaces } from "../db/repo.ts";
+
 export type ServerEvent =
   | { type: "sync"; accountId: string; spaceId: string; stats?: unknown; error?: string }
-  | { type: "notification"; spaceId: string | null; title: string }
+  | { type: "notification"; spaceId: string | null; title: string; ownerEmail?: string }
   | { type: "data"; entity: string; spaceId: string | null };
 
-const clients = new Set<ReadableStreamDefaultController<Uint8Array>>();
+type LiveClient = {
+  email: string | null;
+  enqueue: (chunk: Uint8Array) => void;
+};
+
+const clients = new Set<LiveClient>();
 const encoder = new TextEncoder();
+
+/** Login-off demo sees every event. Otherwise a title reaches only its owner, or a shared Work space the viewer belongs to. */
+export function deliversNotification(viewer: string | null, event: { spaceId: string | null; ownerEmail?: string }): boolean {
+  if (viewer == null) return true;
+  const owner = (event.ownerEmail || "").toLowerCase();
+  if (owner) return owner === viewer.toLowerCase();
+  if (!event.spaceId || spaces.get(event.spaceId)?.kind !== "work") return false;
+  return accounts.ownedBy(viewer).some((a) => a.spaceId === event.spaceId);
+}
 
 export function broadcast(event: ServerEvent): void {
   const payload = encoder.encode(`data: ${JSON.stringify(event)}\n\n`);
   for (const c of clients) {
+    if (event.type === "notification" && !deliversNotification(c.email, event)) continue;
     try {
       c.enqueue(payload);
     } catch {
@@ -22,25 +40,29 @@ export function broadcast(event: ServerEvent): void {
   }
 }
 
-export function sseResponse(): Response {
-  let controller!: ReadableStreamDefaultController<Uint8Array>;
+export function sseResponse(req: Request): Response {
+  const email = viewerEmail(req);
+  let client!: LiveClient;
   let keepAlive: ReturnType<typeof setInterval> | null = null;
   const stream = new ReadableStream<Uint8Array>({
-    start(c) {
-      controller = c;
-      clients.add(c);
-      c.enqueue(encoder.encode(`: connected\n\n`));
+    start(controller) {
+      client = {
+        email,
+        enqueue: (chunk) => controller.enqueue(chunk),
+      };
+      clients.add(client);
+      controller.enqueue(encoder.encode(`: connected\n\n`));
       keepAlive = setInterval(() => {
         try {
-          c.enqueue(encoder.encode(`: ping\n\n`));
+          controller.enqueue(encoder.encode(`: ping\n\n`));
         } catch {
-          clients.delete(c);
+          clients.delete(client);
           if (keepAlive) clearInterval(keepAlive);
         }
       }, 10_000);
     },
     cancel() {
-      clients.delete(controller);
+      clients.delete(client);
       if (keepAlive) clearInterval(keepAlive);
     },
   });

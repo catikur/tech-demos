@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AgentContext, Space, SourceRef } from "../shared/types.ts";
-import { api } from "./api/client.ts";
+import { api, subscribe } from "./api/client.ts";
 import { t } from "./i18n.ts";
 import { useActiveSpace, useData, useStatus } from "./state.ts";
 import { AgentPanel } from "./components/AgentPanel.tsx";
@@ -12,18 +12,19 @@ import { MinutesPanel } from "./components/MinutesPanel.tsx";
 import { InboxView } from "./views/InboxView.tsx";
 import { CalendarView } from "./views/CalendarView.tsx";
 import { ChatsView } from "./views/ChatsView.tsx";
-import { MeetingsView } from "./views/MeetingsView.tsx";
 import { CommitmentsView } from "./views/CommitmentsView.tsx";
 import { CatchUpView } from "./views/CatchUpView.tsx";
 import { TopicsView } from "./views/TopicsView.tsx";
 import { RadarView } from "./views/RadarView.tsx";
 import { PeopleView } from "./views/PeopleView.tsx";
 import { BriefingView } from "./views/BriefingView.tsx";
+import { HomeView } from "./views/HomeView.tsx";
 import { LoginView, type SessionView } from "./components/LoginView.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
 import { Icon, type IconName } from "./components/Icon.tsx";
 
 export type ViewId =
+  | "home"
   | "briefing"
   | "inbox"
   | "calendar"
@@ -37,11 +38,11 @@ export type ViewId =
   | "settings";
 
 const NAV: { id: ViewId; labelKey: string; icon: IconName }[] = [
+  { id: "home", labelKey: "nav.home", icon: "radar" },
   { id: "briefing", labelKey: "nav.briefing", icon: "sun" },
   { id: "inbox", labelKey: "nav.inbox", icon: "inbox" },
   { id: "calendar", labelKey: "nav.calendar", icon: "calendar" },
   { id: "chats", labelKey: "nav.chats", icon: "chat" },
-  { id: "meetings", labelKey: "nav.meetings", icon: "video" },
   { id: "catchup", labelKey: "nav.catchup", icon: "catchup" },
   { id: "commitments", labelKey: "nav.commitments", icon: "board" },
   { id: "radar", labelKey: "nav.radar", icon: "radar" },
@@ -50,8 +51,8 @@ const NAV: { id: ViewId; labelKey: string; icon: IconName }[] = [
   { id: "settings", labelKey: "nav.settings", icon: "settings" },
 ];
 
-const PRIMARY: ViewId[] = ["briefing", "inbox", "calendar", "commitments"];
-const MORE_IDS = new Set<ViewId>(["chats", "meetings", "catchup", "radar", "topics", "people", "settings"]);
+const PRIMARY: ViewId[] = ["home", "inbox", "calendar", "commitments"];
+const MORE_IDS = new Set<ViewId>(["briefing", "chats", "catchup", "radar", "topics", "people", "settings"]);
 
 export interface Selection {
   threadId: string | null;
@@ -66,7 +67,7 @@ export function App() {
   const session = useData<SessionView>(() => api.get("/api/session"), []);
   const status = useStatus();
   const [spaceId, setSpaceId] = useActiveSpace();
-  const [view, setView] = useState<ViewId>("briefing");
+  const [view, setView] = useState<ViewId>("home");
   const [selection, setSelection] = useState<Selection>(emptySelection);
   const [composerPrefill, setComposerPrefill] = useState<{ threadId: string; body: string } | null>(null);
   const [agentOpen, setAgentOpen] = useState(false);
@@ -80,6 +81,18 @@ export function App() {
   useEffect(() => {
     if (spaceId && spaces.length > 0 && !activeSpace) setSpaceId(null);
   }, [spaceId, spaces.length, activeSpace, setSpaceId]);
+
+  useEffect(() => {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") void Notification.requestPermission();
+    return subscribe((ev) => {
+      if (ev.type !== "notification" || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+      try {
+        new Notification("Butler", { body: ev.title });
+      } catch {
+        /* the tab stays the source of truth when the browser blocks alerts */
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -124,8 +137,8 @@ export function App() {
           select({ chatId: ref.id });
           break;
         case "meeting":
-          setView("meetings");
-          select({ meetingId: ref.id });
+          setView("calendar");
+          select({ meetingId: ref.id, eventId: null });
           break;
         case "event":
           setView("calendar");
@@ -239,6 +252,7 @@ export function App() {
               </button>
             </div>
           )}
+          {view === "home" && <HomeView spaceId={spaceId} spaces={spaces} onOpenSource={openSource} />}
           {view === "briefing" && (
             <BriefingView
               spaceId={spaceId}
@@ -257,23 +271,16 @@ export function App() {
               onPrefillConsumed={() => setComposerPrefill(null)}
             />
           )}
-          {view === "calendar" && (
+          {(view === "calendar" || view === "meetings") && (
             <CalendarView
               spaceId={spaceId}
               spaces={spaces}
               selectedId={selection.eventId}
-              onSelect={(id) => select({ eventId: id })}
+              onSelect={(id) => select({ eventId: id, meetingId: null })}
+              selectedMeetingId={selection.meetingId}
+              onSelectMeeting={(id) => select({ meetingId: id, eventId: null })}
               renderDetailExtras={(event) => <BriefPanel key={event.id} event={event} />}
-            />
-          )}
-          {view === "chats" && <ChatsView spaceId={spaceId} spaces={spaces} selectedId={selection.chatId} onSelect={(id) => select({ chatId: id })} />}
-          {view === "meetings" && (
-            <MeetingsView
-              spaceId={spaceId}
-              spaces={spaces}
-              selectedId={selection.meetingId}
-              onSelect={(id) => select({ meetingId: id })}
-              renderDetailExtras={(meeting) => (
+              renderMeetingExtras={(meeting) => (
                 <>
                   <MinutesPanel key={`min-${meeting.id}`} meeting={meeting} />
                   <FollowUpPanel key={meeting.id} meeting={meeting} onSent={(threadId) => openSource({ kind: "thread", id: threadId, label: "" })} />
@@ -281,6 +288,7 @@ export function App() {
               )}
             />
           )}
+          {view === "chats" && <ChatsView spaceId={spaceId} spaces={spaces} selectedId={selection.chatId} onSelect={(id) => select({ chatId: id })} />}
           {view === "catchup" && <CatchUpView key={focusDigestId ?? "catchup"} {...viewProps} focusDigestId={focusDigestId} />}
           {view === "commitments" && <CommitmentsView {...viewProps} />}
           {view === "radar" && <RadarView {...viewProps} />}

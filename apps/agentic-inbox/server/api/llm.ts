@@ -1,5 +1,6 @@
 import { llmStatus } from "../agent/index.ts";
-import { API_KEY_SETTING, llmConfig, maskKey, setStoredApiKey, setStoredEmbedModel, setStoredModel } from "../agent/config.ts";
+import { API_KEY_SETTING, llmConfig, maskKey, setStoredApiKey, setStoredEmbedModel, setStoredJevModel, setStoredModel } from "../agent/config.ts";
+import { jevDecide, jevModel } from "../agent/jev.ts";
 import { resetProviderCache, selectProvider } from "../agent/llm.ts";
 import { cachedModels, fetchOpenRouterModels } from "../agent/models.ts";
 import { audit, chunks, settings } from "../db/repo.ts";
@@ -21,6 +22,10 @@ export interface LlmConfigView {
   embedModel: string;
   embedModelSource: "settings" | "env" | "default";
   envEmbedModel: string | null;
+  /** Decision model. Not used for chat or drafts. */
+  jevModel: string;
+  jevModelSource: "settings" | "env" | "default";
+  envJevModel: string | null;
   mockForced: boolean;
 }
 
@@ -40,6 +45,9 @@ function view(): LlmConfigView {
     embedModel: cfg.embedModel,
     embedModelSource: cfg.embedModelSource,
     envEmbedModel: process.env.OPENROUTER_EMBED_MODEL ?? null,
+    jevModel: cfg.jevModel,
+    jevModelSource: cfg.jevModelSource,
+    envJevModel: process.env.JEV_MODEL ?? null,
     mockForced: cfg.provider === "mock",
   };
 }
@@ -50,7 +58,7 @@ export const llmRoutes = {
   "/api/llm/config": {
     GET: h(() => ok(view())),
     PATCH: h(async (req) => {
-      const body = await readJson<{ apiKey?: string | null; model?: string | null; embedModel?: string | null }>(req);
+      const body = await readJson<{ apiKey?: string | null; model?: string | null; embedModel?: string | null; jevModel?: string | null }>(req);
       const changes: string[] = [];
       if ("apiKey" in body) {
         const key = body.apiKey?.trim() ?? "";
@@ -74,6 +82,12 @@ export const llmRoutes = {
         const next = llmConfig().embedModel;
         changes.push(embedModel ? `embedModel:${embedModel}` : "embedModel:cleared");
         if (next !== previous) chunks.clear();
+      }
+      if ("jevModel" in body) {
+        const model = body.jevModel?.trim() ?? "";
+        if (model && (model.length > 120 || !MODEL_ID.test(model))) badRequest("Model id must look like vendor/model");
+        setStoredJevModel(model || null);
+        changes.push(model ? `jevModel:${model}` : "jevModel:cleared");
       }
       if (changes.length === 0) badRequest("Nothing to update");
       resetProviderCache();
@@ -141,6 +155,23 @@ export const llmRoutes = {
       } catch (err) {
         return ok({ ok: false, model: cfg.embedModel, error: err instanceof Error ? err.message : String(err) });
       }
+    }),
+  },
+  "/api/llm/test-jev": {
+    POST: h(async () => {
+      const model = jevModel();
+      if (llmConfig().provider === "mock") {
+        return ok({ ok: false, model, error: "LLM_PROVIDER=mock disables Jev" });
+      }
+      if (!llmConfig().apiKey) {
+        return ok({ ok: false, model, error: "No OpenRouter API key configured" });
+      }
+      const started = Date.now();
+      const answers = await jevDecide({ text: "ping" }, { yes: { type: "noul", instructions: "Is `text` the word ping?" } });
+      if (!answers || answers.yes?.type !== "noul") {
+        return ok({ ok: false, model, error: "Jev did not return a noul" });
+      }
+      return ok({ ok: true, model, noul: answers.yes.noul, ms: Date.now() - started });
     }),
   },
 };
