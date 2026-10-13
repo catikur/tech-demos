@@ -7,6 +7,7 @@ import { onPostSync } from "../sync/engine.ts";
 import { contentHash, isAsk, isPromise, jaccard, parseDue, splitSentences, tokens, truncate } from "./text.ts";
 import { fillEmptyDeadlines } from "./deadlines.ts";
 import { closeFinishedWork } from "./close-done.ts";
+import { hasNewCorrespondence, rememberModelPass } from "./sync-gate.ts";
 
 /**
  * Feature 1 — Commitment ledger.
@@ -199,6 +200,11 @@ async function extractLlmForSpace(
   const cacheKey = `llmExtract.${spaceId}`;
   const hash = contentHash(corpus);
   if (settings.get(cacheKey) === hash) return 0;
+  const accountKey = opts.accountIds?.[0] ?? spaceId;
+  if (!(await rememberModelPass(accountKey, corpus))) {
+    settings.set(cacheKey, hash);
+    return 0;
+  }
   const raw = await complete(
     'Extract real commitments (who owes whom what by when) from mail/chat/meeting lines. Reply ONLY with JSON: {"items":[{"text":string,"direction":"owed_by_me"|"owed_to_me","counterpart":"email or Name <email>","due":"YYYY-MM-DD or null","source_kind":"thread"|"chat"|"meeting","source_id":"id from the [kind:id] tag"}]}. Include Turkish and English. Skip greetings, FYIs and conversational questions. Use source_id exactly as given.',
     corpus,
@@ -318,10 +324,14 @@ export async function extractForSpace(
   return inserted;
 }
 
-onPostSync(async (account: Account) => {
+onPostSync(async (account: Account, stats) => {
+  const closed = closeFinishedWork(account.spaceId);
+  if (!hasNewCorrespondence(stats)) {
+    if (closed) console.log(`[commitments] closed ${closed} in ${account.spaceId}`);
+    return;
+  }
   const n = await extractForSpace(account.spaceId, { ownerEmail: account.ownerEmail || account.email, accountId: account.id });
   if (n > 0) console.log(`[commitments] ${n} new in space ${account.spaceId}`);
   const filled = await fillEmptyDeadlines(account.spaceId);
-  const closed = closeFinishedWork(account.spaceId);
   if (filled || closed) console.log(`[commitments] filled ${filled} deadlines, closed ${closed} in ${account.spaceId}`);
 });

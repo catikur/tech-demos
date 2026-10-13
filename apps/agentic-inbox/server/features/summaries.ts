@@ -3,6 +3,7 @@ import { tryComplete } from "../agent/llm.ts";
 import { json } from "../db/index.ts";
 import { people, settings, topics } from "../db/repo.ts";
 import { onPostSync } from "../sync/engine.ts";
+import { hasNewCorrespondence, modelPass } from "./sync-gate.ts";
 import { personProfile } from "./people.ts";
 import { contentHash, truncate } from "./text.ts";
 import type { CompleteFn } from "./commitments.ts";
@@ -133,6 +134,9 @@ export async function refreshSummaries(spaceId: string, opts?: { tryComplete?: C
   await refreshTopics(spaceId, complete);
 }
 
-onPostSync(async (account: Account) => {
+onPostSync(async (account: Account, stats) => {
+  if (!hasNewCorrespondence(stats)) return;
+  const decision = modelPass(account.id);
+  if (decision && !(await decision)) return;
   await refreshSummaries(account.spaceId);
 });

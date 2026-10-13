@@ -1,7 +1,7 @@
 import type { Commitment } from "../../shared/types.ts";
 import { asChoice, jevDecide, jevEnabled } from "../agent/jev.ts";
-import { commitments } from "../db/repo.ts";
-import { parseDue } from "./text.ts";
+import { commitments, settings } from "../db/repo.ts";
+import { contentHash, parseDue } from "./text.ts";
 
 const DAY = 86_400_000;
 
@@ -49,13 +49,23 @@ async function guessWithJev(c: Commitment): Promise<number | null> {
   return horizonToDue(choice.choice);
 }
 
-/** Fill deadlines that are still empty. A user-set date (dueLocked) is never replaced. */
+function guessKey(c: Commitment): string {
+  return `deadline.guess.${c.id}.${contentHash(c.text)}`;
+}
+
+/** Fill deadlines that are still empty. A user-set date (dueLocked) is never replaced. A "no deadline" answer is not asked again. */
 export async function fillEmptyDeadlines(spaceId: string, limit = 8): Promise<number> {
   const open = commitments.list(spaceId, { status: "open" }).filter((c) => c.dueAt == null && !c.dueLocked).slice(0, limit);
   let filled = 0;
   for (const c of open) {
     const parsed = parseDue(c.text, c.createdAt);
-    const due = parsed ?? (await guessWithJev(c));
+    if (parsed) {
+      if (commitments.fillDueIfEmpty(c.id, parsed)) filled++;
+      continue;
+    }
+    if (settings.get(guessKey(c)) || !jevEnabled()) continue;
+    const due = await guessWithJev(c);
+    settings.set(guessKey(c), due != null ? "1" : "0");
     if (due != null && commitments.fillDueIfEmpty(c.id, due)) filled++;
   }
   return filled;

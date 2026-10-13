@@ -17,7 +17,7 @@ export function personProfile(person: Person): PersonProfile {
   const lastChatAt = recentChats
     .flatMap((c) => chats.messages(c.id).filter((m) => senderEmail(m.from) === email))
     .reduce((max, m) => Math.max(max, m.at), 0);
-  const lastMeetingAt = meetingsWith.reduce((max, m) => Math.max(max, m.end), 0);
+  const lastMeetingAt = meetingsWith.reduce((max, m) => (m.end <= now ? Math.max(max, m.end) : max), 0);
   const lastContactAt = Math.max(lastThreadAt, lastChatAt, lastMeetingAt) || null;
   const threadIds = new Set(recentThreads.map((t) => t.id));
   const chatIds = new Set(recentChats.map((c) => c.id));

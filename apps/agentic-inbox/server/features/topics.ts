@@ -2,6 +2,7 @@ import type { Account, SourceRef, Topic } from "../../shared/types.ts";
 import { newId } from "../db/index.ts";
 import { chats, events, meetings, threads, topics } from "../db/repo.ts";
 import { onPostSync } from "../sync/engine.ts";
+import { hasNewCorrespondence } from "./sync-gate.ts";
 import { normalizeTitle, tokens } from "./text.ts";
 import { inWindow } from "./window.ts";
 
@@ -161,7 +162,8 @@ export function searchTopics(spaceId: string | null, query: string): Topic[] {
 const pendingSpaces = new Set<string>();
 let topicTimer: ReturnType<typeof setTimeout> | null = null;
 
-onPostSync((account: Account) => {
+onPostSync((account: Account, stats) => {
+  if (!hasNewCorrespondence(stats)) return;
   pendingSpaces.add(account.spaceId);
   if (topicTimer) return;
   topicTimer = setTimeout(() => {
