@@ -24,9 +24,10 @@ export const stochasticIndicator: IndicatorDef = {
       if (Number.isNaN(range)) return NaN;
       return range === 0 ? 50 : (100 * (c - lo[i])) / range;
     });
-    const firstValid = rawK.findIndex((v) => !Number.isNaN(v));
+    // Smooth only the valid tail of the input (each series has its own warm-up).
     const smoothTail = (src: number[], len: number) => {
       const out = new Array<number>(src.length).fill(NaN);
+      const firstValid = src.findIndex((v) => !Number.isNaN(v));
       if (firstValid < 0) return out;
       const tail = P.sma(src.slice(firstValid), len);
       for (let i = 0; i < tail.length; i++) out[firstValid + i] = tail[i];

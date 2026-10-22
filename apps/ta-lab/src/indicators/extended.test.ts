@@ -63,6 +63,17 @@ describe("Stochastic", () => {
       expect(v).toBeLessThanOrEqual(100);
     }
   });
+
+  test("default smoothing produces a valid %D (regression: warm-up alignment)", () => {
+    const closes = ramp(0, 0, 60).map((_, i) => 100 + 10 * Math.sin(i / 3));
+    const out = stochasticIndicator.compute(fromCloses(closes), stochasticIndicator.defaults, P);
+    const d = line(out, "d");
+    expect(d.some((v) => !Number.isNaN(v))).toBe(true);
+    // %D must be the SMA(3) of %K once both are warm.
+    const k = line(out, "k");
+    const i = 40;
+    expect(d[i]).toBeCloseTo((k[i] + k[i - 1] + k[i - 2]) / 3, 8);
+  });
 });
 
 describe("CCI", () => {

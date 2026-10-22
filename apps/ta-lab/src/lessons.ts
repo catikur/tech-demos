@@ -123,19 +123,23 @@ export const LESSONS: Lesson[] = [
     pitfall:
       "A regression channel always fits the past window perfectly — it tells you what the trend *was*. After a sharp break, the channel takes many bars to rotate, happily pointing up while price collapses.",
     exercise: {
-      prompt: "Click a candle that closes below the lower channel band (a downside outlier).",
+      prompt: "Click a candle that closes outside the channel — above the top or below the bottom band.",
       tolerance: 0,
       targets(candles) {
-        const lower = run("linregchannel", candles)("lower");
+        const get = run("linregchannel", candles);
+        const lower = get("lower");
+        const upper = get("upper");
         return closes(candles)
-          .map((c, i) => (!Number.isNaN(lower[i]) && c < lower[i] ? i : -1))
+          .map((c, i) =>
+            !Number.isNaN(lower[i]) && (c < lower[i] || c > upper[i]) ? i : -1,
+          )
           .filter((i) => i >= 0);
       },
       describe(i, candles) {
-        const lower = run("linregchannel", candles)("lower");
-        return `Close = ${fmt(candles[i].close)}, lower band = ${fmt(
-          lower[i],
-        )}. You want a close *under* the band — more than ~2σ below the regression path.`;
+        const get = run("linregchannel", candles);
+        return `Close = ${fmt(candles[i].close)}, channel = ${fmt(get("lower")[i])}–${fmt(
+          get("upper")[i],
+        )}. You want a close *outside* the band — more than ~2σ away from the regression path.`;
       },
     },
   },
@@ -674,16 +678,21 @@ export const LESSONS: Lesson[] = [
     pitfall:
       "There is nothing magical about these ratios; their power is substantially self-fulfilling, and with enough levels drawn, *something* always 'worked' in hindsight. Use them as zones where you look for confirmation, never as standalone triggers.",
     exercise: {
-      prompt: "Click a candle that trades into the golden pocket (0.5–0.618 retracement zone).",
-      tolerance: 0,
-      targets: (candles) => flagged(run("fib", candles)("goldenTouch")),
+      prompt: "Click the swing extreme the retracement is anchored to — the candle where the 0% line begins.",
+      tolerance: 1,
+      targets(candles) {
+        // All fib lines start at the later swing point; its index is the anchor.
+        const fib0 = run("fib", candles)("fib0");
+        const anchor = fib0.findIndex((v) => !Number.isNaN(v));
+        return anchor >= 0 ? [anchor] : [];
+      },
       describe(i, candles) {
         const get = run("fib", candles);
-        const z1 = get("fib5")[get("fib5").length - 1];
-        const z2 = get("fib618")[get("fib618").length - 1];
-        return `This candle spans ${fmt(candles[i].low)}–${fmt(candles[i].high)}; the golden pocket sits at ${fmt(
-          Math.min(z1, z2),
-        )}–${fmt(Math.max(z1, z2))}. Find a bar whose range reaches into that zone after the swing completes.`;
+        const fib0 = get("fib0");
+        const level = fib0[fib0.length - 1];
+        return `This bar spans ${fmt(candles[i].low)}–${fmt(candles[i].high)}, but the 0% line sits at ${fmt(
+          level,
+        )}. Find the extreme candle the levels are measured from — where the horizontal lines begin.`;
       },
     },
   },
