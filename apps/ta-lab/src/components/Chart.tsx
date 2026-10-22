@@ -20,6 +20,8 @@ export interface RenderLine {
   width?: 1 | 2 | 3;
   dashed?: boolean;
   style?: "line" | "hist";
+  /** Optional per-bar histogram colors (overrides sign-based coloring). */
+  histColors?: (string | undefined)[];
 }
 
 export interface RenderPane {
@@ -31,7 +33,8 @@ export interface RenderPane {
 
 export interface ChartMarker {
   time: number;
-  kind: "correct" | "wrong" | "target";
+  kind: "correct" | "wrong" | "target" | "bull" | "bear" | "note";
+  text?: string;
 }
 
 interface Props {
@@ -165,7 +168,9 @@ export function Chart({ candles, overlays, panes, markers, theme, onCandleClick 
                 : {
                     time: c.time as UTCTimestamp,
                     value: line.values[i],
-                    color: line.values[i] >= 0 ? colors.volUp : colors.volDown,
+                    color:
+                      line.histColors?.[i] ??
+                      (line.values[i] >= 0 ? colors.volUp : colors.volDown),
                   },
             ),
           );
@@ -203,34 +208,21 @@ export function Chart({ candles, overlays, panes, markers, theme, onCandleClick 
 
     if (markers.length > 0) {
       const seriesMarkers: SeriesMarker<Time>[] = markers.map((m) => {
-        if (m.kind === "correct") {
-          return {
-            time: m.time as UTCTimestamp,
-            position: "aboveBar",
-            color: colors.up,
-            shape: "arrowDown",
-            text: "✓",
-            size: 2,
-          };
+        const time = m.time as UTCTimestamp;
+        switch (m.kind) {
+          case "correct":
+            return { time, position: "aboveBar", color: colors.up, shape: "arrowDown", text: "✓", size: 2 };
+          case "wrong":
+            return { time, position: "aboveBar", color: colors.down, shape: "arrowDown", text: "✗", size: 2 };
+          case "bull":
+            return { time, position: "belowBar", color: colors.up, shape: "arrowUp", text: m.text ?? "", size: 1 };
+          case "bear":
+            return { time, position: "aboveBar", color: colors.down, shape: "arrowDown", text: m.text ?? "", size: 1 };
+          case "note":
+            return { time, position: "aboveBar", color: "#9aa5bb", shape: "circle", text: m.text ?? "", size: 0 };
+          default:
+            return { time, position: "belowBar", color: "#ffd166", shape: "circle", text: "", size: 1 };
         }
-        if (m.kind === "wrong") {
-          return {
-            time: m.time as UTCTimestamp,
-            position: "aboveBar",
-            color: colors.down,
-            shape: "arrowDown",
-            text: "✗",
-            size: 2,
-          };
-        }
-        return {
-          time: m.time as UTCTimestamp,
-          position: "belowBar",
-          color: "#ffd166",
-          shape: "circle",
-          text: "",
-          size: 1,
-        };
       });
       createSeriesMarkers(candleSeries, seriesMarkers);
     }
@@ -248,5 +240,11 @@ export function Chart({ candles, overlays, panes, markers, theme, onCandleClick 
     return () => chart.remove();
   }, [candles, overlays, panes, markers, theme]);
 
-  return <div ref={containerRef} className="chart-container" />;
+  return (
+    <div
+      ref={containerRef}
+      className="chart-container"
+      style={{ height: 440 + 110 * panes.length }}
+    />
+  );
 }

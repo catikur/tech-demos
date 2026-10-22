@@ -29,6 +29,18 @@ export interface Primitives {
   trueRange(candles: Candle[]): Series;
   /** Difference vs `n` values back (default 1). */
   change(src: Series, n?: number): Series;
+  /** Least-squares moving average: value of the regression line fitted over the last `len` values, evaluated at the current bar. */
+  linreg(src: Series, len: number): Series;
+  /** Mean absolute deviation from the rolling mean over `len` values. */
+  meanDev(src: Series, len: number): Series;
+  /** 1 at bars that are a local maximum vs `left` bars before and `right` bars after; NaN elsewhere. Confirmed only after `right` more bars exist. */
+  pivotHigh(src: Series, left: number, right: number): Series;
+  /** 1 at bars that are a local minimum vs surrounding bars; NaN elsewhere. */
+  pivotLow(src: Series, left: number, right: number): Series;
+  /** Typical price per candle: (high + low + close) / 3. */
+  hlc3(candles: Candle[]): Series;
+  /** Running cumulative sum (NaN inputs treated as 0). */
+  cumsum(src: Series): Series;
 }
 
 export const PRIMITIVE_IDS = [
@@ -40,6 +52,12 @@ export const PRIMITIVE_IDS = [
   "lowest",
   "trueRange",
   "change",
+  "linreg",
+  "meanDev",
+  "pivotHigh",
+  "pivotLow",
+  "hlc3",
+  "cumsum",
 ] as const;
 
 export type PrimitiveId = (typeof PRIMITIVE_IDS)[number];
@@ -53,6 +71,12 @@ export const PRIMITIVE_INFO: Record<PrimitiveId, { name: string; desc: string }>
   lowest: { name: "Lowest", desc: "rolling minimum of the last n values" },
   trueRange: { name: "True Range", desc: "candle range extended across gaps vs previous close" },
   change: { name: "Change", desc: "difference vs n bars ago — the raw momentum step" },
+  linreg: { name: "LinReg", desc: "least-squares line fitted over the window, read at the current bar" },
+  meanDev: { name: "Mean Dev", desc: "average absolute distance from the rolling mean" },
+  pivotHigh: { name: "Pivot High", desc: "local maximum confirmed by bars on both sides" },
+  pivotLow: { name: "Pivot Low", desc: "local minimum confirmed by bars on both sides" },
+  hlc3: { name: "HLC3", desc: "typical price: (high + low + close) / 3" },
+  cumsum: { name: "CumSum", desc: "running total — the accumulation backbone of OBV and VWAP" },
 };
 
 function sma(src: Series, len: number): Series {
@@ -142,6 +166,75 @@ function change(src: Series, n = 1): Series {
   return out;
 }
 
+function linreg(src: Series, len: number): Series {
+  const out = new Array<number>(src.length).fill(NaN);
+  // x = 0..len-1 inside the window; closed forms for Σx and Σx².
+  const sumX = (len * (len - 1)) / 2;
+  const sumX2 = ((len - 1) * len * (2 * len - 1)) / 6;
+  for (let i = len - 1; i < src.length; i++) {
+    let sumY = 0;
+    let sumXY = 0;
+    for (let j = 0; j < len; j++) {
+      const y = src[i - len + 1 + j];
+      sumY += y;
+      sumXY += j * y;
+    }
+    const denom = len * sumX2 - sumX * sumX;
+    const slope = (len * sumXY - sumX * sumY) / denom;
+    const intercept = (sumY - slope * sumX) / len;
+    out[i] = intercept + slope * (len - 1);
+  }
+  return out;
+}
+
+function meanDev(src: Series, len: number): Series {
+  const out = new Array<number>(src.length).fill(NaN);
+  for (let i = len - 1; i < src.length; i++) {
+    let mean = 0;
+    for (let j = i - len + 1; j <= i; j++) mean += src[j];
+    mean /= len;
+    let acc = 0;
+    for (let j = i - len + 1; j <= i; j++) acc += Math.abs(src[j] - mean);
+    out[i] = acc / len;
+  }
+  return out;
+}
+
+function pivot(src: Series, left: number, right: number, isHigh: boolean): Series {
+  const out = new Array<number>(src.length).fill(NaN);
+  for (let i = left; i < src.length - right; i++) {
+    let ok = true;
+    for (let j = i - left; j <= i + right && ok; j++) {
+      if (j === i) continue;
+      if (isHigh ? src[j] >= src[i] : src[j] <= src[i]) ok = false;
+    }
+    if (ok) out[i] = 1;
+  }
+  return out;
+}
+
+function pivotHigh(src: Series, left: number, right: number): Series {
+  return pivot(src, left, right, true);
+}
+
+function pivotLow(src: Series, left: number, right: number): Series {
+  return pivot(src, left, right, false);
+}
+
+function hlc3(candles: Candle[]): Series {
+  return candles.map((c) => (c.high + c.low + c.close) / 3);
+}
+
+function cumsum(src: Series): Series {
+  const out = new Array<number>(src.length).fill(NaN);
+  let acc = 0;
+  for (let i = 0; i < src.length; i++) {
+    acc += Number.isNaN(src[i]) ? 0 : src[i];
+    out[i] = acc;
+  }
+  return out;
+}
+
 export const primitives: Primitives = {
   sma,
   ema,
@@ -151,4 +244,10 @@ export const primitives: Primitives = {
   lowest,
   trueRange,
   change,
+  linreg,
+  meanDev,
+  pivotHigh,
+  pivotLow,
+  hlc3,
+  cumsum,
 };

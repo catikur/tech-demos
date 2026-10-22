@@ -4,42 +4,46 @@
  * derive the primitives graph from real calls.
  */
 
-import type { Candle } from "../data/synthetic.ts";
-import type { Primitives, Series } from "./primitives.ts";
+import {
+  divergenceIndicator,
+  fibRetracementIndicator,
+  pivotPointsIndicator,
+  vwapIndicator,
+} from "./advanced.ts";
+import {
+  candlePatternsIndicator,
+  linregChannelIndicator,
+  obvIndicator,
+  srLevelsIndicator,
+} from "./foundations.ts";
+import { emaRibbonIndicator, maCrossIndicator } from "./moving-averages.ts";
+import { cciIndicator, stochasticIndicator } from "./oscillators.ts";
+import { adxIndicator, donchianIndicator, ichimokuIndicator } from "./trend-systems.ts";
+import { closes, type IndicatorDef, type ModuleId } from "./types.ts";
+import { keltnerIndicator, ttmSqueezeIndicator } from "./volatility.ts";
 
-export type Params = Record<string, number>;
+export type { IndicatorDef, ModuleId, OutputLine, ParamMeta, Params } from "./types.ts";
 
-export interface ParamMeta {
-  key: string;
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-}
-
-export interface OutputLine {
-  key: string;
-  title: string;
-  values: Series;
-  /** Hint for the renderer; "hidden" lines carry data (e.g. trend direction) but aren't plotted. */
-  style?: "line" | "hist" | "hidden";
-}
-
-export interface IndicatorDef {
-  id: string;
+export interface ModuleDef {
+  id: ModuleId;
   name: string;
-  /** overlay = drawn on the price chart; pane = separate sub-pane. */
-  kind: "overlay" | "pane";
-  defaults: Params;
-  paramMeta: ParamMeta[];
-  compute(candles: Candle[], params: Params, P: Primitives): OutputLine[];
+  color: string;
+  tagline: string;
 }
 
-const closes = (candles: Candle[]): Series => candles.map((c) => c.close);
+export const MODULES: ModuleDef[] = [
+  { id: "foundations", name: "Foundations", color: "#4e9cff", tagline: "candles, levels, trend, volume" },
+  { id: "moving-averages", name: "Moving Averages", color: "#ff9f43", tagline: "smoothing price into trend" },
+  { id: "oscillators", name: "Oscillators", color: "#b77dff", tagline: "momentum squeezed into a range" },
+  { id: "volatility", name: "Volatility", color: "#45b5aa", tagline: "how loud the market is" },
+  { id: "trend-systems", name: "Trend Systems", color: "#2fbf8f", tagline: "regime labels and trailing stops" },
+  { id: "advanced", name: "Advanced Tools", color: "#e8c35a", tagline: "anchors, levels and divergences" },
+];
 
 export const smaIndicator: IndicatorDef = {
   id: "sma",
   name: "SMA",
+  module: "moving-averages",
   kind: "overlay",
   defaults: { length: 20 },
   paramMeta: [{ key: "length", label: "Length", min: 2, max: 200, step: 1 }],
@@ -51,6 +55,7 @@ export const smaIndicator: IndicatorDef = {
 export const emaIndicator: IndicatorDef = {
   id: "ema",
   name: "EMA",
+  module: "moving-averages",
   kind: "overlay",
   defaults: { length: 21 },
   paramMeta: [{ key: "length", label: "Length", min: 2, max: 200, step: 1 }],
@@ -62,9 +67,11 @@ export const emaIndicator: IndicatorDef = {
 export const rsiIndicator: IndicatorDef = {
   id: "rsi",
   name: "RSI",
+  module: "oscillators",
   kind: "pane",
   defaults: { length: 14 },
   paramMeta: [{ key: "length", label: "Length", min: 2, max: 60, step: 1 }],
+  guides: [30, 70],
   compute(candles, { length }, P) {
     const diff = P.change(closes(candles));
     const gains = diff.map((d) => (Number.isNaN(d) ? NaN : Math.max(d, 0)));
@@ -85,6 +92,7 @@ export const rsiIndicator: IndicatorDef = {
 export const macdIndicator: IndicatorDef = {
   id: "macd",
   name: "MACD",
+  module: "oscillators",
   kind: "pane",
   defaults: { fast: 12, slow: 26, signal: 9 },
   paramMeta: [
@@ -116,6 +124,7 @@ export const macdIndicator: IndicatorDef = {
 export const bollingerIndicator: IndicatorDef = {
   id: "bollinger",
   name: "Bollinger Bands",
+  module: "volatility",
   kind: "overlay",
   defaults: { length: 20, mult: 2 },
   paramMeta: [
@@ -137,6 +146,7 @@ export const bollingerIndicator: IndicatorDef = {
 export const atrIndicator: IndicatorDef = {
   id: "atr",
   name: "ATR",
+  module: "volatility",
   kind: "pane",
   defaults: { length: 14 },
   paramMeta: [{ key: "length", label: "Length", min: 2, max: 60, step: 1 }],
@@ -149,6 +159,7 @@ export const atrIndicator: IndicatorDef = {
 export const supertrendIndicator: IndicatorDef = {
   id: "supertrend",
   name: "Supertrend",
+  module: "trend-systems",
   kind: "overlay",
   defaults: { length: 10, mult: 3 },
   paramMeta: [
@@ -195,15 +206,59 @@ export const supertrendIndicator: IndicatorDef = {
   },
 };
 
+/** Ordered by module, matching the lesson curriculum. */
 export const INDICATORS: IndicatorDef[] = [
+  // Foundations
+  candlePatternsIndicator,
+  srLevelsIndicator,
+  linregChannelIndicator,
+  obvIndicator,
+  // Moving Averages
   smaIndicator,
   emaIndicator,
+  maCrossIndicator,
+  emaRibbonIndicator,
+  // Oscillators
   rsiIndicator,
+  stochasticIndicator,
   macdIndicator,
+  cciIndicator,
+  // Volatility
   bollingerIndicator,
   atrIndicator,
+  keltnerIndicator,
+  ttmSqueezeIndicator,
+  // Trend Systems
   supertrendIndicator,
+  adxIndicator,
+  ichimokuIndicator,
+  donchianIndicator,
+  // Advanced Tools
+  vwapIndicator,
+  fibRetracementIndicator,
+  pivotPointsIndicator,
+  divergenceIndicator,
 ];
+
+export {
+  adxIndicator,
+  candlePatternsIndicator,
+  cciIndicator,
+  divergenceIndicator,
+  donchianIndicator,
+  emaRibbonIndicator,
+  fibRetracementIndicator,
+  ichimokuIndicator,
+  keltnerIndicator,
+  linregChannelIndicator,
+  maCrossIndicator,
+  obvIndicator,
+  pivotPointsIndicator,
+  srLevelsIndicator,
+  stochasticIndicator,
+  ttmSqueezeIndicator,
+  vwapIndicator,
+};
 
 export function getIndicator(id: string): IndicatorDef {
   const def = INDICATORS.find((d) => d.id === id);
