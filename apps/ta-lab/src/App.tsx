@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Chart, type ChartMarker, type RenderLine, type RenderPane } from "./components/Chart.tsx";
 import { PrimitivesGraph } from "./components/PrimitivesGraph.tsx";
-import { generateCandles, randomSeed, SYMBOLS } from "./data/synthetic.ts";
-import {
-  getIndicator,
-  INDICATORS,
-  MODULES,
-  type OutputLine,
-  type Params,
-} from "./indicators/indicators.ts";
+import { generateCandles, projectClosePath, randomSeed, SYMBOLS } from "./data/synthetic.ts";
+import { computeLabIndicators } from "./indicators/close-path.ts";
+import { getIndicator, INDICATORS, MODULES, type Params } from "./indicators/indicators.ts";
 import { primitives as P } from "./indicators/primitives.ts";
 import { checkExercise, LESSONS, LESSONS_BY_MODULE, type Lesson } from "./lessons.ts";
 
@@ -167,6 +162,7 @@ export function App() {
   const [exercise, setExercise] = useState<ExerciseState | null>(null);
   const [completed, setCompleted] = useState<Record<string, boolean>>(loadProgress);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [showPath, setShowPath] = useState(true);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -178,18 +174,21 @@ export function App() {
 
   const candles = useMemo(() => generateCandles(symbolId, seed, 360), [symbolId, seed]);
 
+  const projected = useMemo(() => {
+    const last = candles[candles.length - 1];
+    return last ? projectClosePath(symbolId, last) : [];
+  }, [candles, symbolId]);
+
+  const shownPath = useMemo(() => (showPath ? projected : []), [showPath, projected]);
+
   const activeLesson: Lesson | null = exercise
     ? LESSONS.find((l) => l.id === exercise.lessonId) ?? null
     : null;
 
-  const results = useMemo(() => {
-    const out: Record<string, OutputLine[]> = {};
-    for (const def of INDICATORS) {
-      if (!enabled[def.id]) continue;
-      out[def.id] = def.compute(candles, params[def.id], P);
-    }
-    return out;
-  }, [candles, enabled, params]);
+  const results = useMemo(
+    () => computeLabIndicators(candles, projected, showPath, enabled, params, P),
+    [candles, projected, showPath, enabled, params],
+  );
 
   const { overlays, panes } = useMemo(() => {
     const overlays: RenderLine[] = [];
@@ -281,7 +280,8 @@ export function App() {
       const values = lines.find((l) => l.key === spec.key)?.values;
       if (!values) continue;
       values.forEach((v, i) => {
-        if (v === 1) out.push({ time: candles[i].time, kind: spec.kind, text: spec.text });
+        const candle = candles[i];
+        if (v === 1 && candle) out.push({ time: candle.time, kind: spec.kind, text: spec.text });
       });
     }
     if (exercise && activeLesson) {
@@ -451,8 +451,29 @@ export function App() {
             </div>
           )}
 
+          <div className="path-bar">
+            <label className="path-toggle">
+              <input
+                id="projected-path-toggle"
+                type="checkbox"
+                checked={showPath}
+                aria-describedby="projected-path-note"
+                onChange={(e) => setShowPath(e.target.checked)}
+              />
+              <span className="path-swatch" aria-hidden="true" />
+              Show projected close path
+            </label>
+            <p className="path-note" id="projected-path-note">
+              Dashed line after the last daily candle is a made-up close path (seeded from this
+              symbol, about 20–30 steps) so close-based indicators and oscillators can extend. Not a
+              market forecast.
+            </p>
+          </div>
+
           <Chart
             candles={candles}
+            projected={shownPath}
+            focusTail={showPath && exercise === null}
             overlays={overlays}
             panes={panes}
             markers={markers}

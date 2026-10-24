@@ -162,3 +162,52 @@ function round2(x: number): number {
 export function randomSeed(): number {
   return Math.floor(Math.random() * 0xffffffff) >>> 0;
 }
+
+/** Inclusive bounds for the made-up close continuation. */
+export const PROJECTED_STEP_MIN = 20;
+export const PROJECTED_STEP_MAX = 30;
+
+/** One future close. No open, high, low, or volume — this is not a candle. */
+export interface ProjectedClose {
+  time: number;
+  close: number;
+}
+
+function symbolPathSeed(symbolId: string): number {
+  let mixed = 0xc105e0a7;
+  for (const ch of symbolId) {
+    mixed = Math.imul(mixed ^ ch.charCodeAt(0), 0x01000193) >>> 0;
+  }
+  return mixed === 0 ? 0xc105e0a7 : mixed;
+}
+
+/** Step count in [20, 30], stable for a symbol. */
+export function projectedStepCount(symbolId: string): number {
+  const span = PROJECTED_STEP_MAX - PROJECTED_STEP_MIN + 1;
+  return PROJECTED_STEP_MIN + (symbolPathSeed(symbolId) % span);
+}
+
+/**
+ * Made-up daily close continuation after the last real candle.
+ * Shocks are seeded from the symbol id only, so the same symbol and last
+ * close replay the same path across reloads. Not a model forecast.
+ */
+export function projectClosePath(
+  symbolId: string,
+  last: { time: number; close: number },
+  steps = projectedStepCount(symbolId),
+): ProjectedClose[] {
+  const n = Math.max(0, Math.floor(steps));
+  if (n === 0) return [];
+  const seed = symbolPathSeed(symbolId);
+  const rand = mulberry32(seed);
+  const drift = ((seed % 5) - 2) * 0.0006;
+  const vol = 0.011;
+  const out: ProjectedClose[] = [];
+  let close = last.close;
+  for (let i = 1; i <= n; i++) {
+    close = close * Math.exp(drift + vol * gaussian(rand));
+    out.push({ time: last.time + i * DAY, close: round2(close) });
+  }
+  return out;
+}
