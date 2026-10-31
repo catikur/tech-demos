@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Chart, type ChartMarker, type RenderLine, type RenderPane } from "./components/Chart.tsx";
+import { DeskLayout } from "./components/DeskReadings.tsx";
 import { PrimitivesGraph } from "./components/PrimitivesGraph.tsx";
 import { generateCandles, projectClosePath, randomSeed, SYMBOLS } from "./data/synthetic.ts";
+import { buildDesk, formatReading } from "./desk/readings.ts";
 import { computeLabIndicators } from "./indicators/close-path.ts";
 import { getIndicator, INDICATORS, MODULES, type Params } from "./indicators/indicators.ts";
 import { primitives as P } from "./indicators/primitives.ts";
@@ -154,7 +156,8 @@ export function App() {
   const [theme, setTheme] = useState<Theme>("dark");
   const [symbolId, setSymbolId] = useState("NEONX");
   const [seed, setSeed] = useState(0x5eed_c0de);
-  const [enabled, setEnabled] = useState<Record<string, boolean>>({ sma: true, rsi: true });
+  const [enabled, setEnabled] = useState<Record<string, boolean>>({ sma: true, rsi: true, atr: true });
+  const [benchmarkId, setBenchmarkId] = useState("QUARK");
   const [params, setParams] = useState<Record<string, Params>>(() =>
     Object.fromEntries(INDICATORS.map((d) => [d.id, { ...d.defaults }])),
   );
@@ -172,7 +175,15 @@ export function App() {
     localStorage.setItem(PROGRESS_KEY, JSON.stringify(completed));
   }, [completed]);
 
+  const benchmarkSafe =
+    benchmarkId === symbolId ? (SYMBOLS.find((symbol) => symbol.id !== symbolId)?.id ?? "QUARK") : benchmarkId;
+
   const candles = useMemo(() => generateCandles(symbolId, seed, 360), [symbolId, seed]);
+  const benchmarkCandles = useMemo(
+    () => generateCandles(benchmarkSafe, seed, 360),
+    [benchmarkSafe, seed],
+  );
+  const desk = useMemo(() => buildDesk(candles, benchmarkCandles), [candles, benchmarkCandles]);
 
   const projected = useMemo(() => {
     const last = candles[candles.length - 1];
@@ -189,6 +200,16 @@ export function App() {
     () => computeLabIndicators(candles, projected, showPath, enabled, params, P),
     [candles, projected, showPath, enabled, params],
   );
+
+  function paneTitle(id: string, key: string, fallback: string): string {
+    if (id === "atr" && key === "atr") {
+      return `Wilder ${formatReading(desk.atr.wilder)} | price ${formatReading(desk.atr.price)} | ${formatReading(desk.atr.pct)}%`;
+    }
+    if (id === "rsi" && key === "rsi") {
+      return `Wilder ${formatReading(desk.rsi.wilder, 1)} | sum ${formatReading(desk.rsi.sum, 1)}`;
+    }
+    return fallback;
+  }
 
   const { overlays, panes } = useMemo(() => {
     const overlays: RenderLine[] = [];
@@ -222,7 +243,7 @@ export function App() {
           const st = styleOf(line.key);
           overlays.push({
             key: `${def.id}:${line.key}`,
-            title: line.title,
+            title: paneTitle(def.id, line.key, line.title),
             values: line.values,
             color: st.color,
             dashed: st.dashed,
@@ -240,7 +261,7 @@ export function App() {
             const st = styleOf(line.key);
             return {
               key: `${def.id}:${line.key}`,
-              title: line.title,
+              title: paneTitle(def.id, line.key, line.title),
               values: line.values,
               color: st.color,
               dashed: st.dashed,
@@ -270,7 +291,7 @@ export function App() {
       }
     }
     return { overlays, panes };
-  }, [results, activeLesson, candles, theme]);
+  }, [results, activeLesson, candles, theme, desk]);
 
   const markers = useMemo<ChartMarker[]>(() => {
     const out: ChartMarker[] = [];
@@ -284,6 +305,8 @@ export function App() {
         if (v === 1 && candle) out.push({ time: candle.time, kind: spec.kind, text: spec.text });
       });
     }
+    const lastReal = candles[candles.length - 1];
+    if (lastReal) out.push({ time: lastReal.time, kind: "note", text: "seq" });
     if (exercise && activeLesson) {
       if (exercise.revealed) {
         for (const t of activeLesson.exercise.targets(candles)) {
@@ -470,15 +493,23 @@ export function App() {
             </p>
           </div>
 
-          <Chart
-            candles={candles}
-            projected={shownPath}
-            focusTail={showPath && exercise === null}
-            overlays={overlays}
-            panes={panes}
-            markers={markers}
-            theme={theme}
-            onCandleClick={handleCandleClick}
+          <DeskLayout
+            desk={desk}
+            chartSymbolId={symbolId}
+            benchmarkId={benchmarkSafe}
+            onBenchmarkId={setBenchmarkId}
+            chart={
+              <Chart
+                candles={candles}
+                projected={shownPath}
+                focusTail={showPath && exercise === null}
+                overlays={overlays}
+                panes={panes}
+                markers={markers}
+                theme={theme}
+                onCandleClick={handleCandleClick}
+              />
+            }
           />
 
           <nav className="tabs">
