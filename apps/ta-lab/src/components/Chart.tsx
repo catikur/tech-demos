@@ -41,7 +41,7 @@ export interface ChartMarker {
 }
 
 interface Props {
-  /** Real daily candles. Lesson clicks index this array; the tail is not included. */
+  /** Real candles. Lesson clicks index this array; the tail is not included. */
   candles: Candle[];
   /**
    * Made-up closes after the last candle. Empty hides the path.
@@ -55,6 +55,10 @@ interface Props {
   panes: RenderPane[];
   markers: ChartMarker[];
   theme: "dark" | "light";
+  /** Daily bars keep the date axis. Any other interval shows the clock. */
+  timeVisible?: boolean;
+  /** When set, the price axis uses this many decimals. Stored prices are unchanged. */
+  pricePrecision?: number;
   onCandleClick?: (index: number) => void;
 }
 
@@ -146,6 +150,8 @@ export function Chart({
   panes,
   markers,
   theme,
+  timeVisible = false,
+  pricePrecision,
   onCandleClick,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -172,7 +178,7 @@ export function Chart({
         horzLines: { color: colors.grid },
       },
       rightPriceScale: { borderColor: colors.border },
-      timeScale: { borderColor: colors.border, timeVisible: false, rightOffset: 3 },
+      timeScale: { borderColor: colors.border, timeVisible, secondsVisible: false, rightOffset: 3 },
       crosshair: { mode: 0 },
     });
 
@@ -183,6 +189,10 @@ export function Chart({
       borderDownColor: colors.down,
       wickUpColor: colors.up,
       wickDownColor: colors.down,
+      priceFormat:
+        pricePrecision === undefined
+          ? undefined
+          : { type: "price", precision: pricePrecision, minMove: 10 ** -pricePrecision },
     });
     candleSeries.setData(
       candles.map((c) => ({
@@ -336,7 +346,7 @@ export function Chart({
     }
 
     return () => chart.remove();
-  }, [candles, projected, focusTail, overlays, panes, markers, theme]);
+  }, [candles, projected, focusTail, overlays, panes, markers, theme, timeVisible, pricePrecision]);
 
   return (
     <div

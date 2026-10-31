@@ -17,7 +17,7 @@ bun test        # primitives, indicators, graph-snapshot + data tests
 bun run typecheck
 ```
 
-No API keys, no market data, no network calls at runtime.
+Lessons and the default chart stay on seeded synthetic candles. A Bybit source loads one public kline through this lab server (`GET /v5/market/kline`, at most 1000 bars, volume from field 6). No API key. No other venue. Desk numbers on that series are not orders.
 
 ## The curriculum
 
@@ -43,4 +43,4 @@ Every lesson has an original explanation (what it measures / how to read it / a 
 
 ## Honest-scope note
 
-Educational demo over seeded synthetic data. Not financial advice; no live market data, brokers, or backtesting.
+Educational demo. The curriculum is seeded synthetic data. The Bybit source is one public kline for the chart and the desk; those readings are not orders, signals, or size. No brokers and no backtesting.

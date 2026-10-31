@@ -1,5 +1,5 @@
 /**
- * Desk readings on the real daily bars.
+ * Desk readings on the real bars of one series.
  * The projected close path is not an input. High, low, and volume stay on
  * finite bars, so a NaN tail cannot move these numbers.
  * Nothing here is an order, a size, or a forecast.
@@ -26,8 +26,98 @@ export const TAIL_NOTE =
 export const VA_VB_TIMEFRAME_NOTE =
   "V-A and V-B run on 240 and 60 on the desk. This card reads the same formulas on the daily bars. It does not invent 4-hour OHLC.";
 
+export const VA_VB_THIS_SERIES_NOTE =
+  "V-A and V-B are this series only. A 240, 60, or D tag that is not this interval is this series' bars, not another timeframe.";
+
 export const VE_NOTE =
   "Preregistration, not a live rule. Today's high stays out of this channel. The Donchian lesson includes today; that is a different line.";
+
+export type DeskSeries = "synthetic" | "1" | "5" | "15" | "60" | "240" | "D";
+
+export function seriesIsDaily(series: DeskSeries): boolean {
+  switch (series) {
+    case "synthetic":
+    case "D":
+      return true;
+    case "1":
+    case "5":
+    case "15":
+    case "60":
+    case "240":
+      return false;
+    default: {
+      const unreachable: never = series;
+      return unreachable;
+    }
+  }
+}
+
+export interface DeskCopy {
+  lead: string;
+  structureLabel: string;
+  priceAtrLabel: string;
+  regimeRangeLabel: string;
+  stanceLabel: string;
+  stanceNote: string;
+  barNote: string;
+  needsBars: string;
+}
+
+const DAILY_COPY: DeskCopy = {
+  lead: "Numbers from the last real daily bar. Not a trade signal, not an order, not a size.",
+  structureLabel: "Daily structure",
+  priceAtrLabel: "Price ATR",
+  regimeRangeLabel: "Change / daily range",
+  stanceLabel: "Daily stance",
+  stanceNote:
+    "One daily interval cannot be strong. No hourly candles are invented. The factor is not applied to a size.",
+  barNote:
+    "The last real daily bar is marked seq. Order inside that bar is unknown. This does not place or cancel an order, and a touch is not a fill.",
+  needsBars: "Needs 21 real daily bars.",
+};
+
+const BAR_COPY: DeskCopy = {
+  lead: "Numbers from the last real bar of this series. Not a trade signal, not an order, not a size.",
+  structureLabel: "Bar structure",
+  priceAtrLabel: "this interval's price ATR",
+  regimeRangeLabel: "Change / loaded window",
+  stanceLabel: "Bar stance",
+  stanceNote: "One interval cannot be strong. No other interval is invented. The factor is not applied to a size.",
+  barNote:
+    "The last real bar is marked seq. Order inside that bar is unknown. This does not place or cancel an order, and a touch is not a fill.",
+  needsBars: "Needs 21 real bars.",
+};
+
+export function deskCopy(series: DeskSeries): DeskCopy {
+  return seriesIsDaily(series) ? DAILY_COPY : BAR_COPY;
+}
+
+/** Day-words become bars. The partial_daily token stays. */
+export function dayWordsAsBars(text: string): string {
+  const token = "\u0000PARTIAL\u0000";
+  const protectedText = text.replaceAll("partial_daily", token);
+  return protectedText
+    .replaceAll("21 real daily bars", "21 real bars")
+    .replaceAll("daily range", "bar range")
+    .replaceAll("daily price ATR", "this interval's price ATR")
+    .replaceAll("daily ATR", "this interval's price ATR")
+    .replaceAll("last real daily bar", "last real bar")
+    .replaceAll("One daily interval", "One interval")
+    .replaceAll("Daily structure", "Bar structure")
+    .replaceAll("Daily stance", "Bar stance")
+    .replaceAll("20-day", "20-bar")
+    .replaceAll("60-day", "60-bar")
+    .replaceAll("55-day", "55-bar")
+    .replaceAll("daily", "bar")
+    .replaceAll(token, "partial_daily");
+}
+
+export function clauseWhere(desk: Clause["desk"], series: DeskSeries): string {
+  if (desk === "prereg") return "prereg";
+  if (seriesIsDaily(series)) return desk;
+  if (desk === series) return desk;
+  return "this series";
+}
 
 const DAY = 86_400;
 
@@ -1059,10 +1149,13 @@ export function hourlyCancelResult(touched: boolean): HourlyCancelResult {
 export const UNRESOLVED_NO_FILL = ["gap_dropped", "no_history", "no_atr"] as const;
 
 export interface DeskReadings {
+  series: DeskSeries;
   barCount: number;
   lastTime: number | null;
   lastClose: number | null;
   producesOrder: false;
+  betaShown: boolean;
+  copy: DeskCopy;
   atr: { wilder: number | null; price: number | null; pct: number | null };
   rsi: { wilder: number | null; deskWilder: number | null; sum: number | null };
   vote: Vote;
@@ -1089,38 +1182,54 @@ export interface DeskReadings {
   tailNote: string;
 }
 
-export function buildDesk(asset: Candle[], benchmark: Candle[]): DeskReadings {
+function presentVariants(variants: VariantRead[], series: DeskSeries): VariantRead[] {
+  if (seriesIsDaily(series)) return variants;
+  return variants.map((variant) => ({
+    ...variant,
+    clauses: variant.clauses.map((item) => ({ ...item, text: dayWordsAsBars(item.text) })),
+  }));
+}
+
+export function buildDesk(asset: Candle[], benchmark: Candle[], series: DeskSeries = "synthetic"): DeskReadings {
   const rows = realBars(asset);
   const bench = realBars(benchmark);
   const last = rows[rows.length - 1];
   const features = dailyFeatureSet(rows);
-  const pairs = alignedReturns(rows, bench, BETA_WINDOW);
-  const beta = betaOf(pairs);
-  const benchRet1 = rows.length >= 2 && last ? benchMove(bench, rows[rows.length - 2].time, last.time) : null;
-  const benchRet5 = rows.length >= 6 && last ? benchMove(bench, rows[rows.length - 6].time, last.time) : null;
+  const daily = seriesIsDaily(series);
+  const pairs = daily ? alignedReturns(rows, bench, BETA_WINDOW) : [];
+  const beta = daily ? betaOf(pairs) : 1;
+  const benchRet1 = daily && rows.length >= 2 && last ? benchMove(bench, rows[rows.length - 2].time, last.time) : null;
+  const benchRet5 = daily && rows.length >= 6 && last ? benchMove(bench, rows[rows.length - 6].time, last.time) : null;
   const ctx: RuleContext = { beta, benchRet1, benchRet5 };
   const fired = features ? fireListedRules(features, ctx) : [];
   const sides = fired.map((rule) => rule.side);
   const agreement: DeskReadings["agreement"] =
     sides.length === 0 ? "none" : sides.every((side) => side === sides[0]) ? "same" : "split";
   const relative =
-    features?.ret5 != null && benchRet5 != null && features.atr14Pct
+    daily && features?.ret5 != null && benchRet5 != null && features.atr14Pct
       ? (features.ret5 - beta * benchRet5) / features.atr14Pct
       : null;
   const structure = dailyStructure(rows);
-  const regime = detectRegime(bench);
+  const regime = detectRegime(daily ? bench : rows);
   return {
+    series,
     barCount: rows.length,
     lastTime: last?.time ?? null,
     lastClose: last?.close ?? null,
     producesOrder: false,
+    betaShown: daily,
+    copy: deskCopy(series),
     atr: { wilder: labWilderAtr(rows), price: priceAtr(rows), pct: atr14Pct(rows) },
     rsi: { wilder: labWilderRsi(rows), deskWilder: deskWilderRsi(rows), sum: sumRsi14(rows) },
     vote: trendVote(rows),
     structure,
     universeLabel: universeFamilyLabel(fired),
     swings: swingLevels(rows),
-    sl01: { timeframeNote: VA_VB_TIMEFRAME_NOTE, veNote: VE_NOTE, variants: sl01Variants(rows, structure) },
+    sl01: {
+      timeframeNote: daily ? VA_VB_TIMEFRAME_NOTE : VA_VB_THIS_SERIES_NOTE,
+      veNote: VE_NOTE,
+      variants: presentVariants(sl01Variants(rows, structure), series),
+    },
     features,
     beta,
     benchRet1,

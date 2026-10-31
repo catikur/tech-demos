@@ -3,11 +3,13 @@ import { Chart, type ChartMarker, type RenderLine, type RenderPane } from "./com
 import { DeskLayout } from "./components/DeskReadings.tsx";
 import { PrimitivesGraph } from "./components/PrimitivesGraph.tsx";
 import { generateCandles, projectClosePath, randomSeed, SYMBOLS } from "./data/synthetic.ts";
-import { buildDesk, formatReading } from "./desk/readings.ts";
+import { buildDesk, formatReading, type DeskSeries } from "./desk/readings.ts";
 import { computeLabIndicators } from "./indicators/close-path.ts";
 import { getIndicator, INDICATORS, MODULES, type Params } from "./indicators/indicators.ts";
 import { primitives as P } from "./indicators/primitives.ts";
 import { checkExercise, LESSONS, LESSONS_BY_MODULE, type Lesson } from "./lessons.ts";
+import { BYBIT_CATEGORIES, BYBIT_INTERVALS, displayPrecision, parseCategory, parseInterval } from "./market/bybit.ts";
+import { useBybitSeries } from "./market/use-bybit-series.ts";
 
 /** Per-indicator line styling: color / dash / width by output key. */
 const LINE_STYLE: Record<string, Record<string, { color: string; dashed?: boolean; width?: 1 | 2 | 3 }>> = {
@@ -166,6 +168,9 @@ export function App() {
   const [completed, setCompleted] = useState<Record<string, boolean>>(loadProgress);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [showPath, setShowPath] = useState(true);
+  const [source, setSource] = useState<"synthetic" | "bybit">("synthetic");
+  const bybit = useBybitSeries(source === "bybit");
+  const live = source === "bybit";
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -178,27 +183,38 @@ export function App() {
   const benchmarkSafe =
     benchmarkId === symbolId ? (SYMBOLS.find((symbol) => symbol.id !== symbolId)?.id ?? "QUARK") : benchmarkId;
 
-  const candles = useMemo(() => generateCandles(symbolId, seed, 360), [symbolId, seed]);
+  const lessonCandles = useMemo(() => generateCandles(symbolId, seed, 360), [symbolId, seed]);
   const benchmarkCandles = useMemo(
     () => generateCandles(benchmarkSafe, seed, 360),
     [benchmarkSafe, seed],
   );
-  const desk = useMemo(() => buildDesk(candles, benchmarkCandles), [candles, benchmarkCandles]);
+  const chartCandles = live ? bybit.candles : lessonCandles;
+  const series: DeskSeries = live ? bybit.interval : "synthetic";
+  const deskBenchmark = live ? (bybit.interval === "D" ? bybit.benchCandles : []) : benchmarkCandles;
+  const desk = useMemo(
+    () => buildDesk(chartCandles, deskBenchmark, series),
+    [chartCandles, deskBenchmark, series],
+  );
+  const betaReady = !live || (bybit.interval === "D" && bybit.benchCandles.length > 0);
+  const benchmarkChoices = live
+    ? (bybit.symbols.length > 0 ? bybit.symbols : [bybit.benchSymbol]).map((id) => ({ id }))
+    : SYMBOLS.map((item) => ({ id: item.id }));
 
   const projected = useMemo(() => {
-    const last = candles[candles.length - 1];
+    if (live) return [];
+    const last = lessonCandles[lessonCandles.length - 1];
     return last ? projectClosePath(symbolId, last) : [];
-  }, [candles, symbolId]);
+  }, [live, lessonCandles, symbolId]);
 
-  const shownPath = useMemo(() => (showPath ? projected : []), [showPath, projected]);
+  const shownPath = live || !showPath ? [] : projected;
 
   const activeLesson: Lesson | null = exercise
     ? LESSONS.find((l) => l.id === exercise.lessonId) ?? null
     : null;
 
   const results = useMemo(
-    () => computeLabIndicators(candles, projected, showPath, enabled, params, P),
-    [candles, projected, showPath, enabled, params],
+    () => computeLabIndicators(chartCandles, projected, !live && showPath, enabled, params, P),
+    [chartCandles, projected, live, showPath, enabled, params],
   );
 
   function paneTitle(id: string, key: string, fallback: string): string {
@@ -278,8 +294,8 @@ export function App() {
         });
       }
     }
-    if (activeLesson?.extraOverlays) {
-      for (const line of activeLesson.extraOverlays(candles)) {
+    if (!live && activeLesson?.extraOverlays) {
+      for (const line of activeLesson.extraOverlays(lessonCandles)) {
         overlays.push({
           key: `lesson:${line.key}`,
           title: line.title,
@@ -291,7 +307,7 @@ export function App() {
       }
     }
     return { overlays, panes };
-  }, [results, activeLesson, candles, theme, desk]);
+  }, [results, activeLesson, lessonCandles, live, theme, desk]);
 
   const markers = useMemo<ChartMarker[]>(() => {
     const out: ChartMarker[] = [];
@@ -301,34 +317,54 @@ export function App() {
       const values = lines.find((l) => l.key === spec.key)?.values;
       if (!values) continue;
       values.forEach((v, i) => {
-        const candle = candles[i];
+        const candle = chartCandles[i];
         if (v === 1 && candle) out.push({ time: candle.time, kind: spec.kind, text: spec.text });
       });
     }
-    const lastReal = candles[candles.length - 1];
+    const lastReal = chartCandles[chartCandles.length - 1];
     if (lastReal) out.push({ time: lastReal.time, kind: "note", text: "seq" });
-    if (exercise && activeLesson) {
+    if (!live && exercise && activeLesson) {
       if (exercise.revealed) {
-        for (const t of activeLesson.exercise.targets(candles)) {
-          out.push({ time: candles[t].time, kind: "target" });
+        for (const t of activeLesson.exercise.targets(lessonCandles)) {
+          const candle = lessonCandles[t];
+          if (candle) out.push({ time: candle.time, kind: "target" });
         }
       }
       if (exercise.clickedIndex !== null) {
-        out.push({
-          time: candles[exercise.clickedIndex].time,
-          kind: exercise.ok ? "correct" : "wrong",
-        });
+        const candle = lessonCandles[exercise.clickedIndex];
+        if (candle) {
+          out.push({
+            time: candle.time,
+            kind: exercise.ok ? "correct" : "wrong",
+          });
+        }
       }
     }
     return out.sort((a, b) => a.time - b.time);
-  }, [results, exercise, activeLesson, candles]);
+  }, [results, exercise, activeLesson, chartCandles, lessonCandles, live]);
 
   const targetCount = useMemo(
-    () => (activeLesson ? activeLesson.exercise.targets(candles).length : 0),
-    [activeLesson, candles],
+    () => (activeLesson ? activeLesson.exercise.targets(lessonCandles).length : 0),
+    [activeLesson, lessonCandles],
   );
 
+  function chooseSource(next: "synthetic" | "bybit") {
+    setSource(next);
+    if (next === "bybit") setExercise(null);
+  }
+
+  function chooseCategory(value: string) {
+    const category = parseCategory(value);
+    if (category) bybit.setCategory(category);
+  }
+
+  function chooseInterval(value: string) {
+    const next = parseInterval(value);
+    if (next) bybit.setInterval(next);
+  }
+
   function startExercise(lesson: Lesson) {
+    if (live) return;
     setEnabled((e) => ({ ...e, [lesson.indicatorId]: true }));
     setParams((p) => ({ ...p, [lesson.indicatorId]: { ...getIndicator(lesson.indicatorId).defaults } }));
     setExercise({ lessonId: lesson.id, clickedIndex: null, ok: null, message: null, revealed: false });
@@ -340,7 +376,8 @@ export function App() {
 
   function handleCandleClick(index: number) {
     if (!exercise || !activeLesson) return;
-    const check = checkExercise(activeLesson, index, candles);
+    if (live) return;
+    const check = checkExercise(activeLesson, index, lessonCandles);
     if (check.ok) setCompleted((c) => ({ ...c, [activeLesson.id]: true }));
     setExercise({ ...exercise, clickedIndex: index, ok: check.ok, message: check.message });
   }
@@ -356,6 +393,7 @@ export function App() {
   }
 
   const symbol = SYMBOLS.find((s) => s.id === symbolId)!;
+  const lastChart = chartCandles[chartCandles.length - 1];
   const totalDone = LESSONS.filter((l) => completed[l.id]).length;
 
   return (
@@ -365,7 +403,11 @@ export function App() {
           <span className="brand-mark">TA</span>
           <div>
             <h1>TA Lab</h1>
-            <p>Technical Analysis 101 — synthetic data learning lab</p>
+            <p>
+              {live
+                ? "One public Bybit series. Readings are not orders."
+                : "Technical Analysis 101 — synthetic data learning lab"}
+            </p>
           </div>
         </div>
         <div className="controls">
@@ -373,18 +415,79 @@ export function App() {
             {totalDone}/{LESSONS.length} lessons
           </span>
           <label className="control">
-            <span>Symbol</span>
-            <select value={symbolId} onChange={(e) => setSymbolId(e.target.value)}>
-              {SYMBOLS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.id} — {s.blurb}
-                </option>
-              ))}
+            <span>Source</span>
+            <select
+              id="market-source"
+              data-testid="market-source"
+              value={source}
+              onChange={(e) => chooseSource(e.target.value === "bybit" ? "bybit" : "synthetic")}
+            >
+              <option value="synthetic">Synthetic</option>
+              <option value="bybit">Bybit</option>
             </select>
           </label>
-          <button className="btn seed-btn" onClick={regenerate} title="Regenerate with a new random seed">
-            🎲 seed {seed.toString(16).slice(0, 6)}
-          </button>
+          {live ? (
+            <>
+              <label className="control">
+                <span>Category</span>
+                <select
+                  data-testid="bybit-category"
+                  value={bybit.category}
+                  onChange={(e) => chooseCategory(e.target.value)}
+                >
+                  {BYBIT_CATEGORIES.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="control">
+                <span>Symbol</span>
+                <select
+                  data-testid="bybit-symbol"
+                  value={bybit.symbol}
+                  onChange={(e) => bybit.setSymbol(e.target.value)}
+                >
+                  {(bybit.symbols.length > 0 ? bybit.symbols : [bybit.symbol]).map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="control">
+                <span>Interval</span>
+                <select
+                  data-testid="bybit-interval"
+                  value={bybit.interval}
+                  onChange={(e) => chooseInterval(e.target.value)}
+                >
+                  {BYBIT_INTERVALS.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="control">
+                <span>Symbol</span>
+                <select value={symbolId} onChange={(e) => setSymbolId(e.target.value)}>
+                  {SYMBOLS.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.id} — {s.blurb}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="btn seed-btn" onClick={regenerate} title="Regenerate with a new random seed">
+                🎲 seed {seed.toString(16).slice(0, 6)}
+              </button>
+            </>
+          )}
           <button
             className="btn"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -437,8 +540,17 @@ export function App() {
             </div>
           ))}
           <div className="sidebar-note">
-            All candles are <strong>synthetic</strong>: a seeded random walk through {symbol.name}
-            's regime schedule ({symbol.blurb}). No market data, no network.
+            {live ? (
+              <>
+                Candles are one public Bybit kline, at most 1000 bars. Volume is field 6. No API key.
+                Lessons stay on the 360 synthetic candles.
+              </>
+            ) : (
+              <>
+                All candles are <strong>synthetic</strong>: a seeded random walk through {symbol.name}
+                's regime schedule ({symbol.blurb}). No market data, no network.
+              </>
+            )}
           </div>
         </aside>
 
@@ -474,39 +586,56 @@ export function App() {
             </div>
           )}
 
-          <div className="path-bar">
-            <label className="path-toggle">
-              <input
-                id="projected-path-toggle"
-                type="checkbox"
-                checked={showPath}
-                aria-describedby="projected-path-note"
-                onChange={(e) => setShowPath(e.target.checked)}
-              />
-              <span className="path-swatch" aria-hidden="true" />
-              Show projected close path
-            </label>
-            <p className="path-note" id="projected-path-note">
-              Dashed line after the last daily candle is a made-up close path (seeded from this
-              symbol, about 20–30 steps) so close-based indicators and oscillators can extend. Not a
-              market forecast.
+          {live ? (
+            <p className="market-status" data-testid="bybit-status">
+              {bybit.loading
+                ? "Loading Bybit…"
+                : `${bybit.candles.length} bars · ${bybit.category} ${bybit.symbol} ${bybit.interval}`}
             </p>
-          </div>
+          ) : (
+            <div className="path-bar">
+              <label className="path-toggle">
+                <input
+                  id="projected-path-toggle"
+                  type="checkbox"
+                  checked={showPath}
+                  aria-describedby="projected-path-note"
+                  onChange={(e) => setShowPath(e.target.checked)}
+                />
+                <span className="path-swatch" aria-hidden="true" />
+                Show projected close path
+              </label>
+              <p className="path-note" id="projected-path-note">
+                Dashed line after the last daily candle is a made-up close path (seeded from this
+                symbol, about 20–30 steps) so close-based indicators and oscillators can extend. Not a
+                market forecast.
+              </p>
+            </div>
+          )}
+          {live && bybit.error && (
+            <p className="market-error" role="alert" data-testid="bybit-error">
+              {bybit.error}
+            </p>
+          )}
 
           <DeskLayout
             desk={desk}
-            chartSymbolId={symbolId}
-            benchmarkId={benchmarkSafe}
-            onBenchmarkId={setBenchmarkId}
+            chartSymbolId={live ? bybit.symbol : symbolId}
+            benchmarkId={live ? bybit.benchSymbol : benchmarkSafe}
+            benchmarkChoices={benchmarkChoices}
+            betaReady={betaReady}
+            onBenchmarkId={live ? bybit.setBenchSymbol : setBenchmarkId}
             chart={
               <Chart
-                candles={candles}
+                candles={chartCandles}
                 projected={shownPath}
-                focusTail={showPath && exercise === null}
+                focusTail={!live && showPath && exercise === null}
                 overlays={overlays}
                 panes={panes}
                 markers={markers}
                 theme={theme}
+                timeVisible={live && bybit.interval !== "D"}
+                pricePrecision={live && lastChart ? displayPrecision(lastChart.close) : undefined}
                 onCandleClick={handleCandleClick}
               />
             }
@@ -523,6 +652,11 @@ export function App() {
 
           {tab === "lessons" ? (
             <div className="modules">
+              {live && (
+                <p className="lesson-lock">
+                  Exercises stay on the 360 synthetic candles. Switch the source to Synthetic to click the chart.
+                </p>
+              )}
               {LESSONS_BY_MODULE.map(({ module, lessons }, mi) => {
                 const done = lessons.filter((l) => completed[l.id]).length;
                 const isCollapsed = collapsed[module.id] ?? false;
@@ -572,6 +706,7 @@ export function App() {
                                 <p>🎯 {lesson.exercise.prompt}</p>
                                 <button
                                   className={`btn small ${active ? "primary" : ""}`}
+                                  disabled={live}
                                   onClick={() => (active ? stopExercise() : startExercise(lesson))}
                                 >
                                   {active ? "Stop exercise" : "Find it on the chart"}
@@ -595,7 +730,10 @@ export function App() {
       </div>
 
       <footer className="footer">
-        Educational demo over seeded synthetic data — not financial advice, not market data. Inspired by{" "}
+        {live
+          ? "Public Bybit kline. Not an order, not a signal, not a size. "
+          : "Educational demo over seeded synthetic data — not financial advice, not market data. "}
+        Inspired by{" "}
         <a href="https://ta.cognicode.org" target="_blank" rel="noreferrer">
           ta.cognicode.org
         </a>{" "}

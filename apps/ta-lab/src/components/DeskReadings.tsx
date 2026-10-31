@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
-import { SYMBOLS } from "../data/synthetic.ts";
 import {
   basisPct,
+  clauseWhere,
   formatReading,
   FUNDING_WINDOW,
   hourlyCancelResult,
@@ -11,6 +11,7 @@ import {
   type DeskReadings,
   type StanceRead,
   type TradeSide,
+  type DeskSeries,
   type VariantRead,
 } from "../desk/readings.ts";
 
@@ -19,7 +20,10 @@ interface Props {
   chart: ReactNode;
   chartSymbolId: string;
   benchmarkId: string;
+  benchmarkChoices: { id: string }[];
   onBenchmarkId: (id: string) => void;
+  /** False when a second daily product did not load. Beta is not printed. */
+  betaReady: boolean;
 }
 
 function gloss(alignment: Alignment): string {
@@ -39,7 +43,15 @@ function gloss(alignment: Alignment): string {
   }
 }
 
-export function DeskLayout({ desk, chart, chartSymbolId, benchmarkId, onBenchmarkId }: Props) {
+export function DeskLayout({
+  desk,
+  chart,
+  chartSymbolId,
+  benchmarkId,
+  benchmarkChoices,
+  onBenchmarkId,
+  betaReady,
+}: Props) {
   const [side, setSide] = useState<TradeSide>("long");
   const [touched, setTouched] = useState(true);
   const [perpText, setPerpText] = useState("");
@@ -52,7 +64,7 @@ export function DeskLayout({ desk, chart, chartSymbolId, benchmarkId, onBenchmar
   const basis = basisPct(Number.isFinite(perp) ? perp : null, Number.isFinite(spot) ? spot : null);
   const barResult = hourlyCancelResult(touched);
   const features = desk.features;
-  const benchmarks = SYMBOLS.filter((symbol) => symbol.id !== chartSymbolId);
+  const benchmarks = benchmarkChoices.filter((symbol) => symbol.id !== chartSymbolId);
 
   return (
     <div className="chart-desk">
@@ -72,7 +84,7 @@ export function DeskLayout({ desk, chart, chartSymbolId, benchmarkId, onBenchmar
       </div>
       <aside className="desk-panel" id="desk-readings" data-testid="desk-readings">
         <h2>Desk readings</h2>
-        <p className="desk-lead">Numbers from the last real daily bar. Not a trade signal, not an order, not a size.</p>
+        <p className="desk-lead">{desk.copy.lead}</p>
 
         <section className="desk-card" id="desk-atr">
           <h3>1 · Three ATRs</h3>
@@ -83,7 +95,7 @@ export function DeskLayout({ desk, chart, chartSymbolId, benchmarkId, onBenchmar
               <dd>{formatReading(desk.atr.wilder, 4)}</dd>
             </div>
             <div>
-              <dt>Price ATR</dt>
+              <dt>{desk.copy.priceAtrLabel}</dt>
               <dd>{formatReading(desk.atr.price, 4)}</dd>
             </div>
             <div>
@@ -124,7 +136,7 @@ export function DeskLayout({ desk, chart, chartSymbolId, benchmarkId, onBenchmar
               <dd>{desk.vote}</dd>
             </div>
             <div>
-              <dt>Daily structure</dt>
+              <dt>{desk.copy.structureLabel}</dt>
               <dd>{desk.structure}</dd>
             </div>
             <div>
@@ -140,13 +152,20 @@ export function DeskLayout({ desk, chart, chartSymbolId, benchmarkId, onBenchmar
 
         <section className="desk-card" id="desk-sl01">
           <h3>4 · SL-01 checklist</h3>
-          <p className="desk-note">{desk.sl01.timeframeNote}</p>
+          <p className="desk-note" data-testid="va-vb-note">
+            {desk.sl01.timeframeNote}
+          </p>
           <p className="desk-note">
             The ATR floor only widens. This lab does not tighten a stop. V-C has no target. A 2R multiple is not a
             destination and is not drawn. Supertrend is a different function.
           </p>
           {desk.sl01.variants.map((variant) => (
-            <VariantBlock key={variant.id} variant={variant} note={variant.id === "E" ? desk.sl01.veNote : null} />
+            <VariantBlock
+              key={variant.id}
+              variant={variant}
+              series={desk.series}
+              note={variant.id === "E" ? desk.sl01.veNote : null}
+            />
           ))}
         </section>
 
@@ -188,19 +207,28 @@ export function DeskLayout({ desk, chart, chartSymbolId, benchmarkId, onBenchmar
                 <dt>80% half-width</dt>
                 <dd>{formatReading(desk.bandHalf, 3)}%</dd>
               </div>
-              <div>
-                <dt>beta / bench ret5</dt>
-                <dd>
-                  {formatReading(desk.beta, 3)} / {formatReading(desk.benchRet5)}%
-                </dd>
-              </div>
-              <div>
-                <dt>relative score</dt>
-                <dd>{formatReading(desk.relative, 3)}</dd>
-              </div>
+              {desk.betaShown && betaReady && (
+                <>
+                  <div>
+                    <dt>beta / bench ret5</dt>
+                    <dd>
+                      {formatReading(desk.beta, 3)} / {formatReading(desk.benchRet5)}%
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>relative score</dt>
+                    <dd>{formatReading(desk.relative, 3)}</dd>
+                  </div>
+                </>
+              )}
             </dl>
           ) : (
-            <p className="desk-note">Needs 21 real daily bars.</p>
+            <p className="desk-note">{desk.copy.needsBars}</p>
+          )}
+          {!desk.betaShown && (
+            <p className="desk-note" data-testid="beta-hidden">
+              Beta and the relative score are not printed on this interval.
+            </p>
           )}
           <p className="desk-note">
             volZ20 divides by n−1. Lab stdev divides by n. The half-width is 1.2816 × sigma at multiplier 1. Not a wick.
@@ -222,25 +250,30 @@ export function DeskLayout({ desk, chart, chartSymbolId, benchmarkId, onBenchmar
 
         <section className="desk-card" id="desk-regime">
           <h3>6 · Regime strip</h3>
-          <label className="desk-field">
-            <span>Other symbol</span>
-            <select value={benchmarkId} onChange={(event) => onBenchmarkId(event.target.value)}>
-              {benchmarks.map((symbol) => (
-                <option key={symbol.id} value={symbol.id}>
-                  {symbol.id}
-                </option>
-              ))}
-            </select>
-          </label>
+          {desk.betaShown && (
+            <label className="desk-field">
+              <span>Other symbol</span>
+              <select value={benchmarkId} onChange={(event) => onBenchmarkId(event.target.value)}>
+                {benchmarks.map((symbol) => (
+                  <option key={symbol.id} value={symbol.id}>
+                    {symbol.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {desk.betaShown && !betaReady && (
+            <p className="desk-note">The second product on this category at D did not load. Beta is not printed.</p>
+          )}
           <dl>
             <div>
-              <dt>{benchmarkId}</dt>
+              <dt>{desk.betaShown ? benchmarkId : chartSymbolId}</dt>
               <dd data-testid="regime-label">
                 {desk.regime.regime} · {desk.regime.trend} · {desk.regime.volatility}
               </dd>
             </div>
             <div>
-              <dt>Change / daily range</dt>
+              <dt>{desk.copy.regimeRangeLabel}</dt>
               <dd>
                 {formatReading(desk.regime.changePct)}% / {formatReading(desk.regime.avgRangePct)}%
               </dd>
@@ -271,7 +304,7 @@ export function DeskLayout({ desk, chart, chartSymbolId, benchmarkId, onBenchmar
           </div>
           <dl>
             <div>
-              <dt>Daily stance</dt>
+              <dt>{desk.copy.stanceLabel}</dt>
               <dd data-testid="stance-label">{stance.stance}</dd>
             </div>
             <div>
@@ -292,17 +325,13 @@ export function DeskLayout({ desk, chart, chartSymbolId, benchmarkId, onBenchmar
             </div>
           </dl>
           <p className="desk-note">
-            {stance.reasons.length ? stance.reasons.join(", ") : "No vote."} One daily interval cannot be strong. No
-            hourly candles are invented. The factor is not applied to a size.
+            {stance.reasons.length ? stance.reasons.join(", ") : "No vote."} {desk.copy.stanceNote}
           </p>
         </section>
 
         <section className="desk-card" id="desk-bar">
           <h3>8 · One bar</h3>
-          <p className="desk-note">
-            The last real daily bar is marked seq. Order inside that bar is unknown. This does not place or cancel an
-            order, and a touch is not a fill.
-          </p>
+          <p className="desk-note">{desk.copy.barNote}</p>
           <div className="desk-toggle" role="group" aria-label="What happened inside the bar">
             <button type="button" className={touched ? "btn small primary" : "btn small"} onClick={() => setTouched(true)}>
               Touch and cancel
@@ -379,7 +408,7 @@ export function DeskLayout({ desk, chart, chartSymbolId, benchmarkId, onBenchmar
   );
 }
 
-function VariantBlock({ variant, note }: { variant: VariantRead; note: string | null }) {
+function VariantBlock({ variant, series, note }: { variant: VariantRead; series: DeskSeries; note: string | null }) {
   return (
     <div className="desk-variant">
       <header>
@@ -391,7 +420,7 @@ function VariantBlock({ variant, note }: { variant: VariantRead; note: string | 
       <ul>
         {variant.clauses.map((item) => (
           <li key={item.id} className={`desk-clause ${item.state}`}>
-            <span className="desk-where">{item.desk}</span>
+            <span className="desk-where">{clauseWhere(item.desk, series)}</span>
             <span>{item.text}</span>
             <span className="desk-value">{item.value}</span>
           </li>

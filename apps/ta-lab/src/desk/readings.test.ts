@@ -7,8 +7,10 @@ import {
   basisPct,
   betaOf,
   buildDesk,
+  clauseWhere,
   dailyFeatureSet,
   dailyStructure,
+  dayWordsAsBars,
   deskWilderRsi,
   detectRegime,
   donchianBreakout,
@@ -316,6 +318,50 @@ describe("one bar, paper cap, basis", () => {
     expect(basisPct(90, 100)).toBeCloseTo(-10, 8);
     expect(basisPct(100, 0)).toBeNull();
     expect(basisPct(null, 100)).toBeNull();
+  });
+});
+
+describe("one loaded interval", () => {
+  test("an intraday series renames day-words, hides beta, and keeps V-E preregistered", () => {
+    const asset = ramp(80);
+    const bench = flat(80, 20);
+    const desk = buildDesk(asset, bench, "60");
+    expect(desk.producesOrder).toBe(false);
+    expect(desk.betaShown).toBe(false);
+    expect(desk.relative).toBeNull();
+    expect(desk.sl01.timeframeNote).toContain("this series");
+    expect(desk.sl01.veNote.toLowerCase()).toContain("preregistration");
+    const ve = desk.sl01.variants.find((variant) => variant.id === "E");
+    expect(ve?.liveRule).toBe(false);
+    expect(ve?.clauses.find((item) => item.id === "e-channel")?.text).toContain("55-bar");
+    const vc = desk.sl01.variants.find((variant) => variant.id === "C");
+    expect(vc?.clauses.find((item) => item.id === "c-ret")?.text).toContain("20-bar");
+    expect(vc?.clauses.find((item) => item.id === "c-ret")?.text).toContain("60-bar");
+    expect(desk.sl01.variants.find((variant) => variant.id === "A")?.clauses.find((item) => item.id === "a-stop")?.text).toContain(
+      "this interval's price ATR",
+    );
+    expect(desk.copy.regimeRangeLabel).toBe("Change / loaded window");
+    expect(desk.copy.needsBars).toBe("Needs 21 real bars.");
+    expect(desk.regime).toEqual(detectRegime(asset));
+    expect(desk.regime).not.toEqual(detectRegime(bench));
+    expect(clauseWhere("240", "60")).toBe("this series");
+    expect(clauseWhere("60", "60")).toBe("60");
+    expect(clauseWhere("prereg", "15")).toBe("prereg");
+    expect(desk.tailNote).toContain("partial_daily");
+    expect(dayWordsAsBars("partial_daily daily range")).toBe("partial_daily bar range");
+  });
+
+  test("daily and synthetic labels stay, including the V-A / V-B note", () => {
+    const desk = buildDesk(ramp(80), flat(80), "D");
+    expect(desk.betaShown).toBe(true);
+    expect(desk.sl01.timeframeNote).toContain("daily bars");
+    expect(desk.sl01.variants.find((variant) => variant.id === "C")?.clauses.find((item) => item.id === "c-ret")?.text).toContain(
+      "20-day",
+    );
+    expect(desk.copy.structureLabel).toBe("Daily structure");
+    expect(clauseWhere("240", "D")).toBe("240");
+    expect(clauseWhere("240", "synthetic")).toBe("240");
+    expect(buildDesk(ramp(40), flat(40)).series).toBe("synthetic");
   });
 });
 

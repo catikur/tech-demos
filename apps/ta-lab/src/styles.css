@@ -138,6 +138,24 @@ body {
   font-size: 12px;
 }
 
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.market-status,
+.lesson-lock {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.market-error {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--bad);
+}
+
 .btn.primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -898,7 +916,7 @@ body {
 
 .desk-clause {
   display: grid;
-  grid-template-columns: 52px 1fr;
+  grid-template-columns: max-content 1fr;
   gap: 2px 8px;
   padding: 4px 0;
   border-top: 1px solid var(--border);
