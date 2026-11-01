@@ -84,16 +84,15 @@
       "stars": 34002
     },
     {
-      "id": "2103190313624039620-jev",
-      "title": "Jev (TypeSafe AI) — System One decision model for agent harnesses",
-      "url": "https://x.com/Av1dlive/status/2103190313624039620",
-      "github": "https://github.com/codejunkie99/keel",
-      "docs": "https://learnjev.com/tutorials/agent-harness",
-      "date": "2026-09-28",
+      "id": "2104169192438296889-modulify",
+      "title": "Modulify",
+      "url": "https://x.com/VullnetAdemaj/status/2104169192438296889",
+      "product": "https://modulify.ai/templates",
+      "date": "2026-10-01",
       "source": "daily-x-tech-scout",
-      "slug": "jev-harness",
+      "slug": "modulify-lite",
       "folder": "unfiled",
-      "reason": "owner dismissed Approve/Tweak/Skip without answering"
+      "reason": "owner skipped"
     }
   ],
   "built": [
@@ -148,6 +147,40 @@
       "slug": "openbb-lite",
       "folder": "Trade",
       "stars": 73393
+    },
+    {
+      "id": "2103190313624039620-jev",
+      "title": "Jev (TypeSafe AI) — System One decision model for agent harnesses",
+      "url": "https://x.com/Av1dlive/status/2103190313624039620",
+      "github": "https://github.com/codejunkie99/keel",
+      "docs": "https://learnjev.com/tutorials/agent-harness",
+      "date": "2026-09-28",
+      "pr": "https://github.com/catikur/tech-demos/pull/19",
+      "source": "daily-x-tech-scout",
+      "slug": "jev-harness",
+      "folder": "unfiled"
+    },
+    {
+      "id": "2109623431763292649-rea",
+      "title": "REA (morluto/rea) — Reverse Engineer Anything: agent-driven reverse engineering from app behavior to native binaries",
+      "url": "https://x.com/0xCodila/status/2109623431763292649",
+      "github": "https://github.com/morluto/rea",
+      "date": "2026-10-19",
+      "pr": "https://github.com/catikur/tech-demos/pull/22",
+      "source": "daily-x-tech-scout",
+      "slug": "rea-lite",
+      "folder": "unfiled",
+      "stars": 326120
+    },
+    {
+      "id": "2085976353258561813-cognicode-ta101",
+      "title": "Technical Analysis 101 (ta.cognicode.org) — 1000 TradingView scripts mined into a knowledge graph of shared primitives",
+      "url": "https://x.com/i/status/2085976353258561813",
+      "site": "https://ta.cognicode.org",
+      "date": "2026-08-08",
+      "pr": "https://github.com/catikur/tech-demos/pull/23",
+      "source": "owner-pick",
+      "slug": "ta-lab"
     }
   ]
 }
