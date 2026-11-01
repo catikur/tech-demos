@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { isCloudFrontCountryBlock } from "./bybit-route.ts";
 import {
   BYBIT_ORIGIN,
   clampKlineLimit,
@@ -136,6 +137,29 @@ describe("public GET", () => {
     };
     await expect(readTradingSymbols("inverse", fetchImpl)).rejects.toThrow(/rate limit/);
     expect(calls).toBe(1);
+  });
+});
+
+describe("country block", () => {
+  test("CloudFront's country page is the block, and a generic 403 is not", () => {
+    const page = "{\n    error:The Amazon CloudFront distribution is configured to block access from your country\n}";
+    expect(isCloudFrontCountryBlock(403, page)).toBe(true);
+    expect(isCloudFrontCountryBlock(403, "Request blocked")).toBe(false);
+    expect(isCloudFrontCountryBlock(200, page)).toBe(false);
+  });
+
+  test("an injected country block does not open another host", async () => {
+    const seen: string[] = [];
+    const fetchImpl: FetchLike = async (input) => {
+      seen.push(String(input));
+      return new Response(
+        "{ error:The Amazon CloudFront distribution is configured to block access from your country }",
+        { status: 403 },
+      );
+    };
+    await expect(readKlines({ category: "linear", symbol: "BTCUSDT", interval: "D" }, fetchImpl)).rejects.toThrow(/403/);
+    expect(seen).toEqual([expect.stringContaining("https://api.bybit.com/v5/market/kline")]);
+    expect(seen.join(" ").toLowerCase()).not.toContain("bitget");
   });
 });
 

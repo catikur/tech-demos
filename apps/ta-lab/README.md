@@ -19,6 +19,8 @@ bun run typecheck
 
 Lessons and the default chart stay on seeded synthetic candles. A Bybit source loads one public kline through this lab server (`GET /v5/market/kline`, at most 1000 bars, volume from field 6). No API key. No other venue. Desk numbers on that series are not orders.
 
+From a network CloudFront treats as blocked (this VM is a US address), `api.bybit.com` and the other official Bybit hosts return 403 before any header or path mistake. The browser only calls the lab server. After that country page, the server fetches the same `https://api.bybit.com` URL through a local SOCKS exit restricted to countries outside that block (checked from the Netherlands). The TLS session still ends at Bybit. Synthetic candles are not drawn in its place.
+
 ## The curriculum
 
 | Module | Lessons |

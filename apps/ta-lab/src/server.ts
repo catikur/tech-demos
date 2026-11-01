@@ -17,6 +17,8 @@ function marketError(error: unknown): Response {
 
 const server = Bun.serve({
   port: Number(process.env.PORT ?? 3000),
+  // The first Bybit fetch may wait for a SOCKS circuit after a country block.
+  idleTimeout: 120,
   routes: {
     "/api/bybit/instruments": {
       GET: async (req) => {

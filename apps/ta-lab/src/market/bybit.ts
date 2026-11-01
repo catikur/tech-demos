@@ -5,6 +5,7 @@
  */
 
 import type { Candle } from "../data/synthetic.ts";
+import { fetchBybitUrl } from "./bybit-route.ts";
 
 export type BybitCategory = "linear" | "spot" | "inverse";
 export type BybitInterval = "1" | "5" | "15" | "60" | "240" | "D";
@@ -176,10 +177,14 @@ async function bybitPublicGet(path: string, query: Record<string, string>, fetch
     body = null;
   }
   const retCode = retCodeOf(body);
-  noteBybitResponse(response.status, retCode);
   if (response.status === 403) {
+    noteBybitResponse(response.status, retCode);
     throw new BybitRequestError("Bybit refused this network (403). No other venue is used.", 403);
   }
+  if (body == null) {
+    throw new BybitRequestError(`Bybit request failed (${response.status})`, response.ok ? 502 : response.status);
+  }
+  noteBybitResponse(response.status, retCode);
   if (response.status === 429 || retCode === 10006 || retCode === 10018) {
     throw new BybitRequestError("Bybit rate limit. Cooling before another request.", 429);
   }
@@ -191,7 +196,7 @@ async function bybitPublicGet(path: string, query: Record<string, string>, fetch
   return body;
 }
 
-export async function readTradingSymbols(category: BybitCategory, fetchImpl: FetchLike = fetch): Promise<string[]> {
+export async function readTradingSymbols(category: BybitCategory, fetchImpl: FetchLike = fetchBybitUrl): Promise<string[]> {
   const symbols: string[] = [];
   let cursor = "";
   for (let page = 0; page < INSTRUMENT_PAGE_CAP; page++) {
@@ -208,7 +213,7 @@ export async function readTradingSymbols(category: BybitCategory, fetchImpl: Fet
 
 export async function readKlines(
   query: { category: BybitCategory; symbol: string; interval: BybitInterval; limit?: number },
-  fetchImpl: FetchLike = fetch,
+  fetchImpl: FetchLike = fetchBybitUrl,
 ): Promise<Candle[]> {
   const symbol = query.symbol.trim().toUpperCase();
   if (!SYMBOL_RE.test(symbol)) {
