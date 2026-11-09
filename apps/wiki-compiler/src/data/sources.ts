@@ -1,0 +1,188 @@
+import type { RawSource } from "../lib/types.ts";
+
+export const RAW_SOURCES: RawSource[] = [
+  {
+    id: "src-filing-cabinet",
+    title: "A filing cabinet is not a brain",
+    kind: "article",
+    created: "2026-10-12",
+    author: "Ada Wren",
+    suggestedFolder: "Notes",
+    suggestedCategories: ["[[Knowledge]]"],
+    suggestedRating: 7,
+    claims: [
+      {
+        id: "claim-compile-affirm",
+        subject: "compile-at-ingest",
+        polarity: "affirm",
+        statement: "Knowledge should be compiled once at ingest into interlinked pages.",
+      },
+    ],
+    aliases: {
+      "Karpathy wiki": "Karpathy LLM Wiki",
+      "living profile": "Living profile",
+    },
+    markdown: [
+      "Most second brains are filing cabinets: store, search, hope the right note surfaces.",
+      "",
+      "The Karpathy wiki pattern treats ingest as compile. Raw stays a buffer. The wiki is the artifact — pages, links, an index, a log.",
+      "",
+      "Queries should read compiled structure, not re-derive it. The human stays curator of ratings and contradictions.",
+    ].join("\n"),
+  },
+  {
+    id: "src-search-hope",
+    title: "Just tag it and search later",
+    kind: "clipping",
+    created: "2026-10-18",
+    author: "Anon thread",
+    suggestedFolder: "Clippings",
+    suggestedCategories: ["[[Knowledge]]"],
+    suggestedRating: 3,
+    claims: [
+      {
+        id: "claim-compile-deny",
+        subject: "compile-at-ingest",
+        polarity: "deny",
+        statement: "Search over tags is enough; compiling at ingest is wasted work.",
+      },
+    ],
+    html: [
+      "<nav>Home | Subscribe | Shop | Trending</nav>",
+      "<aside>Sponsored: 14 tools that auto-file your life</aside>",
+      "<article>",
+      "<h1>Just tag it and search later</h1>",
+      "<p>You do not need a compiler. Dump everything into one vault, slap on tags, and trust search. Re-reading at query time is a feature — you might think something new.</p>",
+      "<p>Karpathy wiki people overfit. A living profile is just another document you will ignore.</p>",
+      "</article>",
+      "<footer>Cookie notice · 12 newsletter popups · related merch</footer>",
+    ].join("\n"),
+    markdown: "You do not need a compiler. Dump everything into one vault and trust search.",
+  },
+  {
+    id: "src-async-standup",
+    title: "Studio standup — async first",
+    kind: "meeting",
+    created: "2026-10-21",
+    author: "Studio notes",
+    suggestedFolder: "Notes",
+    suggestedCategories: ["[[Work]]"],
+    suggestedRating: 5,
+    claims: [
+      {
+        id: "claim-async-affirm",
+        subject: "meeting-cadence",
+        polarity: "affirm",
+        statement: "The studio should default to async written standups.",
+      },
+    ],
+    aliases: {
+      "living profile": "Living profile",
+    },
+    markdown: [
+      "Team vote: written standups in the vault, live calls only for decisions.",
+      "Reason: context should compound in notes, not evaporate in a room.",
+      "Action: capture decisions into the living profile after each compile.",
+    ].join("\n"),
+  },
+  {
+    id: "src-exec-sync",
+    title: "Exec review — more live time",
+    kind: "meeting",
+    created: "2026-10-22",
+    author: "Exec notes",
+    suggestedFolder: "Notes",
+    suggestedCategories: ["[[Work]]"],
+    suggestedRating: 4,
+    claims: [
+      {
+        id: "claim-async-deny",
+        subject: "meeting-cadence",
+        polarity: "deny",
+        statement: "The studio should add more live meetings, not fewer.",
+      },
+    ],
+    markdown: [
+      "Exec wants three extra live syncs per week. Written notes are 'too quiet'.",
+      "This collides with the studio vote from the day before.",
+      "Do not silently merge these. Flag it.",
+    ].join("\n"),
+  },
+  {
+    id: "src-ink-palette",
+    title: "Warm paper, cool ink",
+    kind: "clipping",
+    created: "2026-09-30",
+    author: "Palette notes",
+    suggestedFolder: "Clippings",
+    suggestedCategories: ["[[Design]]"],
+    suggestedRating: 6,
+    claims: [],
+    html: [
+      "<nav>Magazine · Issues · Cart</nav>",
+      "<article>",
+      "<h1>Warm paper, cool ink</h1>",
+      "<p>Reading UIs last longer when the background is paper-warm and the text is ink, not pure white and pure black.</p>",
+      "<p>A 1–7 rating is easier to feel than five stars. Seven leaves a middle, two leanings, and two extremes.</p>",
+      "</article>",
+      "<footer>Subscribe for 40% off ink samples</footer>",
+    ].join("\n"),
+    markdown: "Reading UIs last longer when the background is paper-warm.",
+    aliases: {
+      "1–7 rating": "Seven-point ratings",
+    },
+  },
+  {
+    id: "src-seven-scale",
+    title: "Seven-point ratings",
+    kind: "article",
+    created: "2026-08-14",
+    author: "Ada Wren",
+    suggestedFolder: "Notes",
+    suggestedCategories: ["[[Knowledge]]", "[[Design]]"],
+    suggestedRating: 6,
+    claims: [],
+    markdown: [
+      "Five stars collapse. Seven points give a true middle (4) plus mild and strong lean.",
+      "Use the scale on compiled notes, not on raw buffers. Raw has no opinion yet.",
+    ].join("\n"),
+  },
+  {
+    id: "src-daily-1102",
+    title: "2026-11-02",
+    kind: "daily",
+    created: "2026-11-02",
+    suggestedFolder: "Daily",
+    suggestedCategories: ["[[Journal]]"],
+    suggestedRating: 4,
+    claims: [],
+    markdown: [
+      "Walked the canal. Noticed I keep re-deriving the same argument about meetings.",
+      "If the wiki compiled yesterday's standup, I would not be rewriting it in my head.",
+      "Open loop: decide cadence before Friday.",
+    ].join("\n"),
+    aliases: {
+      standup: "Studio standup — async first",
+    },
+  },
+  {
+    id: "src-karpathy-ref",
+    title: "Karpathy LLM Wiki",
+    kind: "reference",
+    created: "2026-10-05",
+    author: "Reference card",
+    suggestedFolder: "References",
+    suggestedCategories: ["[[People]]", "[[Knowledge]]"],
+    suggestedRating: 7,
+    claims: [],
+    markdown: [
+      "Pattern: maintain a compiled wiki of a corpus so an agent (or a person) reads structure instead of stuffing a context window every time.",
+      "Folders of intent: raw input, compiled pages, outputs, a living profile of the curator.",
+      "This card is a reference, not a clipping — it exists so other notes can point at the idea.",
+    ].join("\n"),
+  },
+];
+
+export function getSource(id: string): RawSource | undefined {
+  return RAW_SOURCES.find((source) => source.id === id);
+}
