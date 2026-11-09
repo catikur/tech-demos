@@ -69,4 +69,18 @@ describe("Bases filtering", () => {
     expect(groups.get("[[Knowledge]]")?.length).toBe(2);
     expect(groups.get("(empty)")?.length).toBe(1);
   });
+
+  test("a note with two categories appears in both groups and matches either", () => {
+    const row = noteToRow(
+      makeNote(
+        "Notes/Scale.md",
+        { title: "Scale", type: "note", categories: ["[[Knowledge]]", "[[Design]]"], rating: 6 },
+        "x",
+      ),
+    );
+    const groups = groupRows([row], "category");
+    expect(groups.get("[[Knowledge]]")?.map((item) => item.title)).toEqual(["Scale"]);
+    expect(groups.get("[[Design]]")?.map((item) => item.title)).toEqual(["Scale"]);
+    expect(matchFilter(row, { field: "category", op: "eq", value: "[[Design]]" })).toBe(true);
+  });
 });

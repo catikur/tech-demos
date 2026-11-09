@@ -1,5 +1,6 @@
 import { seedVault } from "../data/seed.ts";
-import { DEFAULT_SKILLS, type SkillToggles, type Vault } from "../lib/types.ts";
+import { normalizeVault } from "../lib/vault.ts";
+import { DEFAULT_SKILLS, type RawSource, type SkillToggles, type Vault } from "../lib/types.ts";
 
 const KEY = "wiki-compiler.v1";
 
@@ -7,7 +8,7 @@ export type Persisted = {
   vault: Vault;
   skills: SkillToggles;
   theme: "light" | "dark";
-  extraSources?: unknown;
+  extras: RawSource[];
 };
 
 export function loadState(): Persisted {
@@ -17,9 +18,10 @@ export function loadState(): Persisted {
     const parsed = JSON.parse(raw) as Partial<Persisted>;
     if (!parsed.vault || !Array.isArray(parsed.vault.notes)) return fresh();
     return {
-      vault: parsed.vault,
+      vault: normalizeVault(parsed.vault),
       skills: { ...DEFAULT_SKILLS, ...parsed.skills },
       theme: parsed.theme === "dark" ? "dark" : "light",
+      extras: Array.isArray(parsed.extras) ? parsed.extras.filter(isRawSource) : [],
     };
   } catch {
     return fresh();
@@ -27,9 +29,18 @@ export function loadState(): Persisted {
 }
 
 export function saveState(state: Persisted): void {
-  localStorage.setItem(KEY, JSON.stringify({ vault: state.vault, skills: state.skills, theme: state.theme }));
+  localStorage.setItem(
+    KEY,
+    JSON.stringify({ vault: state.vault, skills: state.skills, theme: state.theme, extras: state.extras }),
+  );
+}
+
+function isRawSource(value: unknown): value is RawSource {
+  if (!value || typeof value !== "object") return false;
+  const source = value as RawSource;
+  return typeof source.id === "string" && typeof source.title === "string" && typeof source.markdown === "string" && Array.isArray(source.claims);
 }
 
 export function fresh(): Persisted {
-  return { vault: seedVault(), skills: { ...DEFAULT_SKILLS }, theme: "light" };
+  return { vault: seedVault(), skills: { ...DEFAULT_SKILLS }, theme: "light", extras: [] };
 }

@@ -1,11 +1,13 @@
-import type { BasesRow, BasesView, Folder, PropertyFilter, VaultNote } from "./types.ts";
+import type { BasesRow, BasesView, FilterOp, Folder, PropertyFilter, VaultNote } from "./types.ts";
 
 export function noteToRow(note: VaultNote): BasesRow {
+  const categories = note.frontmatter.categories ?? [];
   return {
     path: note.path,
     title: note.title,
     type: String(note.frontmatter.type ?? note.folder),
-    category: (note.frontmatter.categories ?? [])[0] ?? "",
+    category: categories[0] ?? "",
+    categories,
     rating: typeof note.frontmatter.rating === "number" ? note.frontmatter.rating : null,
     date: note.frontmatter.updated ?? note.frontmatter.created ?? "",
     folder: note.folder,
@@ -36,9 +38,40 @@ export function rowValue(row: BasesRow, field: string): unknown {
   }
 }
 
+function categoryValues(row: BasesRow): string[] {
+  if (row.categories.length > 0) return row.categories;
+  return row.category ? [row.category] : [];
+}
+
+function matchCategoryOp(row: BasesRow, op: FilterOp, value: unknown): boolean {
+  const cats = categoryValues(row);
+  switch (op) {
+    case "eq":
+      return cats.includes(String(value));
+    case "neq":
+      return !cats.includes(String(value));
+    case "contains": {
+      const needle = String(value).toLowerCase();
+      return cats.some((cat) => cat.toLowerCase().includes(needle));
+    }
+    case "in": {
+      const haystack = Array.isArray(value) ? value.map(String) : [String(value)];
+      return cats.some((cat) => haystack.includes(cat));
+    }
+    case "gte":
+    case "lte":
+      return false;
+    default: {
+      const _exhaustive: never = op;
+      return _exhaustive;
+    }
+  }
+}
+
 export function matchFilter(row: BasesRow, filter: PropertyFilter): boolean {
   if ("and" in filter) return filter.and.every((part) => matchFilter(row, part));
   if ("or" in filter) return filter.or.some((part) => matchFilter(row, part));
+  if (filter.field === "category") return matchCategoryOp(row, filter.op, filter.value);
   const actual = rowValue(row, filter.field);
   switch (filter.op) {
     case "eq":
@@ -84,13 +117,23 @@ export function applyView(rows: BasesRow[], view: BasesView): BasesRow[] {
 export function groupRows(rows: BasesRow[], field: string): Map<string, BasesRow[]> {
   const groups = new Map<string, BasesRow[]>();
   for (const row of rows) {
-    const raw = rowValue(row, field);
-    const key = raw == null || raw === "" ? "(empty)" : String(raw);
-    const list = groups.get(key) ?? [];
-    list.push(row);
-    groups.set(key, list);
+    const keys =
+      field === "category"
+        ? categoryValues(row).length > 0
+          ? categoryValues(row)
+          : ["(empty)"]
+        : [blankKey(rowValue(row, field))];
+    for (const key of keys) {
+      const list = groups.get(key) ?? [];
+      list.push(row);
+      groups.set(key, list);
+    }
   }
   return groups;
+}
+
+function blankKey(raw: unknown): string {
+  return raw == null || raw === "" ? "(empty)" : String(raw);
 }
 
 export const DEFAULT_VIEWS: BasesView[] = [

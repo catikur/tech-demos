@@ -38,11 +38,13 @@ export function contradictionPath(subject: string): string {
 }
 
 export function contradictionBody(item: Contradiction): string {
+  const affirm = item.left.sourceTitle ? ` ([[${item.left.sourceTitle}]])` : "";
+  const deny = item.right.sourceTitle ? ` ([[${item.right.sourceTitle}]])` : "";
   return [
     `Flagged at compile. Same subject, opposite polarity.`,
     ``,
-    `- Affirm (${item.left.id}): ${item.left.statement}`,
-    `- Deny (${item.right.id}): ${item.right.statement}`,
+    `- Affirm (${item.left.id})${affirm}: ${item.left.statement}`,
+    `- Deny (${item.right.id})${deny}: ${item.right.statement}`,
     ``,
     `Curator decides which claim stays in the living profile. The compiler does not pick a winner.`,
   ].join("\n");

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { YEARLY_QUESTIONS } from "../data/questions.ts";
 import { RAW_SOURCES } from "../data/sources.ts";
 import { applyView, groupRows, noteToRow } from "../lib/bases.ts";
@@ -18,7 +18,7 @@ import type {
   YearlyAnswer,
 } from "../lib/types.ts";
 import { FOLDERS } from "../lib/types.ts";
-import { getNote, makeNote, notesIn, upsertNote } from "../lib/vault.ts";
+import { getNote, makeNote, notesIn, setRating, upsertNote } from "../lib/vault.ts";
 import { backlinksTo, resolveWikilink } from "../lib/wikilink.ts";
 import { draftYearlyAnswers } from "../lib/yearly.ts";
 import { CanvasMap, exportCanvasFile } from "./CanvasMap.tsx";
@@ -53,7 +53,7 @@ export function App() {
   const [focus, setFocus] = useState(false);
   const [tab, setTab] = useState<Tab>("ingest");
   const [picked, setPicked] = useState<string[]>(RAW_SOURCES.slice(0, 4).map((source) => source.id));
-  const [extras, setExtras] = useState<RawSource[]>([]);
+  const [extras, setExtras] = useState<RawSource[]>(initial.extras);
   const [hot, setHot] = useState(false);
   const [trace, setTrace] = useState<CompileTraceStep[]>(initial.vault.lastTrace);
   const [diff, setDiff] = useState<WikiDiff | null>(null);
@@ -64,14 +64,17 @@ export function App() {
   const [answers, setAnswers] = useState<YearlyAnswer[]>([]);
 
   const library = [...RAW_SOURCES, ...extras];
+  const vaultRef = useRef(vault);
+  const compileGen = useRef(0);
+  vaultRef.current = vault;
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
   useEffect(() => {
-    saveState({ vault, skills, theme });
-  }, [vault, skills, theme]);
+    saveState({ vault, skills, theme, extras });
+  }, [vault, skills, theme, extras]);
 
   function openNote(target: string) {
     const resolved = resolveWikilink(vault.notes, target) ?? getNote(vault, target);
@@ -83,15 +86,34 @@ export function App() {
 
   async function runCompile() {
     const selected = library.filter((source) => picked.includes(source.id));
-    const sources = selected.length ? selected : library;
-    setCompiling(true);
+    const gen = ++compileGen.current;
     setTab("compile");
+    if (selected.length === 0) {
+      setCompiling(false);
+      setDiff(null);
+      setTrace([
+        {
+          id: "step-extract-nothing-selected",
+          phase: "extract",
+          title: "Nothing selected",
+          status: "skipped",
+          durationMs: 0,
+          summary: "Select at least one source. The vault was not changed.",
+          details: ["Empty selection does not compile the whole library."],
+        },
+      ]);
+      return;
+    }
+    setCompiling(true);
     setTrace([]);
-    const result = compile({ vault, sources, skills, now: today() });
-    for (const step of result.steps) {
+    const preview = compile({ vault: vaultRef.current, sources: selected, skills, now: today() });
+    for (const step of preview.steps) {
       await sleep(step.durationMs);
+      if (compileGen.current !== gen) return;
       setTrace((current) => [...current, step]);
     }
+    if (compileGen.current !== gen) return;
+    const result = compile({ vault: vaultRef.current, sources: selected, skills, now: today() });
     setVault(result.vault);
     setDiff(result.diff);
     setCompiling(false);
@@ -129,14 +151,18 @@ export function App() {
       const source = ingestDropped(file.name, text, today());
       added.push(source);
     }
-    setExtras((current) => [...current, ...added]);
-    setPicked((current) => [...current, ...added.map((source) => source.id)]);
+    setExtras((current) => {
+      const ids = new Set(current.map((source) => source.id));
+      return [...current, ...added.filter((source) => !ids.has(source.id))];
+    });
+    setPicked((current) => [...new Set([...current, ...added.map((source) => source.id)])]);
   }
 
   const note = notePath ? getNote(vault, notePath) : undefined;
-  const view = vault.basesViews.find((item) => item.id === viewId) ?? vault.basesViews[0]!;
-  const liveRows = applyView(vault.notes.map(noteToRow), view);
-  const rows = skills["bases-refresh"] || !vault.basesSnapshot ? liveRows : filterSnapshot(vault, view);
+  const view = vault.basesViews.find((item) => item.id === viewId) ?? vault.basesViews[0];
+  const sourceRows =
+    !skills["bases-refresh"] && vault.basesSnapshot ? vault.basesSnapshot : vault.notes.map(noteToRow);
+  const rows = view ? applyView(sourceRows, view) : [];
   const stale = !skills["bases-refresh"] && vault.basesSnapshot !== null && vault.lastCompileAt !== null;
 
   return (
@@ -173,9 +199,14 @@ export function App() {
             <button
               className="ghost danger"
               onClick={() => {
+                compileGen.current += 1;
                 const reset = fresh();
+                setCompiling(false);
                 setVault(reset.vault);
                 setSkills(reset.skills);
+                setExtras([]);
+                setPicked(RAW_SOURCES.slice(0, 4).map((source) => source.id));
+                setNotePath("root/Living profile.md");
                 setTrace([]);
                 setDiff(null);
                 setAnswers([]);
@@ -256,7 +287,10 @@ export function App() {
                       type="file"
                       accept=".md,text/markdown,text/plain"
                       hidden
-                      onChange={(event) => void onFiles(event.target.files)}
+                      onChange={(event) => {
+                        void onFiles(event.target.files);
+                        event.target.value = "";
+                      }}
                     />
                   </label>
                 </div>
@@ -356,11 +390,21 @@ export function App() {
               </div>
             </div>
             <div className="card note-view">
-              {note ? <NotePane note={note} notes={vault.notes} onOpen={openNote} /> : <p className="muted">Pick a note.</p>}
+              {note ? (
+                <NotePane
+                  note={note}
+                  notes={vault.notes}
+                  onOpen={openNote}
+                  onRate={(path, rating) => setVault(setRating(vault, path, rating))}
+                />
+              ) : (
+                <p className="muted">Pick a note.</p>
+              )}
             </div>
           </div>
         );
       case "bases":
+        if (!view) return <div className="card"><p className="muted">No saved views.</p></div>;
         return (
           <div className="card">
             <div className="kicker">saved views</div>
@@ -405,7 +449,7 @@ export function App() {
           <div className="card">
             <div className="kicker">jsoncanvas 1.0</div>
             <h2>Knowledge map</h2>
-            <p className="muted">Auto-rewritten after compile when the canvas skill is on. Drag file nodes. Export is a valid .canvas file.</p>
+            <p className="muted">Auto-rewritten after compile when the canvas skill is on. Drag nodes — a group takes the notes inside it. Export is a valid .canvas file.</p>
             <div className="tools" style={{ margin: "10px 0 14px" }}>
               <button className="ghost" onClick={() => exportCanvasFile(vault.canvas)}>
                 Export knowledge-map.canvas
@@ -517,7 +561,7 @@ export function App() {
             <div className="kicker">living profile</div>
             <h2>Rewritten by compiles</h2>
             {profile ? (
-              <MarkdownView text={profile.body} onOpen={openNote} />
+              <MarkdownView text={profile.body} notes={vault.notes} onOpen={openNote} />
             ) : (
               <p className="muted">Profile missing.</p>
             )}
@@ -536,19 +580,36 @@ function NotePane({
   note,
   notes,
   onOpen,
+  onRate,
 }: {
   note: VaultNote;
   notes: VaultNote[];
   onOpen: (target: string) => void;
+  onRate: (path: string, rating: number) => void;
 }) {
   const backs = backlinksTo(notes, note.path);
   return (
     <>
       <div className="kicker">{note.path}</div>
       <h2>{note.title}</h2>
-      <Rating value={note.frontmatter.rating ?? null} />
+      <Rating
+        value={note.frontmatter.rating ?? null}
+        onChange={note.frontmatter.type === "raw" ? undefined : (rating) => onRate(note.path, rating)}
+      />
+      {(note.frontmatter.categories ?? []).length > 0 && (
+        <div className="tools">
+          {(note.frontmatter.categories ?? []).map((category) => {
+            const target = category.replace(/^\[\[|\]\]$/g, "");
+            return (
+              <button key={category} type="button" className="ghost" onClick={() => onOpen(target)}>
+                {category}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <pre className="frontmatter mono">{yamlPreview(note)}</pre>
-      <MarkdownView text={note.body} onOpen={onOpen} />
+      <MarkdownView text={note.body} notes={notes} onOpen={onOpen} />
       <div>
         <div className="kicker">backlinks</div>
         {backs.length === 0 && <p className="muted">No backlinks yet.</p>}
@@ -601,13 +662,24 @@ function RowTable({
   );
 }
 
-function Rating({ value }: { value: number | null }) {
+function Rating({ value, onChange }: { value: number | null; onChange?: (rating: number) => void }) {
   const n = value ?? 0;
   return (
     <span className="rating" title={value ? `${value}/7` : "unrated"}>
-      {Array.from({ length: 7 }, (_, index) => (
-        <i key={index} className={index < n ? "on" : ""} />
-      ))}
+      {Array.from({ length: 7 }, (_, index) => {
+        const score = index + 1;
+        const className = score <= n ? "on" : "";
+        if (!onChange) return <i key={score} className={className} />;
+        return (
+          <button
+            key={score}
+            type="button"
+            className={className}
+            aria-label={`Rate ${score} of 7`}
+            onClick={() => onChange(score)}
+          />
+        );
+      })}
     </span>
   );
 }
@@ -623,10 +695,6 @@ function yamlPreview(note: VaultNote): string {
   ]
     .filter(Boolean)
     .join("\n");
-}
-
-function filterSnapshot(vault: Vault, view: Vault["basesViews"][number]) {
-  return applyView(vault.basesSnapshot ?? vault.notes.map(noteToRow), view);
 }
 
 function titleFor(tab: Tab): string {

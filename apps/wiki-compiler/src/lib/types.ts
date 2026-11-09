@@ -69,6 +69,9 @@ export type Claim = {
   subject: string;
   polarity: ClaimPolarity;
   statement: string;
+  sourceId?: string;
+  sourceTitle?: string;
+  categories?: string[];
 };
 
 export type Contradiction = {
@@ -163,6 +166,7 @@ export type BasesRow = {
   title: string;
   type: string;
   category: string;
+  categories: string[];
   rating: number | null;
   date: string;
   folder: Folder;
@@ -235,6 +239,7 @@ export type Vault = {
   basesViews: BasesView[];
   basesSnapshot: BasesRow[] | null;
   contradictions: Contradiction[];
+  claims: Claim[];
   lastCompileAt: string | null;
   lastTrace: CompileTraceStep[];
 };

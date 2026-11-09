@@ -24,16 +24,19 @@ export function extractWikilinks(text: string): Wikilink[] {
 }
 
 export function linkifyMentions(text: string, aliases: Record<string, string>): string {
-  let output = text;
+  const masks: string[] = [];
+  let output = text.replace(/\[\[[^\]]+\]\]/g, (match) => {
+    const token = `\u0000${masks.length}\u0000`;
+    masks.push(match);
+    return token;
+  });
   const entries = Object.entries(aliases).sort((a, b) => b[0].length - a[0].length);
   for (const [mention, target] of entries) {
     if (!mention) continue;
-    const already = new RegExp(`\\[\\[${escapeReg(target)}(?:\\|[^\\]]+)?\\]\\]`);
-    if (already.test(output) && !output.includes(mention)) continue;
-    const pattern = new RegExp(`(?<!\\[\\[)${escapeReg(mention)}(?!\\]\\])`, "g");
+    const pattern = new RegExp(`(?<![A-Za-z0-9])${escapeReg(mention)}(?![A-Za-z0-9])`, "g");
     output = output.replace(pattern, `[[${target}]]`);
   }
-  return output;
+  return output.replace(/\u0000(\d+)\u0000/g, (_match, index: string) => masks[Number(index)] ?? "");
 }
 
 function escapeReg(value: string): string {
@@ -47,17 +50,23 @@ export function noteStem(path: string): string {
 
 export function resolveWikilink(notes: VaultNote[], target: string): VaultNote | undefined {
   const needle = normalizeTitle(target);
-  return notes.find((note) => {
+  const matches = notes.filter((note) => {
     if (normalizeTitle(note.title) === needle) return true;
     if (normalizeTitle(noteStem(note.path)) === needle) return true;
     return false;
   });
+  return matches.find((note) => note.folder !== "raw") ?? matches[0];
+}
+
+function linkSurface(note: VaultNote): string {
+  const categories = (note.frontmatter.categories ?? []).join("\n");
+  return `${note.frontmatter.title}\n${categories}\n${note.body}`;
 }
 
 export function buildBacklinks(notes: VaultNote[]): Backlink[] {
   const links: Backlink[] = [];
   for (const note of notes) {
-    const found = extractWikilinks(`${note.frontmatter.title}\n${note.body}`);
+    const found = extractWikilinks(linkSurface(note));
     for (const link of found) {
       const resolved = resolveWikilink(notes, link.target);
       links.push({
@@ -72,13 +81,16 @@ export function buildBacklinks(notes: VaultNote[]): Backlink[] {
 
 export function backlinksTo(notes: VaultNote[], path: string): Backlink[] {
   const title = notes.find((note) => note.path === path)?.title ?? noteStem(path);
+  const seen = new Set<string>();
   return buildBacklinks(notes).filter((link) => {
-    if (link.fromPath === path) return false;
-    return (
+    if (link.fromPath === path || seen.has(link.fromPath)) return false;
+    const hit =
       link.target === path ||
       normalizeTitle(link.target) === normalizeTitle(title) ||
-      normalizeTitle(noteStem(link.target)) === normalizeTitle(noteStem(path))
-    );
+      normalizeTitle(noteStem(link.target)) === normalizeTitle(noteStem(path));
+    if (!hit) return false;
+    seen.add(link.fromPath);
+    return true;
   });
 }
 

@@ -20,6 +20,8 @@ export function compileProfile(vault: Vault, now: string, contradictions: Contra
       : contradictions.map(
           (item) => `- [[${titleFromPath(item.notePath)}]] — ${item.left.statement} vs ${item.right.statement}`,
         );
+  const previous = vault.notes.find((note) => note.path === PROFILE_PATH);
+  const rating = typeof previous?.frontmatter.rating === "number" ? previous.frontmatter.rating : 5;
 
   const body = [
     "# Ada Wren",
@@ -49,7 +51,7 @@ export function compileProfile(vault: Vault, now: string, contradictions: Contra
       type: "profile",
       created: "2026-08-01",
       updated: now,
-      rating: 5,
+      rating,
       tags: ["profile"],
       compiledFrom: compiled.map((note) => note.path),
     },

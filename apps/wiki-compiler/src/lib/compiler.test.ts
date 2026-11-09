@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { RAW_SOURCES } from "../data/sources.ts";
 import { seedVault } from "../data/seed.ts";
-import { compile } from "./compiler.ts";
+import { compile, ingestDropped } from "./compiler.ts";
 import { DEFAULT_SKILLS, type SkillToggles } from "./types.ts";
+import { setRating } from "./vault.ts";
 
 const pair = RAW_SOURCES.filter((source) => source.id === "src-filing-cabinet" || source.id === "src-search-hope");
 const cadence = RAW_SOURCES.filter((source) => source.id === "src-async-standup" || source.id === "src-exec-sync");
@@ -97,6 +98,36 @@ describe("compile + skill toggles", () => {
     });
     expect((on.vault.basesSnapshot ?? []).length).toBeGreaterThan(0);
     expect(off.vault.basesSnapshot).toEqual([]);
+  });
+
+  test("keeps contradictions from earlier sources and preserves a curator rating", () => {
+    const first = compile({ vault: seedVault(), sources: pair, skills: skills(), now: "2026-11-09" });
+    expect(first.contradictions).toHaveLength(1);
+    const flag = first.vault.notes.find((note) => note.frontmatter.type === "contradiction");
+    expect(flag?.body).toContain("[[A filing cabinet is not a brain]]");
+    expect(flag?.frontmatter.categories).toEqual(["[[Knowledge]]"]);
+    const rated = setRating(first.vault, "Notes/A filing cabinet is not a brain.md", 2);
+    const again = compile({ vault: rated, sources: pair, skills: skills(), now: "2026-11-09" });
+    expect(again.vault.notes.find((note) => note.path.startsWith("Notes/A filing"))?.frontmatter.rating).toBe(2);
+    const second = compile({ vault: again.vault, sources: cadence, skills: skills(), now: "2026-11-09" });
+    expect(second.contradictions).toHaveLength(2);
+    const log = second.vault.notes.find((note) => note.path === "output/compile-log.md");
+    expect(log?.body).toContain("canvas");
+    expect(log?.body.match(/## Compile/g)?.length).toBe(3);
+    expect(second.vault.basesSnapshot?.some((row) => row.folder === "Categories")).toBe(true);
+  });
+
+  test("dropped markdown keeps its frontmatter body instead of nesting the fence", () => {
+    const source = ingestDropped(
+      "clip.md",
+      "---\ntitle: Harbor note\nrating: 6\ncategories:\n  - \"[[Design]]\"\n---\n\nThe pier.\n",
+      "2026-11-09",
+    );
+    expect(source.title).toBe("Harbor note");
+    expect(source.markdown).toBe("The pier.");
+    expect(source.suggestedRating).toBe(6);
+    expect(source.suggestedCategories).toEqual(["[[Design]]"]);
+    expect(source.markdown.includes("---")).toBe(false);
   });
 });
 

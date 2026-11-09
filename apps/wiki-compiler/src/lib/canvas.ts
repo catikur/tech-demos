@@ -1,3 +1,4 @@
+import { extractWikilinks, resolveWikilink } from "./wikilink.ts";
 import type {
   CanvasEdge,
   CanvasNode,
@@ -155,30 +156,26 @@ export function buildKnowledgeCanvas(notes: VaultNote[], previous?: JsonCanvas):
     });
   });
 
-  const byTitle = new Map(notes.map((note) => [note.title.toLowerCase(), note]));
   for (const note of notes) {
+    if (isStructural(note)) continue;
     const fromId = `file-${note.path}`;
     if (!nodes.some((node) => node.id === fromId)) continue;
-    const re = /\[\[([^\]|#]+)(?:\|[^\]]+)?\]\]/g;
-    let match: RegExpExecArray | null = re.exec(note.body);
-    while (match) {
-      const target = (match[1] ?? "").trim().toLowerCase();
-      const dest = byTitle.get(target) ?? notes.find((item) => item.path.toLowerCase().includes(target));
-      if (dest) {
-        const toId = `file-${dest.path}`;
-        if (nodes.some((node) => node.id === toId) && fromId !== toId) {
-          edges.push({
-            id: `edge-${fromId}-${toId}`,
-            fromNode: fromId,
-            toNode: toId,
-            fromSide: "right",
-            toSide: "left",
-            toEnd: "arrow",
-            color: dest.frontmatter.type === "contradiction" ? "1" : "5",
-          });
-        }
+    const haystack = [note.body, ...(note.frontmatter.categories ?? [])].join("\n");
+    for (const link of extractWikilinks(haystack)) {
+      const dest = resolveWikilink(notes, link.target);
+      if (!dest) continue;
+      const toId = `file-${dest.path}`;
+      if (nodes.some((node) => node.id === toId) && fromId !== toId) {
+        edges.push({
+          id: `edge-${fromId}-${toId}`,
+          fromNode: fromId,
+          toNode: toId,
+          fromSide: "right",
+          toSide: "left",
+          toEnd: "arrow",
+          color: dest.frontmatter.type === "contradiction" ? "1" : "5",
+        });
       }
-      match = re.exec(note.body);
     }
   }
 
@@ -187,11 +184,34 @@ export function buildKnowledgeCanvas(notes: VaultNote[], previous?: JsonCanvas):
   return { nodes, edges: [...uniqueEdges.values()] };
 }
 
+function isStructural(note: VaultNote): boolean {
+  const type = String(note.frontmatter.type ?? "");
+  return note.folder === "raw" || note.folder === "output" || type === "index" || type === "log" || type === "brief" || type === "category";
+}
+
 export function moveNode(canvas: JsonCanvas, id: string, x: number, y: number): JsonCanvas {
+  const current = canvas.nodes.find((node) => node.id === id);
+  if (!current) return canvas;
+  const nextX = Math.round(x);
+  const nextY = Math.round(y);
+  const dx = nextX - current.x;
+  const dy = nextY - current.y;
+  if (dx === 0 && dy === 0) return canvas;
+  const shift = new Set<string>([id]);
+  if (current.type === "group") {
+    for (const node of canvas.nodes) {
+      if (node.id === id || node.type === "group") continue;
+      const cx = node.x + node.width / 2;
+      const cy = node.y + node.height / 2;
+      if (cx >= current.x && cx <= current.x + current.width && cy >= current.y && cy <= current.y + current.height) {
+        shift.add(node.id);
+      }
+    }
+  }
   return {
     ...canvas,
     nodes: canvas.nodes.map((node) =>
-      node.id === id ? { ...node, x: Math.round(x), y: Math.round(y) } : node,
+      shift.has(node.id) ? { ...node, x: node.x + dx, y: node.y + dy } : node,
     ),
   };
 }

@@ -64,13 +64,20 @@ function answerQuestion(vault: Vault, id: string, prompt: string): YearlyAnswer 
       );
     }
     case "q-uncompiled": {
-      const hits = notes.filter((note) => note.folder === "raw");
+      const compiledIds = new Set(
+        notes.filter((note) => note.folder !== "raw").flatMap((note) => note.frontmatter.sources ?? []),
+      );
+      const hits = notes.filter((note) => {
+        if (note.folder !== "raw") return false;
+        const sourceId = note.frontmatter.sources?.[0];
+        return !sourceId || !compiledIds.has(sourceId);
+      });
       return make(
         id,
         prompt,
         hits.length
-          ? `Still sitting in raw/: ${hits.map((note) => note.title).join("; ")}. Buffer is not knowledge until compile.`
-          : "Raw buffer is empty — everything selected has been compiled, or nothing was ingested.",
+          ? `Still only in raw/, never compiled: ${hits.map((note) => note.title).join("; ")}.`
+          : "Every raw buffer already has a compiled page. Nothing is sitting there as an uncompiled belief.",
         hits,
       );
     }
@@ -101,7 +108,11 @@ function answerQuestion(vault: Vault, id: string, prompt: string): YearlyAnswer 
       );
     }
     case "q-unfinished": {
-      const hits = notes.filter((note) => note.folder === "Daily" || /open loop/i.test(note.body));
+      const hits = notes.filter(
+        (note) =>
+          note.folder === "Daily" ||
+          (note.folder !== "raw" && note.frontmatter.type !== "index" && /open loop/i.test(note.body)),
+      );
       return make(
         id,
         prompt,
@@ -118,7 +129,7 @@ function answerQuestion(vault: Vault, id: string, prompt: string): YearlyAnswer 
 }
 
 function pick(notes: VaultNote[], pred: (note: VaultNote) => boolean): VaultNote[] {
-  const skip = new Set(["category", "index", "log", "brief"]);
+  const skip = new Set(["category", "index", "log", "brief", "profile", "contradiction", "raw"]);
   return notes
     .filter((note) => note.folder !== "raw" && !skip.has(String(note.frontmatter.type ?? "")) && pred(note))
     .sort((a, b) => (b.frontmatter.rating ?? 0) - (a.frontmatter.rating ?? 0));

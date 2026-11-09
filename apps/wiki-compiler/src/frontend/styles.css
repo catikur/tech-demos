@@ -207,14 +207,18 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .diff .plus { color: var(--ok); }
 .diff .minus { color: var(--danger); }
 
-.tree { display: grid; gap: 6px; font-size: 13px; }
+.tree { display: grid; gap: 10px; font-size: 13px; }
+.tree > div { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .tree button {
+  display: block;
+  max-width: 100%;
   background: transparent;
   border: 0;
   text-align: left;
   padding: 4px 6px;
   border-radius: 6px;
   color: var(--tx-2);
+  white-space: normal;
 }
 .tree button.on { background: var(--bg-3); color: var(--tx); }
 .note-view { display: grid; gap: 10px; }
@@ -243,14 +247,17 @@ tr.clickable:hover { background: var(--bg); }
 }
 
 .rating { display: inline-flex; gap: 3px; }
-.rating i {
+.rating i, .rating button {
   width: 8px;
   height: 8px;
   border-radius: 99px;
   background: var(--base-200);
   display: block;
+  padding: 0;
+  border: 0;
 }
-.rating i.on { background: var(--accent); }
+.rating button { cursor: pointer; }
+.rating i.on, .rating button.on { background: var(--accent); }
 
 .canvas-wrap {
   position: relative;
@@ -306,6 +313,7 @@ tr.clickable:hover { background: var(--bg); }
 .md p, .md li { line-height: 1.55; }
 .md ul { margin: 0; padding-left: 18px; }
 .wikilink {
+  display: inline;
   background: none;
   border: 0;
   padding: 0;
@@ -313,6 +321,13 @@ tr.clickable:hover { background: var(--bg); }
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
+  font: inherit;
+  vertical-align: baseline;
+}
+.wikilink.missing {
+  color: var(--tx-2);
+  text-decoration-style: dashed;
+  cursor: text;
 }
 [data-theme="dark"] .wikilink { color: #4385be; }
 

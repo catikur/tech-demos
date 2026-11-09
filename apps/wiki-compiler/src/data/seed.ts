@@ -113,6 +113,7 @@ export function seedVault(): Vault {
     basesViews: DEFAULT_VIEWS,
     basesSnapshot: null,
     contradictions: [],
+    claims: [],
     lastCompileAt: null,
     lastTrace: [],
   };

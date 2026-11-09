@@ -1,8 +1,9 @@
 import { BRIEF_PATH, LOG_PATH } from "../data/seed.ts";
-import { applyView, noteToRow } from "./bases.ts";
+import { noteToRow } from "./bases.ts";
 import { buildKnowledgeCanvas } from "./canvas.ts";
 import { contradictionBody, detectContradictions } from "./contradiction.ts";
 import { diffVault } from "./diff.ts";
+import { parseFrontmatter } from "./frontmatter.ts";
 import { compileIndex, compileProfile } from "./profile.ts";
 import { extractSourceBody, skillLabel } from "./skills.ts";
 import type {
@@ -37,7 +38,6 @@ export function compile(input: CompileInput): CompileResult {
   const before = cloneVault(input.vault);
   let vault = cloneVault(input.vault);
   const steps: CompileTraceStep[] = [];
-  const claims: Claim[] = [];
   const compiledNotes: VaultNote[] = [];
 
   // extract
@@ -59,7 +59,6 @@ export function compile(input: CompileInput): CompileResult {
       body,
     );
     vault = upsertNote(vault, note);
-    claims.push(...source.claims);
     extractDetails.push(`${source.id} → ${path} (${body.split("\n").length} lines)`);
   }
   steps.push(
@@ -84,6 +83,11 @@ export function compile(input: CompileInput): CompileResult {
     const folder = source.suggestedFolder;
     const path = `${folder}/${source.title}.md`;
     const links = extractWikilinks(body);
+    const existing = vault.notes.find((item) => item.path === path);
+    const rating =
+      existing && existing.frontmatter.type !== "raw" && typeof existing.frontmatter.rating === "number"
+        ? existing.frontmatter.rating
+        : source.suggestedRating;
     const note = makeNote(
       path,
       {
@@ -92,7 +96,7 @@ export function compile(input: CompileInput): CompileResult {
         created: source.created,
         updated: now,
         author: source.author,
-        rating: source.suggestedRating,
+        rating,
         categories: source.suggestedCategories,
         tags: [source.kind],
         sources: [source.id],
@@ -121,11 +125,23 @@ export function compile(input: CompileInput): CompileResult {
   );
   steps.push(step("categorize", "Categorize + rate", undefined, "ran", catDetails));
 
-  // contradictions
+  const claimsBook = mergeClaims(before.claims ?? [], input.sources);
+  const keptRatings = new Map(
+    vault.notes
+      .filter((note) => note.frontmatter.type === "contradiction" && typeof note.frontmatter.rating === "number")
+      .map((note) => [note.path, note.frontmatter.rating as number]),
+  );
+  vault = {
+    ...vault,
+    notes: vault.notes.filter((note) => note.frontmatter.type !== "contradiction"),
+  };
+
+  // contradictions are derived from every compiled source, not only this batch
   let contradictions: Contradiction[] = [];
   if (input.skills["contradiction-checker"]) {
-    contradictions = detectContradictions(claims);
+    contradictions = detectContradictions(claimsBook);
     for (const item of contradictions) {
+      const categories = unique([...(item.left.categories ?? []), ...(item.right.categories ?? [])]);
       const note = makeNote(
         item.notePath,
         {
@@ -133,10 +149,10 @@ export function compile(input: CompileInput): CompileResult {
           type: "contradiction",
           created: now,
           updated: now,
-          categories: ["[[Knowledge]]", "[[Work]]"],
+          categories: categories.length > 0 ? categories : ["[[Knowledge]]"],
           tags: ["contradiction", item.subject],
           claims: [item.left.id, item.right.id],
-          rating: 5,
+          rating: keptRatings.get(item.notePath) ?? 5,
         },
         contradictionBody(item),
       );
@@ -144,15 +160,11 @@ export function compile(input: CompileInput): CompileResult {
     }
     steps.push(
       step("detect-contradictions", "Detect contradictions", "contradiction-checker", "ran", [
-        `Found ${contradictions.length} opposing pair(s).`,
+        `Found ${contradictions.length} opposing pair(s) across the compiled claim set.`,
         ...contradictions.map((item) => `${item.subject}: ${item.left.id} vs ${item.right.id}`),
       ]),
     );
   } else {
-    vault = {
-      ...vault,
-      notes: vault.notes.filter((note) => note.frontmatter.type !== "contradiction"),
-    };
     steps.push(
       step("detect-contradictions", "Detect contradictions", "contradiction-checker", "skipped", [
         "Skill off — contradiction pages not written.",
@@ -160,25 +172,16 @@ export function compile(input: CompileInput): CompileResult {
     );
   }
 
-  // index + log
-  vault = upsertNote(vault, compileIndex(vault, now));
-  const logBody = [
-    `# Compile ${now}`,
-    "",
-    ...steps.map((item) => `- ${item.phase} (${item.status}): ${item.summary}`),
-    "",
-  ].join("\n");
-  vault = upsertNote(
-    vault,
-    makeNote(LOG_PATH, { title: "Compile log", type: "log", created: now, updated: now }, logBody),
-  );
+  vault = upsertNote(vault, compileProfile(vault, now, contradictions));
   steps.push(
-    step("update-index", "Update index + log", undefined, "ran", [
-      "Rewrote wiki/Index.md and output/compile-log.md.",
-    ]),
+    step("profile", "Update living profile", undefined, "ran", ["root/Living profile.md rewritten from compiled wiki."]),
   );
 
-  // brief
+  vault = upsertNote(vault, compileIndex(vault, now));
+  steps.push(
+    step("update-index", "Update index", undefined, "ran", ["Rewrote wiki/Index.md from the compiled vault."]),
+  );
+
   const briefLines = [
     `# Compile brief · ${now}`,
     "",
@@ -196,7 +199,6 @@ export function compile(input: CompileInput): CompileResult {
   );
   steps.push(step("compile-brief", "Compile brief", undefined, "ran", briefLines.slice(2, 6)));
 
-  // canvas
   if (input.skills["canvas-rewrite"]) {
     vault = { ...vault, canvas: buildKnowledgeCanvas(vault.notes, before.canvas) };
     steps.push(
@@ -213,22 +215,12 @@ export function compile(input: CompileInput): CompileResult {
     );
   }
 
-  // profile
-  vault = upsertNote(vault, compileProfile(vault, now, contradictions));
-  steps.push(
-    step("profile", "Update living profile", undefined, "ran", ["root/Living profile.md rewritten from compiled wiki."]),
-  );
-
-  // bases snapshot
   const rows = vault.notes.map(noteToRow);
   if (input.skills["bases-refresh"]) {
-    vault = {
-      ...vault,
-      basesSnapshot: applyView(rows, vault.basesViews[0]!),
-    };
+    vault = { ...vault, basesSnapshot: rows };
     steps.push(
       step("bases", "Refresh Bases snapshot", "bases-refresh", "ran", [
-        `Snapshot ${vault.basesSnapshot?.length ?? 0} rows for "${vault.basesViews[0]?.name ?? "default"}".`,
+        `Snapshot ${rows.length} rows. Views filter this set.`,
       ]),
     );
   } else {
@@ -240,10 +232,18 @@ export function compile(input: CompileInput): CompileResult {
     );
   }
 
+  steps.push(
+    step("update-index", "Append compile log", undefined, "ran", [
+      "Appended this run to output/compile-log.md.",
+    ]),
+  );
+  vault = upsertNote(vault, appendLog(vault, now, steps));
+
   vault = {
     ...vault,
     compiledSourceIds: unique([...vault.compiledSourceIds, ...input.sources.map((source) => source.id)]),
     contradictions,
+    claims: claimsBook,
     lastCompileAt: now,
     lastTrace: steps,
   };
@@ -308,19 +308,68 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
+function mergeClaims(existing: Claim[], sources: RawSource[]): Claim[] {
+  const replaced = new Set(sources.map((source) => source.id));
+  const kept = existing.filter((claim) => !claim.sourceId || !replaced.has(claim.sourceId));
+  const added = sources.flatMap((source) =>
+    source.claims.map((claim) => ({
+      ...claim,
+      sourceId: source.id,
+      sourceTitle: source.title,
+      categories: source.suggestedCategories,
+    })),
+  );
+  return [...kept, ...added];
+}
+
+function appendLog(vault: Vault, now: string, steps: CompileTraceStep[]): VaultNote {
+  const previous = vault.notes.find((note) => note.path === LOG_PATH);
+  const entry = [
+    `## Compile ${now}`,
+    "",
+    ...steps.map((item) => `- ${item.phase} (${item.status}): ${item.summary}`),
+    "",
+  ].join("\n");
+  const prior = previous?.body.trim() ?? "";
+  const body = prior && prior !== "No compiles yet." ? `${prior}\n\n${entry}` : `${entry}\n`;
+  return makeNote(
+    LOG_PATH,
+    {
+      title: "Compile log",
+      type: "log",
+      created: previous?.frontmatter.created ?? now,
+      updated: now,
+    },
+    body,
+  );
+}
+
 export function ingestDropped(name: string, text: string, created: string): RawSource {
-  const title = name.replace(/\.md$/i, "") || "Dropped note";
+  const trimmed = text.replace(/^\uFEFF/, "");
+  const hasFence = trimmed.startsWith("---\n") || trimmed.startsWith("---\r\n");
+  const parsed = parseFrontmatter(trimmed);
+  const fromName = name.replace(/\.md$/i, "").trim();
+  const title = (hasFence ? parsed.frontmatter.title : fromName || parsed.frontmatter.title) || "Dropped note";
+  const body = (hasFence ? parsed.body : trimmed).trim();
+  const rating = typeof parsed.frontmatter.rating === "number" ? parsed.frontmatter.rating : 3;
   return {
-    id: `dropped-${slug(title)}`,
+    id: `dropped-${slug(title)}-${fingerprint(trimmed)}`,
     title,
     kind: "clipping",
-    markdown: text,
-    created,
+    markdown: body,
+    created: parsed.frontmatter.created ?? created,
+    author: parsed.frontmatter.author,
     suggestedFolder: "Clippings",
-    suggestedCategories: ["[[Knowledge]]"],
-    suggestedRating: 3,
+    suggestedCategories: parsed.frontmatter.categories?.length ? parsed.frontmatter.categories : ["[[Knowledge]]"],
+    suggestedRating: rating >= 1 && rating <= 7 ? rating : 3,
     claims: [],
   };
+}
+
+function fingerprint(text: string): string {
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+  return hash.toString(36);
 }
 
 function slug(value: string): string {

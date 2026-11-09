@@ -22,7 +22,7 @@ bun run typecheck
 ## What to click
 
 1. **Ingest** — select mock articles / clippings / meeting notes (two pairs contradict) and stage them into `raw/`. You can also drop a local `.md` file.
-2. **Run compile** — watch extract → link → categorize → contradictions → index/log → brief → canvas → profile. The wiki diff shows what changed.
+2. **Run compile** — uses the checked sources (an empty selection does not compile the whole library). Watch extract → link → categorize → contradictions → profile → index → brief → canvas. The wiki diff shows what changed. Click a note's rating dots to keep a curator score across later compiles.
 3. **Vault** — Daily / Notes / Clippings / References / Categories, YAML properties, `[[wikilinks]]`, backlinks, 1–7 ratings.
 4. **Bases** — saved views with filter / sort / group; table or cards.
 5. **Canvas** — auto map after compile; drag nodes; export `knowledge-map.canvas` (JSON Canvas 1.0).
