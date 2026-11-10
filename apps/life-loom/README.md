@@ -1,8 +1,8 @@
 # Life Loom
 
-Altı perdelik, görsel bir hayat simülasyonu. Dünya bir veri paketidir: aynı motor Liman kasabasını da, bir yörünge bahçesini de oynatır. Üçüncü fikri kodu değiştirmeden eklersin.
+Bir meslek hayatı. Her yıl bir karar verirsin. Karar istatistikleri kaydırır. Yılın olayı, o istatistiklerden hesaplanan bir olasılıkla **tutar** ya da **kaçar**. Tutan ve kaçan her yıl, sahnedeki çokgen heykeli bir kat büyütür. Hayat kapanınca bunu bir infografik olarak indirebilirsin.
 
-Döngü, [1 in 8 Billion](https://1in8b.life/en/) sitesinin **herkese açık** oynanışından okundu: seçilmeyen bir doğum, yıl içindeki bir yön, ihtimali kaydıran kararlar, bir kayıt ve bir kapanış. Bu depo o sitenin kodunu, istatistiğini, ülke listesini ve cümlelerini içermez.
+Beş hazır hayat: futbolcu, SAP danışmanı, basketbolcu, politikacı, sokak. Sokak paketi yalnızca bedeli anlatır; bir işin nasıl yapılacağını anlatmaz.
 
 ## Çalıştır
 
@@ -10,48 +10,25 @@ Döngü, [1 in 8 Billion](https://1in8b.life/en/) sitesinin **herkese açık** o
 bun install
 bun test
 bun run dev
-# → http://localhost:3000
 ```
 
-Anahtar gerekmez.
+Anahtar yok.
 
-## Nasıl oynanır
+## Yeni bir simülasyon
 
-1. Bir dünya seç. Tezgâh, o dünyanın yer ağırlıklarını ve perdelerini gösterir.
-2. **Bu dünyada doğ.** Yer ve hane ağırlığa göre çekilir.
-3. Her perdede üç karttan birini seç. Kartın üstünde halkanın nasıl kayacağı yazar. Küçük bir zar ayrıca bir halkayı oynatır.
-4. **Kalanını izle**, kararları senin yerine tamamlar.
-5. Kapanış, hangi perdenin o sonu açtığını söyler. Aynı kuraldan gelen ikinci bir hayat yanda durur.
+1. `src/data/careers/futbol.ts` dosyasını kopyala.
+2. `id`, `role`, `stats`, `vital` alanlarını değiştir.
+3. `origins` doğum yerini, `lifestyles` tarzı ağırlığıyla tarif etsin. `mods` başlangıç istatistiğini kaydırır.
+4. Her `beats` kaydı bir yıldır. `choices` karardır. `check` o yılın olasılığıdır:
+   - `base` bütün istatistikler 50 iken ihtimal
+   - `weights` her puan için eklenen ihtimal (50'nin üstü artı, altı eksi)
+   - `originBias`, `lifestyleBias`, `flagBias` yeri, tarzı ve önceki izi ekler
+   - `hit` ve `miss` cümleyi, istatistik kaymasını ve heykele düşen `prop` şeklini söyler
+   - `end: true` hayatı kapatır
+5. Dosyayı `src/data/packs.ts` listesine ekle.
 
-Tuşlar: `1` `2` `3`.
-
-## Yeni bir hayat simülasyonu
-
-`src/data/packs.ts` içine bir `Pack` daha koy. Motor şunları bilir, başka bir şey bilmez:
-
-| Parça | Ne işe yarar | Nereye yazılır |
-| --- | --- | --- |
-| `places` | Doğum yeri. `weight` büyükse daha sık düşer. `hue` sahnenin rengidir. | paketin |
-| `households` | Başlangıç halkası. Beden / neşe / bağ, 48 üstüne eklenir. | paketin |
-| `stages` | Altı perde. Her birinde 2–3 `choices`. | paketin |
-| `choices.effects` | Görünen kayma. Sonuç bu kadarla bitmez. | seçimin |
-| `choices.flag` | Yapışkan iz. Kapanış kuralları buna bakar. | seçimin |
-| `endings` | İlk uyan kural kazanır. Koşulsuz kural en sonda durur. | paketin |
-
-`src/engine/sim.ts` dosyasına dokunmadan yeni dünya oynanır. İsim listesi, motif (`cradle`, `street`, `school`, `work`, `home`, `evening`, `pod`, `class`, `shift`, `voyage`, `found`, `star`) ve kapanış metni tamamen sana aittir.
-
-## 1in8b’de görülen döngü, burada ne oldu
-
-Herkese açık sayfa ve About metninden okunan karşılıklar:
-
-- **Dünya ve tempo** (geçmiş / bugün / gelecek, 30–90 dk) → burada tempo yok. Bir hayat altı tık.
-- **Doğum çekilişi** (doğum sayısına ya da nüfusa göre) → `weight`.
-- **Yıllık odak + seyrek karar kartı** → her perde zaten bir karardır. Etki kartta görünür.
-- **Dört gizli istatistik** → üç halka. Yüksek olan ihtimali artırır, sonu tek başına yazmaz.
-- **Aynı saniyede doğanlar** → tek bir gölge hayat, başka tohum.
-- **Otomatik mod** → Kalanını izle.
-- **Ölüm kaydı** → temalı bir kapanış. Örnek dünyalarda ağır sahneler yok.
+Motor (`src/engine/sim.ts`) meslek bilmez. Yüzde `8` ile `92` arasında kalır. Zar, yüzdenin altındaysa olay tutar.
 
 ## Kapsam
 
-Özgün oyuncak. Canlı Ghidra, Hopper, MCP ya da o sitenin betiği yok. Hayatlar tarayıcı belleğinde kalır; hesap yok.
+Özgün oyuncak. 1in8b.life'ın kodu, ülke tablosu ve metni yoktur. Oynanış fikri oradan okunmuştur: istatistikten olasılık, olasılıktan gerçekleşen yıl.

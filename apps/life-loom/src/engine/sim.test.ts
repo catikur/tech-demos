@@ -1,101 +1,95 @@
 import { describe, expect, test } from "bun:test";
 import { PACKS } from "../data/packs.ts";
-import {
-  autoRest,
-  beginRun,
-  choose,
-  claims,
-  clampStat,
-  pickEnding,
-  topStat,
-  weightedPick,
-  type Pack,
-} from "./sim.ts";
+import { autoRest, beginRun, explainChance, playYear, type Check, type Pack } from "./sim.ts";
 
-const liman = PACKS[0]!;
-const orbit = PACKS[1]!;
+const futbol = PACKS[0]!;
 
-describe("çekiliş", () => {
-  test("yüksek ağırlık daha sık düşer", () => {
-    const items = [
-      { id: "az", weight: 1 },
-      { id: "çok", weight: 9 },
-    ];
-    let heavy = 0;
-    for (let seed = 1; seed <= 400; seed++) {
-      let a = seed >>> 0;
-      const rnd = () => {
-        a = (a + 0x6d2b79f5) | 0;
-        let t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-      };
-      if (weightedPick(items, rnd).id === "çok") heavy++;
-    }
-    expect(heavy).toBeGreaterThan(300);
+describe("olasılık", () => {
+  const check: Check = {
+    id: "t",
+    title: "deneme",
+    base: 0.4,
+    weights: { form: 0.006 },
+    originBias: { akademi: 0.1 },
+    flagBias: { risk: -0.2 },
+    hit: { prop: "ball", log: "tuttu" },
+    miss: { prop: "crack", log: "kaçtı" },
+  };
+
+  test("yüksek form ihtimali büyütür", () => {
+    const low = explainChance(check, { form: 20 }, "mahalle", "kanat", []);
+    const high = explainChance(check, { form: 90 }, "mahalle", "kanat", []);
+    expect(high.p).toBeGreaterThan(low.p);
   });
 
-  test("aynı tohum aynı doğumu verir", () => {
-    const a = beginRun(liman, 42);
-    const b = beginRun(liman, 42);
-    expect(a.run.name).toBe(b.run.name);
-    expect(a.run.placeId).toBe(b.run.placeId);
-    expect(a.run.householdId).toBe(b.run.householdId);
-    expect(a.shadow.endingId).toBe(b.shadow.endingId);
+  test("yer ve iz sapması işler", () => {
+    const plain = explainChance(check, { form: 50 }, "mahalle", "kanat", []);
+    const academy = explainChance(check, { form: 50 }, "akademi", "kanat", []);
+    const risky = explainChance(check, { form: 50 }, "mahalle", "kanat", ["risk"]);
+    expect(academy.p).toBeGreaterThan(plain.p);
+    expect(risky.p).toBeLessThan(plain.p);
+  });
+
+  test("yüzde 8 ile 92 arasında kalır", () => {
+    const crushed = explainChance(check, { form: 0 }, "mahalle", "kanat", ["risk"]);
+    const boosted = explainChance(check, { form: 100 }, "akademi", "kanat", []);
+    expect(crushed.p).toBeGreaterThanOrEqual(0.08);
+    expect(boosted.p).toBeLessThanOrEqual(0.92);
   });
 });
 
-describe("perde", () => {
-  test("altı seçim bir kapanışa varır", () => {
-    let { run } = beginRun(orbit, 7);
-    let ending = null;
-    for (const stage of orbit.stages) {
-      const step = choose(orbit, run, stage.choices[0]!.id);
-      run = step.run;
-      ending = step.ending;
-    }
-    expect(run.beats).toHaveLength(6);
-    expect(ending?.id).toBeTruthy();
-    expect(claims(orbit, run, ending!).length).toBeGreaterThan(1);
+describe("yıl", () => {
+  test("aynı tohum aynı hayatı üretir", () => {
+    const a = beginRun(futbol, 11);
+    const b = beginRun(futbol, 11);
+    expect(a.name).toBe(b.name);
+    expect(a.originId).toBe(b.originId);
+    const ya = playYear(futbol, a, futbol.beats[0]!.choices[0]!.id);
+    const yb = playYear(futbol, b, futbol.beats[0]!.choices[0]!.id);
+    expect(ya.year.roll).toBe(yb.year.roll);
+    expect(ya.year.hit).toBe(yb.year.hit);
   });
 
-  test("izle modu hayatı bitirir", () => {
-    const { run } = beginRun(liman, 99);
-    const done = autoRest(liman, run);
-    expect(done.run.beats).toHaveLength(liman.stages.length);
-    expect(done.ending.title.length).toBeGreaterThan(0);
-    for (const key of ["body", "joy", "bond"] as const) {
-      expect(done.run.stats[key]).toBeGreaterThanOrEqual(0);
-      expect(done.run.stats[key]).toBeLessThanOrEqual(100);
+  test("zar, açıklanan yüzdenin altında kalırsa tutar", () => {
+    const run = beginRun(futbol, 3);
+    const year = playYear(futbol, run, "antrenman").year;
+    expect(year.hit).toBe(year.roll < year.p);
+    expect(year.p).toBeGreaterThan(0);
+    expect(year.p).toBeLessThan(1);
+  });
+
+  test("izle modu her mesleği kapatır", () => {
+    for (const pack of PACKS) {
+      const done = autoRest(pack, beginRun(pack, 21));
+      expect(done.closed).toBe(true);
+      expect(done.years.length).toBeGreaterThan(0);
+      expect(done.years.length).toBeLessThanOrEqual(pack.beats.length);
+      expect(done.cause.length).toBeGreaterThan(8);
+      for (const stat of pack.stats) {
+        expect(done.stats[stat.key]).toBeGreaterThanOrEqual(0);
+        expect(done.stats[stat.key]).toBeLessThanOrEqual(100);
+      }
     }
   });
 
   test("bilinmeyen seçim reddedilir", () => {
-    const { run } = beginRun(liman, 3);
-    expect(() => choose(liman, run, "yok")).toThrow();
+    const run = beginRun(futbol, 1);
+    expect(() => playYear(futbol, run, "yok")).toThrow();
   });
 });
 
-describe("kapanış", () => {
-  test("bayrak kuralı, en yüksek halkadan önce gelir", () => {
-    const pack = {
-      endings: [
-        { id: "iz", title: "İz", flag: "leave", text: "" },
-        { id: "beden", title: "Beden", top: "body", text: "" },
-        { id: "son", title: "Son", text: "" },
-      ],
-    } as Pack;
-    expect(pickEnding(pack, ["leave"], { body: 90, joy: 10, bond: 10 }).id).toBe("iz");
-  });
-
-  test("bayrak yoksa en yüksek halka kazanır", () => {
-    const pack = liman;
-    expect(pickEnding(pack, [], { body: 10, joy: 80, bond: 20 }).id).toBe("defter");
-    expect(topStat({ body: 10, joy: 80, bond: 20 })).toBe("joy");
-  });
-
-  test("halkalar 0 ile 100 arasında kalır", () => {
-    expect(clampStat(-4)).toBe(0);
-    expect(clampStat(140)).toBe(100);
+describe("paket sözleşmesi", () => {
+  test("her perdede seçim ve iki sonuç vardır", () => {
+    for (const pack of PACKS as Pack[]) {
+      expect(pack.beats.length).toBeGreaterThanOrEqual(5);
+      expect(pack.stats.some((stat) => stat.key === pack.vital)).toBe(true);
+      for (const beat of pack.beats) {
+        expect(beat.choices.length).toBeGreaterThanOrEqual(2);
+        expect(beat.check.hit.prop.length).toBeGreaterThan(0);
+        expect(beat.check.miss.prop.length).toBeGreaterThan(0);
+      }
+      expect(pack.beats[pack.beats.length - 1]!.check.hit.end).toBe(true);
+      expect(pack.beats[pack.beats.length - 1]!.check.miss.end).toBe(true);
+    }
   });
 });

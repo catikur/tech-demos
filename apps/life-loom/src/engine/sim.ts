@@ -1,79 +1,95 @@
-// Pure, seed-deterministic life loop.
-// A world pack supplies places, households, stages, and endings.
-// The engine only draws, applies a choice, rolls a little luck, and closes.
+// Career-agnostic life loop.
+// A pack names the stats. Each year the player chooses, then one check
+// computes a probability from those stats and resolves hit or miss.
 
-export type StatKey = "body" | "joy" | "bond";
+export type Stats = Record<string, number>;
 
-export type Stats = Record<StatKey, number>;
+export type Origin = {
+  id: string;
+  name: string;
+  weight: number;
+  blurb: string;
+  hue: number;
+  mods: Stats;
+};
 
-export const STAT_KEYS: StatKey[] = ["body", "joy", "bond"];
+export type Lifestyle = {
+  id: string;
+  name: string;
+  weight: number;
+  blurb: string;
+  mods: Stats;
+};
 
 export type Choice = {
   id: string;
   label: string;
   detail: string;
-  effects: Partial<Stats>;
-  /** Sticky tag. Ending rules look at these. */
+  effects: Stats;
   flag?: string;
-  /** Chronicle sentence. Tokens: {name} {place} {home} */
-  line: string;
 };
 
-export type Stage = {
+export type Outcome = {
+  log: string;
+  effects?: Stats;
+  flag?: string;
+  prop: string;
+  /** Closes the life after this year. */
+  end?: boolean;
+  epitaph?: string;
+};
+
+export type Check = {
+  id: string;
+  title: string;
+  /** Chance when every weighted stat sits at 50. */
+  base: number;
+  /** Added chance per point above 50. */
+  weights: Stats;
+  originBias?: Record<string, number>;
+  lifestyleBias?: Record<string, number>;
+  flagBias?: Record<string, number>;
+  hit: Outcome;
+  miss: Outcome;
+};
+
+export type Beat = {
   id: string;
   years: string;
   title: string;
-  prompt: string;
-  motif: string;
+  hook: string;
   choices: Choice[];
+  check: Check;
 };
 
-export type Place = {
-  id: string;
-  name: string;
-  weight: number;
-  blurb: string;
-  /** 0–360, drives the scene color. */
-  hue: number;
-};
-
-export type Household = {
-  id: string;
-  name: string;
-  weight: number;
-  blurb: string;
-  start: Partial<Stats>;
-};
-
-export type Ending = {
-  id: string;
-  title: string;
-  /** If set, the life must carry this flag. */
-  flag?: string;
-  /** If set, this stat must be the highest. */
-  top?: StatKey;
-  text: string;
-};
+export type StatDef = { key: string; label: string };
 
 export type Pack = {
   id: string;
   name: string;
+  role: string;
   pitch: string;
   names: string[];
-  places: Place[];
-  households: Household[];
-  stages: Stage[];
-  /** First match wins. Keep a condition-free ending last. */
-  endings: Ending[];
+  stats: StatDef[];
+  /** Falls to zero and the life closes. */
+  vital: string;
+  origins: Origin[];
+  lifestyles: Lifestyle[];
+  beats: Beat[];
 };
 
-export type Luck = { stat: StatKey; delta: number };
+export type Reason = { key: string; delta: number };
 
-export type Beat = {
-  stageId: string;
+export type Year = {
+  beatId: string;
   choiceId: string;
+  p: number;
+  roll: number;
+  hit: boolean;
+  reasons: Reason[];
+  prop: string;
   line: string;
-  luck: Luck;
+  epitaph?: string;
   stats: Stats;
   flags: string[];
 };
@@ -83,29 +99,21 @@ export type Run = {
   rng: number;
   packId: string;
   name: string;
-  placeId: string;
-  householdId: string;
-  /** Halkalar, ilk seçimden önce. */
-  origin: Stats;
+  originId: string;
+  lifestyleId: string;
   stats: Stats;
   flags: string[];
-  beats: Beat[];
-};
-
-export type Shadow = {
-  name: string;
-  placeName: string;
-  endingId: string;
-  choices: string[];
-};
-
-export type Claim = {
-  text: string;
-  stageId?: string;
+  years: Year[];
+  closed: boolean;
+  cause: string;
 };
 
 export function clampStat(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+export function clampChance(n: number): number {
+  return Math.min(0.92, Math.max(0.08, n));
 }
 
 export function makeRng(seed: number): { next: () => number; state: () => number } {
@@ -132,222 +140,163 @@ export function weightedPick<T extends { weight: number }>(items: T[], rnd: () =
   return items[items.length - 1]!;
 }
 
-export function topStat(stats: Stats): StatKey {
-  let best: StatKey = "body";
-  for (const key of STAT_KEYS) {
-    if (stats[key] > stats[best]) best = key;
+function mergeStats(base: Stats, extra: Stats | undefined): Stats {
+  const next = { ...base };
+  for (const [key, value] of Object.entries(extra ?? {})) {
+    next[key] = clampStat((next[key] ?? 50) + value);
   }
-  return best;
+  return next;
 }
 
-export function pickEnding(pack: Pack, flags: string[], stats: Stats): Ending {
-  const top = topStat(stats);
-  for (const ending of pack.endings) {
-    if (ending.flag && !flags.includes(ending.flag)) continue;
-    if (ending.top && ending.top !== top) continue;
-    return ending;
+export function explainChance(
+  check: Check,
+  stats: Stats,
+  originId: string,
+  lifestyleId: string,
+  flags: string[],
+): { p: number; reasons: Reason[] } {
+  const reasons: Reason[] = [];
+  let p = check.base;
+  for (const [key, weight] of Object.entries(check.weights)) {
+    const delta = ((stats[key] ?? 50) - 50) * weight;
+    p += delta;
+    if (Math.abs(delta) >= 0.015) reasons.push({ key, delta });
   }
-  const last = pack.endings[pack.endings.length - 1];
-  if (!last) throw new Error(`pack ${pack.id} has no endings`);
-  return last;
+  const origin = check.originBias?.[originId] ?? 0;
+  if (origin) {
+    p += origin;
+    reasons.push({ key: `yer:${originId}`, delta: origin });
+  }
+  const life = check.lifestyleBias?.[lifestyleId] ?? 0;
+  if (life) {
+    p += life;
+    reasons.push({ key: `tarz:${lifestyleId}`, delta: life });
+  }
+  for (const flag of flags) {
+    const bias = check.flagBias?.[flag] ?? 0;
+    if (bias) {
+      p += bias;
+      reasons.push({ key: `iz:${flag}`, delta: bias });
+    }
+  }
+  reasons.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  return { p: clampChance(p), reasons: reasons.slice(0, 3) };
 }
 
-function initialStats(home: Household): Stats {
-  return {
-    body: clampStat(48 + (home.start.body ?? 0)),
-    joy: clampStat(48 + (home.start.joy ?? 0)),
-    bond: clampStat(48 + (home.start.bond ?? 0)),
-  };
-}
-
-function fill(template: string, name: string, place: string, home: string): string {
-  return template
-    .replaceAll("{name}", name)
-    .replaceAll("{place}", place)
-    .replaceAll("{home}", home);
-}
-
-function rollLuck(rnd: () => number): Luck {
-  const stat = STAT_KEYS[Math.floor(rnd() * STAT_KEYS.length)]!;
-  let delta = Math.floor(rnd() * 7) - 3;
-  if (delta === 0) delta = 1;
-  return { stat, delta };
-}
-
-function apply(stats: Stats, effects: Partial<Stats>, luck: Luck): Stats {
-  const next: Stats = {
-    body: stats.body + (effects.body ?? 0),
-    joy: stats.joy + (effects.joy ?? 0),
-    bond: stats.bond + (effects.bond ?? 0),
-  };
-  next[luck.stat] = next[luck.stat] + luck.delta;
-  return {
-    body: clampStat(next.body),
-    joy: clampStat(next.joy),
-    bond: clampStat(next.bond),
-  };
-}
-
-export function beginRun(pack: Pack, seed: number): { run: Run; shadow: Shadow } {
+export function beginRun(pack: Pack, seed: number): Run {
   const rng = makeRng(seed);
-  const place = weightedPick(pack.places, rng.next);
-  const home = weightedPick(pack.households, rng.next);
-  const name = pack.names[Math.floor(rng.next() * pack.names.length)] ?? pack.names[0] ?? "Kimse";
-  const origin = initialStats(home);
-  const run: Run = {
+  const origin = weightedPick(pack.origins, rng.next);
+  const lifestyle = weightedPick(pack.lifestyles, rng.next);
+  const name = pack.names[Math.floor(rng.next() * pack.names.length)] ?? "Kimse";
+  let stats: Stats = {};
+  for (const stat of pack.stats) stats[stat.key] = 48;
+  stats = mergeStats(stats, origin.mods);
+  stats = mergeStats(stats, lifestyle.mods);
+  return {
     seed,
     rng: rng.state(),
     packId: pack.id,
     name,
-    placeId: place.id,
-    householdId: home.id,
-    origin,
-    stats: { ...origin },
+    originId: origin.id,
+    lifestyleId: lifestyle.id,
+    stats,
     flags: [],
-    beats: [],
+    years: [],
+    closed: false,
+    cause: "",
   };
-  return { run, shadow: shadowLife(pack, seed ^ 0x9e3779b9) };
 }
 
-function leanScore(choice: Choice, rnd: () => number): number {
-  const sum = (choice.effects.body ?? 0) + (choice.effects.joy ?? 0) + (choice.effects.bond ?? 0);
-  return sum + rnd() * 6;
+export function currentBeat(pack: Pack, run: Run): Beat | null {
+  if (run.closed) return null;
+  return pack.beats[run.years.length] ?? null;
 }
 
-export function currentStage(pack: Pack, run: Run): Stage | null {
-  return pack.stages[run.beats.length] ?? null;
-}
-
-export function choose(pack: Pack, run: Run, choiceId: string): { run: Run; ending: Ending | null } {
-  const stage = currentStage(pack, run);
-  if (!stage) {
-    return { run, ending: pickEnding(pack, run.flags, run.stats) };
+export function leanChoice(pack: Pack, run: Run): Choice {
+  const beat = currentBeat(pack, run);
+  if (!beat) throw new Error("no beat");
+  const rng = makeRng(run.rng ^ 0x51ed);
+  let best = beat.choices[0]!;
+  let bestScore = -Infinity;
+  for (const choice of beat.choices) {
+    const sum = Object.values(choice.effects).reduce((total, value) => total + value, 0);
+    const score = sum + rng.next() * 5;
+    if (score > bestScore) {
+      best = choice;
+      bestScore = score;
+    }
   }
-  const choice = stage.choices.find((item) => item.id === choiceId);
+  return best;
+}
+
+function fill(template: string, run: Run, pack: Pack): string {
+  const origin = pack.origins.find((item) => item.id === run.originId);
+  const lifestyle = pack.lifestyles.find((item) => item.id === run.lifestyleId);
+  return template
+    .replaceAll("{name}", run.name)
+    .replaceAll("{origin}", origin?.name ?? "")
+    .replaceAll("{life}", lifestyle?.name ?? "");
+}
+
+export function playYear(pack: Pack, run: Run, choiceId: string): { run: Run; year: Year } {
+  if (run.closed) throw new Error("life already closed");
+  const beat = currentBeat(pack, run);
+  if (!beat) throw new Error("no year left");
+  const choice = beat.choices.find((item) => item.id === choiceId);
   if (!choice) throw new Error(`unknown choice ${choiceId}`);
-  return commit(pack, run, stage, choice);
-}
 
-/** Finish every remaining stage by leaning on effects, with a little noise. */
-export function autoRest(pack: Pack, run: Run): { run: Run; ending: Ending } {
-  let cursor = run;
-  while (currentStage(pack, cursor)) {
-    const stage = currentStage(pack, cursor)!;
-    const rng = makeRng(cursor.rng);
-    let best = stage.choices[0]!;
-    let bestScore = -Infinity;
-    for (const choice of stage.choices) {
-      const score = leanScore(choice, rng.next);
-      if (score > bestScore) {
-        best = choice;
-        bestScore = score;
-      }
-    }
-    cursor = { ...cursor, rng: rng.state() };
-    const step = commit(pack, cursor, stage, best);
-    cursor = step.run;
-    if (step.ending) return { run: cursor, ending: step.ending };
-  }
-  return { run: cursor, ending: pickEnding(pack, cursor.flags, cursor.stats) };
-}
-
-function commit(pack: Pack, run: Run, stage: Stage, choice: Choice): { run: Run; ending: Ending | null } {
-  const place = pack.places.find((item) => item.id === run.placeId);
-  const home = pack.households.find((item) => item.id === run.householdId);
+  let stats = mergeStats(run.stats, choice.effects);
+  const flags = choice.flag && !run.flags.includes(choice.flag) ? [...run.flags, choice.flag] : [...run.flags];
+  const explained = explainChance(beat.check, stats, run.originId, run.lifestyleId, flags);
   const rng = makeRng(run.rng);
-  const luck = rollLuck(rng.next);
-  const stats = apply(run.stats, choice.effects, luck);
-  const flags = choice.flag && !run.flags.includes(choice.flag) ? [...run.flags, choice.flag] : run.flags;
-  const beat: Beat = {
-    stageId: stage.id,
-    choiceId: choice.id,
-    line: fill(choice.line, run.name, place?.name ?? "", home?.name ?? ""),
-    luck,
-    stats,
-    flags,
-  };
-  const next: Run = {
-    ...run,
-    rng: rng.state(),
-    stats,
-    flags,
-    beats: [...run.beats, beat],
-  };
-  const ending = next.beats.length >= pack.stages.length ? pickEnding(pack, next.flags, next.stats) : null;
-  return { run: next, ending };
-}
+  const roll = rng.next();
+  const hit = roll < explained.p;
+  const outcome = hit ? beat.check.hit : beat.check.miss;
+  stats = mergeStats(stats, outcome.effects);
+  if (outcome.flag && !flags.includes(outcome.flag)) flags.push(outcome.flag);
 
-function shadowLife(pack: Pack, seed: number): Shadow {
-  const rng = makeRng(seed);
-  const place = weightedPick(pack.places, rng.next);
-  const home = weightedPick(pack.households, rng.next);
-  const name = pack.names[Math.floor(rng.next() * pack.names.length)] ?? "Kimse";
-  let stats = initialStats(home);
-  const flags: string[] = [];
-  const choices: string[] = [];
-  let state = rng.state();
-  for (const stage of pack.stages) {
-    const roll = makeRng(state);
-    let best = stage.choices[0]!;
-    let bestScore = -Infinity;
-    for (const choice of stage.choices) {
-      const score = leanScore(choice, roll.next);
-      if (score > bestScore) {
-        best = choice;
-        bestScore = score;
-      }
-    }
-    state = roll.state();
-    const luck = rollLuck(roll.next);
-    state = roll.state();
-    stats = apply(stats, best.effects, luck);
-    if (best.flag && !flags.includes(best.flag)) flags.push(best.flag);
-    choices.push(best.label);
-  }
+  const vital = stats[pack.vital] ?? 0;
+  const last = run.years.length + 1 >= pack.beats.length;
+  const closed = Boolean(outcome.end) || vital <= 0 || last;
+  const line = fill(outcome.log, run, pack);
+  const epitaph = outcome.epitaph ? fill(outcome.epitaph, run, pack) : undefined;
+  const year: Year = {
+    beatId: beat.id,
+    choiceId,
+    p: explained.p,
+    roll,
+    hit,
+    reasons: explained.reasons,
+    prop: outcome.prop,
+    line,
+    epitaph,
+    stats,
+    flags,
+  };
+  const cause = closed ? (epitaph ?? line) : "";
   return {
-    name,
-    placeName: place.name,
-    endingId: pickEnding(pack, flags, stats).id,
-    choices,
+    year,
+    run: {
+      ...run,
+      rng: rng.state(),
+      stats,
+      flags,
+      years: [...run.years, year],
+      closed,
+      cause,
+    },
   };
 }
 
-const STAT_LABEL: Record<StatKey, string> = {
-  body: "beden",
-  joy: "neşe",
-  bond: "bağ",
-};
+export function autoRest(pack: Pack, run: Run): Run {
+  let cursor = run;
+  while (!cursor.closed && currentBeat(pack, cursor)) {
+    const choice = leanChoice(pack, cursor);
+    cursor = playYear(pack, cursor, choice.id).run;
+  }
+  return cursor;
+}
 
-export function claims(pack: Pack, run: Run, ending: Ending): Claim[] {
-  const place = pack.places.find((item) => item.id === run.placeId);
-  const home = pack.households.find((item) => item.id === run.householdId);
-  const out: Claim[] = [
-    {
-      text: `${run.name}, ${place?.name ?? "bir yer"} bölgesine düştü. Çekiliş ağırlığa göre yapıldı; bu yerin ağırlığı ${place?.weight ?? 0}. Hane: ${home?.name ?? ""}.`,
-    },
-  ];
-  const flagged = run.beats.find((beat) => {
-    const stage = pack.stages.find((item) => item.id === beat.stageId);
-    const choice = stage?.choices.find((item) => item.id === beat.choiceId);
-    return Boolean(choice?.flag && ending.flag === choice.flag);
-  });
-  if (flagged) {
-    const stage = pack.stages.find((item) => item.id === flagged.stageId);
-    out.push({
-      text: `${stage?.title ?? "Bir perde"} perdesindeki seçim «${ending.title}» kapanışını açan izi bıraktı.`,
-      stageId: flagged.stageId,
-    });
-  }
-  const top = topStat(run.stats);
-  out.push({
-    text: `Kapanışta en yüksek halka ${STAT_LABEL[top]} (${run.stats[top]}). Kurallar listedeki ilk eşleşeni seçer.`,
-  });
-  const last = run.beats[run.beats.length - 1];
-  if (last) {
-    out.push({
-      text: `Son şans zarı ${STAT_LABEL[last.luck.stat]} ${last.luck.delta > 0 ? "+" : ""}${last.luck.delta} geldi. Zar sonucu garanti etmez, sadece kaydırır.`,
-      stageId: last.stageId,
-    });
-  }
-  return out;
+export function statLabel(pack: Pack, key: string): string {
+  return pack.stats.find((stat) => stat.key === key)?.label ?? key;
 }

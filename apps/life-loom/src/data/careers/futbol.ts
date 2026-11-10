@@ -1,0 +1,146 @@
+import type { Pack } from "../../engine/sim.ts";
+
+const pack: Pack = {
+  id: "futbol",
+  name: "Futbolcu",
+  role: "futbolcu",
+  pitch: "Form, beden ve şöhret bir yüzde olur. Yüzde ya kadroyu açar ya sakatlığı.",
+  names: ["Arda", "Ege", "Mert", "Deniz", "Kerem", "Can"],
+  vital: "beden",
+  stats: [
+    { key: "form", label: "Form" },
+    { key: "sohret", label: "Şöhret" },
+    { key: "beden", label: "Beden" },
+    { key: "kafa", label: "Kafa" },
+  ],
+  origins: [
+    { id: "mahalle", name: "Mahalle sahası", weight: 5, hue: 198, blurb: "Toz, bağırış, erken öğrenilen denge.", mods: { beden: 8, sohret: -6 } },
+    { id: "akademi", name: "Akademi", weight: 3, hue: 28, blurb: "Ölçülen koşu, az maç, çok tekrar.", mods: { form: 8, kafa: 6 } },
+    { id: "tasra", name: "Taşra kulübü", weight: 4, hue: 92, blurb: "Küçük tribün, uzun yol, sadık antrenör.", mods: { beden: 4, kafa: 4, sohret: -4 } },
+  ],
+  lifestyles: [
+    { id: "kanat", name: "Kanat", weight: 4, blurb: "Çizgiyi seven, çabuk sıkılan.", mods: { form: 4, beden: -2 } },
+    { id: "onlibero", name: "Ön libero", weight: 3, blurb: "Pas, tempo, görünmeyen iş.", mods: { kafa: 6 } },
+    { id: "kaleci", name: "Kaleci", weight: 2, blurb: "Tek başına bir ceza sahası.", mods: { beden: 6, sohret: -4 } },
+  ],
+  beats: [
+    {
+      id: "deneme",
+      years: "16",
+      title: "Deneme",
+      hook: "Kadro listesi bu hafta asılıyor. Formun, kapının genişliği.",
+      choices: [
+        { id: "antrenman", label: "Antrenmanda kal", detail: "Işıklar sönünce de kal.", effects: { form: 8, beden: -2 }, flag: "isci" },
+        { id: "gosteris", label: "Maçta göster", detail: "Bir hareket yeter, desinler.", effects: { sohret: 8, kafa: -3 }, flag: "star" },
+        { id: "hoca", label: "Hocayla konuş", detail: "Ne eksik, onu sor.", effects: { kafa: 7, form: 2 } },
+      ],
+      check: {
+        id: "kadro",
+        title: "Kadroya girmek",
+        base: 0.42,
+        weights: { form: 0.006, sohret: 0.003, kafa: 0.002 },
+        originBias: { akademi: 0.08, mahalle: -0.04 },
+        hit: { prop: "boot", log: "{name} kadroya girdi. {origin} bunu bekliyordu, kulüp yeni öğrendi." },
+        miss: { prop: "crack", effects: { sohret: -6 }, log: "{name} listenin dışında kaldı. {origin} yolunda bir hafta daha var." },
+      },
+    },
+    {
+      id: "onbir",
+      years: "19",
+      title: "İlk on bir",
+      hook: "Bir maç seni görünür kılar. Şöhret düşükse yüzde de düşük kalır.",
+      choices: [
+        { id: "pas", label: "Güvenli pas", detail: "Kaybetme. Maçı uzat.", effects: { kafa: 6, sohret: 2 } },
+        { id: "dribling", label: "Dribling dene", detail: "Çizgide bir adam eksilt.", effects: { form: 6, sohret: 5, beden: -4 }, flag: "star" },
+        { id: "tasi", label: "Takımı taşı", detail: "Yorul, bağır, yerini bırakma.", effects: { form: 4, beden: -6, kafa: 4 } },
+      ],
+      check: {
+        id: "iz",
+        title: "O maçta iz bırakmak",
+        base: 0.4,
+        weights: { form: 0.007, sohret: 0.004 },
+        lifestyleBias: { kaleci: 0.06, kanat: 0.04 },
+        hit: { prop: "ball", effects: { sohret: 8 }, log: "{name} o akşam bir iz bıraktı. {life} rolü tribünde adıyla geçti." },
+        miss: { prop: "whistle", effects: { form: -5 }, log: "Maç bitti, {name} istatistikte yoktu. Form bir sonraki haftaya kaldı." },
+      },
+    },
+    {
+      id: "sakatlik",
+      years: "23",
+      title: "Sakatlık yılı",
+      hook: "Beden düşünce bütün yüzdeler daralır. Bu yıl sağlam bitmek bir zar.",
+      choices: [
+        { id: "dinlen", label: "Dinlen", detail: "Üç hafta yok. Yerini koru.", effects: { beden: 10, sohret: -4 }, flag: "saglam" },
+        { id: "igne", label: "İğneyle çık", detail: "Maç var. Yarın yok.", effects: { sohret: 6, beden: -12 }, flag: "risk" },
+        { id: "fizyo", label: "Fizyoterapi", detail: "Sıkıcı, ölçülü, geri dönüş.", effects: { beden: 6, kafa: 4 } },
+      ],
+      check: {
+        id: "saglam",
+        title: "Sezonu sağlam bitirmek",
+        base: 0.58,
+        weights: { beden: 0.008, kafa: 0.002 },
+        flagBias: { risk: -0.18, saglam: 0.1 },
+        hit: { prop: "medal", log: "{name} sezonu ayakta kapattı. Beden hâlâ bu işin sahibi." },
+        miss: {
+          prop: "crack",
+          effects: { beden: -18, form: -8 },
+          end: false,
+          log: "Bir yüklenme {name} için sezonu böldü. {origin} sahası bu kez uzaktan izlendi.",
+          epitaph: "Beden dayanamadı. {name} için saha burada kapandı.",
+        },
+      },
+    },
+    {
+      id: "transfer",
+      years: "27",
+      title: "Transfer",
+      hook: "Teklif, şöhretle açılır. Büyük kulüp kapısı akademiye daha yakındır.",
+      choices: [
+        { id: "buyuk", label: "Büyük kulüp", detail: "Yedek olsan da eşik yüksek.", effects: { sohret: 8, kafa: -4 }, flag: "buyuk" },
+        { id: "sehir", label: "Aynı şehir", detail: "Az para, tanıdık soyunma odası.", effects: { kafa: 6, beden: 4 } },
+        { id: "yurt", label: "Yurtdışı", detail: "Dil yeni, sözleşme kısa.", effects: { sohret: 6, form: 4, kafa: -2 }, flag: "yurt" },
+      ],
+      check: {
+        id: "teklif",
+        title: "Ciddi bir teklif gelmesi",
+        base: 0.36,
+        weights: { sohret: 0.008, form: 0.004 },
+        originBias: { akademi: 0.08, tasra: -0.06 },
+        flagBias: { star: 0.08, buyuk: 0.05 },
+        hit: { prop: "contract", effects: { sohret: 10 }, log: "Teklif geldi. {name} için {life} rolü artık bir satır değil, bir bedel." },
+        miss: { prop: "door", effects: { sohret: -4 }, log: "Telefon suskun kaldı. {name} bir yıl daha aynı otobüste." },
+      },
+    },
+    {
+      id: "veda",
+      years: "34",
+      title: "Veda",
+      hook: "Son sezon. Hatırlanmak şöhretle, huzur kafayla gelir.",
+      choices: [
+        { id: "antrenor", label: "Antrenör ol", detail: "Sahayı kenardan tut.", effects: { kafa: 8, sohret: 2 } },
+        { id: "sezon", label: "Bir sezon daha", detail: "Bacaklar izin verirse.", effects: { form: 4, beden: -8 } },
+        { id: "birak", label: "Bırak", detail: "Formayı katla. Evine dön.", effects: { kafa: 6, beden: 6, sohret: -2 } },
+      ],
+      check: {
+        id: "hatir",
+        title: "Adınla hatırlanmak",
+        base: 0.48,
+        weights: { sohret: 0.006, kafa: 0.003 },
+        hit: {
+          prop: "trophy",
+          end: true,
+          log: "{name} hatırlandı. {origin} duvarında hâlâ bir fotoğraf var.",
+          epitaph: "{name} sahayı kendi ayarıyla kapattı. Geride bir ad, bir de {life} rolü kaldı.",
+        },
+        miss: {
+          prop: "lamp",
+          end: true,
+          log: "Tribün başka bir isme baktı. {name} sessizce çıktı.",
+          epitaph: "Işıklar söndü. {name} için bu hayat, alkışsız ama tamam, bitti.",
+        },
+      },
+    },
+  ],
+};
+
+export default pack;

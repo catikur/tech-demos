@@ -1,0 +1,146 @@
+import type { Pack } from "../../engine/sim.ts";
+
+const pack: Pack = {
+  id: "sap",
+  name: "SAP danışmanı",
+  role: "SAP danışmanı",
+  pitch: "Bilgi kapıyı aralar, tempo onu çarpar. Canlıya geçiş bir yüzdedir.",
+  names: ["Selin", "Burak", "Ela", "Kaan", "Deniz", "Yasemin"],
+  vital: "tempo",
+  stats: [
+    { key: "bilgi", label: "Bilgi" },
+    { key: "iliski", label: "İlişki" },
+    { key: "tempo", label: "Tempo" },
+    { key: "itibar", label: "İtibar" },
+  ],
+  origins: [
+    { id: "anadolu", name: "Anadolu ofisi", weight: 4, hue: 24, blurb: "Küçük ekip, çok şapka, az sunum.", mods: { tempo: 6, itibar: -4 } },
+    { id: "merkez", name: "İstanbul merkez", weight: 4, hue: 210, blurb: "Cam bina, katmanlı onay, hızlı e-posta.", mods: { iliski: 6, bilgi: 4 } },
+    { id: "yurtdisi", name: "Yurtdışı proje", weight: 2, hue: 265, blurb: "Saat farkı, İngilizce not, tek başına otel.", mods: { bilgi: 6, tempo: -4, itibar: 6 } },
+  ],
+  lifestyles: [
+    { id: "fi", name: "Finans modülü", weight: 4, blurb: "Hesap, dönem kapanışı, az alkış.", mods: { bilgi: 6 } },
+    { id: "entegrasyon", name: "Entegrasyon", weight: 3, blurb: "İki sistem, bir gece, hiç uyku.", mods: { tempo: -4, bilgi: 4 } },
+    { id: "mimar", name: "Çözüm mimarı", weight: 2, blurb: "Az kod, çok toplantı, imza sende.", mods: { iliski: 6, itibar: 4 } },
+  ],
+  beats: [
+    {
+      id: "sertifika",
+      years: "24",
+      title: "Sertifika",
+      hook: "Kağıt, bilginin görünür hali. İlişki onu işe çevirir.",
+      choices: [
+        { id: "kurs", label: "Kursa gömül", detail: "Akşamları soru bankası.", effects: { bilgi: 10, tempo: -4 } },
+        { id: "usta", label: "Ustanın yanında", detail: "Sertifika yavaş, iş hızlı.", effects: { iliski: 6, bilgi: 4 } },
+        { id: "proje", label: "Ucu açık proje", detail: "Ücretsiz öğren, geç yat.", effects: { bilgi: 6, tempo: -6, itibar: 3 }, flag: "gece" },
+      ],
+      check: {
+        id: "kagidi",
+        title: "Sertifikanın işe dönmesi",
+        base: 0.44,
+        weights: { bilgi: 0.006, iliski: 0.004 },
+        originBias: { merkez: 0.08, anadolu: -0.03 },
+        hit: { prop: "certificate", effects: { itibar: 6 }, log: "{name} kağıdı aldı ve {origin} onu bir projeye yazdı." },
+        miss: { prop: "desk", effects: { itibar: -4 }, log: "Sınav geçti, telefon geçmedi. {name} bir dönem daha bekledi." },
+      },
+    },
+    {
+      id: "canli",
+      years: "28",
+      title: "İlk canlı",
+      hook: "Canlıya geçiş gecesi tempo yer. Bilgi hatayı, ilişki odayı tutar.",
+      choices: [
+        { id: "liste", label: "Kontrol listesi", detail: "Sıkıcı, eksiksiz, senin.", effects: { bilgi: 5, itibar: 4 } },
+        { id: "kahraman", label: "Gece kahramanı", detail: "Herkes gidince sen kal.", effects: { itibar: 8, tempo: -10 }, flag: "gece" },
+        { id: "paylas", label: "İşi böl", detail: "Şöhret az, tempo yerinde.", effects: { iliski: 7, tempo: 4, itibar: -2 } },
+      ],
+      check: {
+        id: "gecis",
+        title: "Canlıya sorunsuz geçmek",
+        base: 0.46,
+        weights: { bilgi: 0.006, tempo: 0.004, iliski: 0.002 },
+        lifestyleBias: { entegrasyon: -0.08, mimar: 0.05 },
+        flagBias: { gece: -0.06 },
+        hit: { prop: "laptop", effects: { itibar: 8 }, log: "Sistem açıldı. {name} sabahı {life} masasından ayakta gördü." },
+        miss: {
+          prop: "crack",
+          effects: { tempo: -14, itibar: -6 },
+          log: "Gece koptu. {name} için {origin} bir daha aynı sessizlikte olmadı.",
+        },
+      },
+    },
+    {
+      id: "musteri",
+      years: "32",
+      title: "Müşteri odası",
+      hook: "İtibar, odada konuşulandan çıkar. Tempo düşükse hata payı da düşük.",
+      choices: [
+        { id: "net", label: "Net konuş", detail: "Olmayanı olma de.", effects: { itibar: 6, iliski: -2 } },
+        { id: "uyum", label: "Uyum sağla", detail: "Müşterinin cümlesini kullan.", effects: { iliski: 8, bilgi: -2 } },
+        { id: "yaz", label: "Yazıya dök", detail: "Toplantı biter, kayıt kalır.", effects: { bilgi: 5, itibar: 4 } },
+      ],
+      check: {
+        id: "yenileme",
+        title: "Sözleşmenin yenilenmesi",
+        base: 0.5,
+        weights: { itibar: 0.005, iliski: 0.005, tempo: 0.002 },
+        originBias: { yurtdisi: 0.06 },
+        hit: { prop: "contract", effects: { itibar: 6 }, log: "Sözleşme yenilendi. {name} artık {origin} içinde bir isim." },
+        miss: { prop: "door", effects: { itibar: -8 }, log: "Oda kibardı, imza gelmedi. {name} özgeçmişi o hafta açtı." },
+      },
+    },
+    {
+      id: "teklif",
+      years: "36",
+      title: "Teklif",
+      hook: "Başka bir masa, itibarın kadar açık. Tempo bitmişse yüzde kapanır.",
+      choices: [
+        { id: "ortak", label: "Ortaklık masası", detail: "Az maaş, çok imza.", effects: { itibar: 8, tempo: -4 }, flag: "ortak" },
+        { id: "sirket", label: "Başka şirket", detail: "Temiz sayfa, yeni modül.", effects: { bilgi: 4, iliski: -4, itibar: 4 } },
+        { id: "kal", label: "Kal", detail: "Bildiğin koridor.", effects: { tempo: 6, iliski: 4 } },
+      ],
+      check: {
+        id: "masa",
+        title: "Kendi masanı kurmak",
+        base: 0.34,
+        weights: { itibar: 0.007, iliski: 0.004 },
+        flagBias: { ortak: 0.12 },
+        lifestyleBias: { mimar: 0.08, fi: -0.04 },
+        hit: { prop: "chart", effects: { itibar: 8 }, log: "{name} kendi masasını kurdu. {life} artık bir başlık." },
+        miss: { prop: "desk", log: "Teklif yarım kaldı. {name} bir yıl daha başkasının slaydında." },
+      },
+    },
+    {
+      id: "cikis",
+      years: "42",
+      title: "Çıkış",
+      hook: "Bu meslek hayatı burada kapanır. Tempo sıfırsa kapanış sert olur.",
+      choices: [
+        { id: "ogret", label: "Öğret", detail: "Genç ekibe aynı geceleri bırakma.", effects: { iliski: 8, itibar: 4 } },
+        { id: "birak", label: "Bırak", detail: "Laptopu kapat. Başka bir tempo.", effects: { tempo: 10, itibar: -2 } },
+        { id: "son", label: "Son bir go-live", detail: "Eski refleks.", effects: { itibar: 6, tempo: -12 } },
+      ],
+      check: {
+        id: "miras",
+        title: "Ardında düzen bırakmak",
+        base: 0.52,
+        weights: { iliski: 0.004, bilgi: 0.004, tempo: 0.003 },
+        hit: {
+          prop: "star",
+          end: true,
+          log: "{name} notlarını bıraktı. {origin} o klasörü hâlâ açıyor.",
+          epitaph: "{name} bu meslek hayatını düzenli kapattı. Geriye {life} ve bir kontrol listesi kaldı.",
+        },
+        miss: {
+          prop: "crack",
+          end: true,
+          effects: { tempo: -20 },
+          log: "Son gece dağınık bitti.",
+          epitaph: "Tempo tükendi. {name} için bu danışmanlık hayatı, bir kesintinin içinde kapandı.",
+        },
+      },
+    },
+  ],
+};
+
+export default pack;

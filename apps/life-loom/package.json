@@ -11,12 +11,14 @@
   },
   "dependencies": {
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "three": "^0.170.0"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/three": "0.170.0",
     "typescript": "^5.7.0"
   }
 }
