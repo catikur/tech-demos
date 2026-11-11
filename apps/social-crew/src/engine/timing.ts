@@ -1,5 +1,5 @@
 import type { Slot } from "./types";
-import { hashString } from "./text";
+import { ANCHOR_ISO, hashString } from "./text";
 
 export const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
@@ -31,6 +31,11 @@ export function buildHeatmap(topic: string): number[][] {
   return grid;
 }
 
+export function isUpcoming(slot: Slot): boolean {
+  const date = WEEK_DATES[slot.day];
+  return date !== undefined && date >= ANCHOR_ISO;
+}
+
 export function suggestBestTimes(heatmap: readonly (readonly number[])[], count = 3): Slot[] {
   const slots: Slot[] = [];
   for (let day = 0; day < heatmap.length; day += 1) {
@@ -41,6 +46,10 @@ export function suggestBestTimes(heatmap: readonly (readonly number[])[], count 
   }
   slots.sort((a, b) => b.score - a.score || a.day - b.day || a.hour - b.hour);
   return slots.slice(0, count);
+}
+
+export function suggestUpcoming(heatmap: readonly (readonly number[])[], count = 3): Slot[] {
+  return suggestBestTimes(heatmap, 7 * 24).filter(isUpcoming).slice(0, count);
 }
 
 export function slotId(slot: Slot): string {

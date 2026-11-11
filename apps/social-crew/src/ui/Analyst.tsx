@@ -1,5 +1,5 @@
 import { historyHeat } from "../engine/analyst";
-import { DAY_LABELS, suggestBestTimes, buildHeatmap } from "../engine/timing";
+import { DAY_LABELS, suggestUpcoming, buildHeatmap } from "../engine/timing";
 import type { DeskProps } from "./model";
 
 const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
@@ -16,7 +16,7 @@ export function Analyst({ state }: DeskProps) {
   }
   const heat = historyHeat(report.posts);
   const max = Math.max(1, ...heat.flat());
-  const next = suggestBestTimes(buildHeatmap(state.topic), 3);
+  const next = suggestUpcoming(buildHeatmap(state.topic), 3);
 
   return (
     <div className="stack">

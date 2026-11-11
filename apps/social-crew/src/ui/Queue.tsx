@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ANCHOR_ISO } from "../engine/text";
 import { DAY_LABELS, WEEK_DATES } from "../engine/timing";
 import { PLATFORM_LIMITS, type PlatformId } from "../engine/types";
 import { activeItem, type DeskProps } from "./model";
@@ -9,7 +10,7 @@ export function Queue({ state, dispatch }: DeskProps) {
   const item = activeItem(state);
   const hook = item?.hooks[item.hookIndex]?.text ?? "";
   const [body, setBody] = useState(hook);
-  const [slotId, setSlotId] = useState("1-9");
+  const [slotId, setSlotId] = useState("3-10");
 
   useEffect(() => {
     setBody(hook);
@@ -169,12 +170,13 @@ function HourRow({
       <div className="cal-hour">{label}</div>
       {DAY_LABELS.map((day, index) => {
         const id = `${index}-${hour}`;
+        const past = (WEEK_DATES[index] ?? "") < ANCHOR_ISO;
         const scheduled = scheduledFor === `${day} ${label}`;
         const className = ["cell", id === slotId ? "picked" : "", suggested.has(id) ? "suggested" : "", scheduled ? "queued" : ""]
           .filter(Boolean)
           .join(" ");
         return (
-          <button key={id} type="button" className={className} onClick={() => onPick(id)}>
+          <button key={id} type="button" className={className} disabled={past} onClick={() => onPick(id)}>
             {scheduled ? "queued" : suggested.has(id) ? "best" : ""}
           </button>
         );

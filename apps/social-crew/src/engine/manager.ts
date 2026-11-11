@@ -4,7 +4,7 @@ import { renderCard } from "./designer";
 import type { BrandKit, DailyReport, QueueItem, ScoutReport, TimelineStep, VoiceProfile } from "./types";
 import { researchTopic } from "./scout";
 import { skillsForAgent, skillsForRun } from "./skills";
-import { buildHeatmap, formatSlot, suggestBestTimes } from "./timing";
+import { buildHeatmap, formatSlot, suggestUpcoming } from "./timing";
 import { hashString } from "./text";
 import { writeDraft } from "./writer";
 
@@ -98,7 +98,7 @@ export function runCrew(input: {
   const draft = writeDraft({ topic: subject, report: scout, voice: input.voice });
   const headline = draft.hooks[0]?.text ?? subject;
   const cardSvg = renderCard({ brand: input.brand, kicker: subject, headline });
-  const suggested = suggestBestTimes(buildHeatmap(subject), 3);
+  const suggested = suggestUpcoming(buildHeatmap(subject), 3);
   const daily = buildDailyReport(scoreHistory(subject), subject);
   const skillsUsed = skillsForRun();
   const top = scout.opportunities[0];

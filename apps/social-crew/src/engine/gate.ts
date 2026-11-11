@@ -1,9 +1,9 @@
 import type { QueueItem, Slot } from "./types";
 import { PLATFORM_LIMITS } from "./types";
 import { fit } from "./text";
-import { formatSlot } from "./timing";
+import { formatSlot, isUpcoming } from "./timing";
 
-export type GateFailure = "needs-approval" | "ask-first" | "rejected" | "replies-are-human";
+export type GateFailure = "needs-approval" | "ask-first" | "rejected" | "replies-are-human" | "past-slot";
 
 export type GateResult =
   | { ok: true; item: QueueItem }
@@ -19,6 +19,7 @@ export function approvePost(
   opts: { askFirst: boolean; confirmed: boolean },
 ): GateResult {
   if (item.status === "rejected") return { ok: false, reason: "rejected", item };
+  if (item.status === "scheduled") return { ok: true, item };
   if (opts.askFirst && !opts.confirmed) return { ok: false, reason: "ask-first", item };
   return {
     ok: true,
@@ -35,6 +36,7 @@ export function schedulePost(
   slot: Slot,
   opts: { askFirst: boolean; confirmed: boolean },
 ): GateResult {
+  if (!isUpcoming(slot)) return { ok: false, reason: "past-slot", item };
   if (item.status !== "approved") {
     return { ok: false, reason: "needs-approval", item };
   }

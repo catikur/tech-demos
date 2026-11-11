@@ -180,10 +180,25 @@ export function deskReducer(state: DeskState, action: DeskAction): DeskState {
       return { ...state, askFirst: { ...state.askFirst, [action.key]: action.value }, confirm: null };
     case "set-brand": {
       const active = state.queue.find((item) => item.id === state.activeId);
-      if (!active) return { ...state, brand: action.brand };
+      if (!active) return { ...state, brand: action.brand, confirm: null };
       const headline = active.hooks[active.hookIndex]?.text ?? active.topic;
       const cardSvg = renderCard({ brand: action.brand, kicker: active.topic, headline });
-      return replaceItem({ ...state, brand: action.brand }, { ...active, cardSvg });
+      if (cardSvg === active.cardSvg) return { ...state, brand: action.brand, confirm: null };
+      if (active.status === "pending") {
+        return replaceItem({ ...state, brand: action.brand, confirm: null }, { ...active, cardSvg });
+      }
+      const edited = markEdited(active, {
+        platforms: active.platforms,
+        thread: active.thread,
+        hooks: active.hooks,
+        hookIndex: active.hookIndex,
+        cardSvg,
+      });
+      return {
+        ...replaceItem({ ...state, brand: action.brand }, edited),
+        notice: "The card changed. Approval was cleared. It is pending again.",
+        confirm: null,
+      };
     }
     case "train": {
       const voice = extractVoice(parseSamples(state.samples));
@@ -221,6 +236,14 @@ export function deskReducer(state: DeskState, action: DeskAction): DeskState {
     case "approve": {
       const current = state.queue.find((item) => item.id === action.id);
       if (!current) return state;
+      if (current.status === "scheduled") {
+        return {
+          ...state,
+          activeId: action.id,
+          notice: "It stays on the calendar. Approving again does not take it off.",
+          confirm: null,
+        };
+      }
       const result = approvePost(current, {
         askFirst: state.askFirst.publish,
         confirmed: action.confirmed,
@@ -260,6 +283,13 @@ export function deskReducer(state: DeskState, action: DeskAction): DeskState {
           ...state,
           confirm: { kind: "schedule", id: action.id, slotId: `${slot.day}-${slot.hour}` },
           activeId: action.id,
+        };
+      }
+      if (!result.ok && result.reason === "past-slot") {
+        return {
+          ...state,
+          notice: "That hour is before 2026-11-11. Pick a slot on the anchor day or later.",
+          confirm: null,
         };
       }
       if (!result.ok) {

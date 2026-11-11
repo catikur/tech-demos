@@ -10,7 +10,7 @@ import { setAutoReply, tryQueueMention } from "./rules";
 import { compositeScore, researchTopic, WINDOW_START } from "./scout";
 import { addSkill, isHumanSkill, skillsForRun, validateSkillGraph } from "./skills";
 import { fit, shiftDays, splitThread, topicTag, ANCHOR_ISO } from "./text";
-import { buildHeatmap, suggestBestTimes } from "./timing";
+import { buildHeatmap, suggestBestTimes, suggestUpcoming, WEEK_DATES } from "./timing";
 import { PLATFORM_LIMITS } from "./types";
 import { DEFAULT_BANNED, extractVoice, SAMPLE_POSTS, stripBanned } from "./voice";
 import { writeDraft } from "./writer";
@@ -189,13 +189,13 @@ describe("approval gate", () => {
     expect(desk.skillsUsed).toContain("intent-link");
     expect(desk.queue[0]?.scheduledFor).toBeNull();
 
-    const slotId = "1-9";
+    const slotId = "3-10";
     desk = deskReducer(desk, { type: "schedule", id, slotId, confirmed: false });
     expect(desk.queue[0]?.status).toBe("approved");
     expect(desk.confirm?.kind).toBe("schedule");
     desk = deskReducer(desk, { type: "schedule", id, slotId, confirmed: true });
     expect(desk.queue[0]?.status).toBe("scheduled");
-    expect(desk.queue[0]?.scheduledFor).toBe("Tue 09:00");
+    expect(desk.queue[0]?.scheduledFor).toBe("Thu 10:00");
     expect(desk.skillsUsed).toContain("calendar-place");
   });
 
@@ -205,7 +205,7 @@ describe("approval gate", () => {
     desk = deskReducer(desk, { type: "set-ask", key: "publish", value: false });
     desk = deskReducer(desk, { type: "set-ask", key: "schedule", value: false });
     desk = deskReducer(desk, { type: "approve", id, confirmed: true });
-    desk = deskReducer(desk, { type: "schedule", id, slotId: "1-9", confirmed: true });
+    desk = deskReducer(desk, { type: "schedule", id, slotId: "3-10", confirmed: true });
     expect(desk.queue[0]?.status).toBe("scheduled");
     desk = deskReducer(desk, { type: "edit", id, body: "A shorter opening after the edit." });
     expect(desk.queue[0]?.status).toBe("pending");
@@ -278,6 +278,50 @@ describe("approval gate", () => {
     expect(desk.messages.at(-1)?.text).toContain("Manager:");
     expect(desk.spent).toBe(FULL_RUN_COST + 1);
   });
+
+  test("a card change clears a yes, and approving again leaves a queued slot in place", () => {
+    let desk = createInitialDesk();
+    const id = desk.queue[0]?.id ?? "";
+    const original = desk.queue[0]?.cardSvg ?? "";
+    desk = deskReducer(desk, { type: "set-ask", key: "publish", value: false });
+    desk = deskReducer(desk, { type: "set-ask", key: "schedule", value: false });
+    desk = deskReducer(desk, { type: "set-brand", brand: { ...desk.brand, accent: "#0F766E" } });
+    expect(desk.queue[0]?.status).toBe("pending");
+    expect(desk.queue[0]?.cardSvg).not.toBe(original);
+
+    desk = deskReducer(desk, { type: "approve", id, confirmed: true });
+    desk = deskReducer(desk, { type: "schedule", id, slotId: "3-10", confirmed: true });
+    expect(desk.queue[0]?.scheduledFor).toBe("Thu 10:00");
+    const queuedCard = desk.queue[0]?.cardSvg ?? "";
+    desk = deskReducer(desk, { type: "set-brand", brand: { ...desk.brand, ink: "#1E3A8A" } });
+    expect(desk.queue[0]?.status).toBe("pending");
+    expect(desk.queue[0]?.scheduledFor).toBeNull();
+    expect(desk.queue[0]?.intentUrl).toBeNull();
+    expect(desk.queue[0]?.cardSvg).not.toBe(queuedCard);
+
+    desk = deskReducer(desk, { type: "approve", id, confirmed: true });
+    desk = deskReducer(desk, { type: "schedule", id, slotId: "3-9", confirmed: true });
+    desk = deskReducer(desk, { type: "approve", id, confirmed: false });
+    expect(desk.confirm).toBeNull();
+    expect(desk.queue[0]?.status).toBe("scheduled");
+    expect(desk.queue[0]?.scheduledFor).toBe("Thu 09:00");
+    const kept = approvePost(desk.queue[0]!, { askFirst: false, confirmed: true });
+    expect(kept.ok).toBe(true);
+    if (kept.ok) expect(kept.item.status).toBe("scheduled");
+  });
+
+  test("a slot before the anchor cannot be queued", () => {
+    let desk = createInitialDesk();
+    const id = desk.queue[0]?.id ?? "";
+    expect(desk.queue[0]?.suggested.every((slot) => (WEEK_DATES[slot.day] ?? "") >= ANCHOR_ISO)).toBe(true);
+    desk = deskReducer(desk, { type: "set-ask", key: "publish", value: false });
+    desk = deskReducer(desk, { type: "set-ask", key: "schedule", value: false });
+    desk = deskReducer(desk, { type: "approve", id, confirmed: true });
+    desk = deskReducer(desk, { type: "schedule", id, slotId: "1-9", confirmed: true });
+    expect(desk.queue[0]?.status).toBe("approved");
+    expect(desk.queue[0]?.scheduledFor).toBeNull();
+    expect(desk.notice).toContain("2026-11-11");
+  });
 });
 
 describe("timing", () => {
@@ -300,6 +344,17 @@ describe("timing", () => {
     expect(top?.day).toBe(1);
     expect(top?.hour).toBeGreaterThanOrEqual(8);
     expect(top?.hour).toBeLessThanOrEqual(10);
+  });
+
+  test("planning suggestions start on the anchor day", () => {
+    const upcoming = suggestUpcoming(buildHeatmap("ai agents"), 3);
+    expect(upcoming.map((slot) => WEEK_DATES[slot.day])).toEqual([
+      "2026-11-12",
+      "2026-11-12",
+      "2026-11-12",
+    ]);
+    expect(upcoming.map((slot) => slot.hour)).toEqual([10, 9, 8]);
+    expect(upcoming.every((slot) => (WEEK_DATES[slot.day] ?? "") >= ANCHOR_ISO)).toBe(true);
   });
 });
 
