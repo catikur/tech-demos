@@ -1,0 +1,146 @@
+import type { Pack } from "../../engine/sim.ts";
+
+const pack: Pack = {
+  id: "basket",
+  name: "Basketbolcu",
+  role: "basketbolcu",
+  pitch: "Atletizm şutu taşır, ışık seni seçtirir. Sakatlık bir yüzde, yüzük de.",
+  names: ["Ekin", "Ada", "Pelin", "Yaman", "Defne", "Kuzey"],
+  vital: "atletizm",
+  stats: [
+    { key: "atletizm", label: "Atletizm" },
+    { key: "sut", label: "Şut" },
+    { key: "disiplin", label: "Disiplin" },
+    { key: "isik", label: "Işık" },
+  ],
+  origins: [
+    { id: "lise", name: "Lise takımı", weight: 4, hue: 18, blurb: "Spor salonu, akşam servisi, bir hoca.", mods: { disiplin: 6, isik: 2 } },
+    { id: "sokak", name: "Park potası", weight: 4, hue: 140, blurb: "Eğri zemin, çok maç, az tekrar.", mods: { sut: 6, atletizm: 4, disiplin: -4 } },
+    { id: "kamp", name: "Yaz kampı", weight: 2, hue: 48, blurb: "Yabancı antrenör, kısa video, uzun liste.", mods: { isik: 8, sut: 4 } },
+  ],
+  lifestyles: [
+    { id: "gard", name: "Gard", weight: 4, blurb: "Topu indiren, tempoyu seçen.", mods: { disiplin: 4, isik: 2 } },
+    { id: "forvet", name: "Forvet", weight: 3, blurb: "Köşe üçlüğü, boş koşu.", mods: { sut: 8 } },
+    { id: "pivot", name: "Pivot", weight: 2, blurb: "Boy, temas, az şut çok yer.", mods: { atletizm: 6, sut: -2 } },
+  ],
+  beats: [
+    {
+      id: "sov",
+      years: "17",
+      title: "Şov",
+      hook: "Bir maç videoya girerse ışığın açılır. Disiplin bunu kadroya çevirir.",
+      choices: [
+        { id: "savunma", label: "Savunmada kal", detail: "Sayı değil, durdurulan adam.", effects: { disiplin: 8, isik: -2 } },
+        { id: "uc", label: "Üçlük dene", detail: "Boşsan at. Doluyken de.", effects: { sut: 8, isik: 4, disiplin: -3 }, flag: "skor" },
+        { id: "pas", label: "Ekstra pas", detail: "Asist tabelaya yazılsın.", effects: { disiplin: 5, isik: 3 } },
+      ],
+      check: {
+        id: "video",
+        title: "Videonun doğru göze gitmesi",
+        base: 0.4,
+        weights: { isik: 0.006, sut: 0.003, disiplin: 0.002 },
+        originBias: { kamp: 0.1, sokak: -0.04 },
+        hit: { prop: "hoop", effects: { isik: 8 }, log: "{name} bir maçta göründü. {origin} artık bir dipnot değil." },
+        miss: { prop: "ball", log: "Video kimseye ulaşmadı. {name} aynı salonda kaldı." },
+      },
+    },
+    {
+      id: "burs",
+      years: "19",
+      title: "Burs",
+      hook: "Burs, şut ve disiplin birlikteyken açılır.",
+      choices: [
+        { id: "sinav", label: "Notu tut", detail: "Gece antrenman, gündüz ders.", effects: { disiplin: 8, atletizm: -2 } },
+        { id: "sadece", label: "Sadece saha", detail: "Kabul riskli, oyun hazır.", effects: { sut: 6, atletizm: 4, disiplin: -6 } },
+        { id: "kamp", label: "Bir kamp daha", detail: "Ailenin parası, senin videon.", effects: { isik: 6, sut: 3 } },
+      ],
+      check: {
+        id: "kabul",
+        title: "Burslu kabul",
+        base: 0.38,
+        weights: { sut: 0.005, disiplin: 0.005, isik: 0.003 },
+        lifestyleBias: { forvet: 0.05 },
+        hit: { prop: "certificate", effects: { isik: 6 }, log: "{name} bursu aldı. {life} rolü artık bir formanın üstünde." },
+        miss: { prop: "door", effects: { isik: -5 }, log: "Kabul gelmedi. {origin} bir yıl daha ev sahipliği yaptı." },
+      },
+    },
+    {
+      id: "draft",
+      years: "22",
+      title: "Seçim",
+      hook: "Seçilmek ışıktır. Işık yoksa yüzde de yoktur.",
+      choices: [
+        { id: "olcum", label: "Ölçüme gir", detail: "Boy, sıçrama, şut yüzdesi.", effects: { isik: 6, disiplin: 4 } },
+        { id: "lig", label: "Yerel lig", detail: "Seçim bekleme. Oyna.", effects: { atletizm: 5, sut: 4, isik: -3 } },
+        { id: "bekle", label: "Bir yıl bekle", detail: "Vücut hazır değilse.", effects: { atletizm: 8, isik: -4 }, flag: "sabir" },
+      ],
+      check: {
+        id: "secim",
+        title: "Bir listenin seni yazması",
+        base: 0.33,
+        weights: { isik: 0.008, sut: 0.003, atletizm: 0.003 },
+        originBias: { kamp: 0.08 },
+        flagBias: { skor: 0.06 },
+        hit: { prop: "star", effects: { isik: 10 }, log: "{name} bir listede vardı. {origin} o gece erken kapattı." },
+        miss: { prop: "whistle", log: "İsim okunmadı. {name} için {life} yolu yerel kaldı." },
+      },
+    },
+    {
+      id: "diz",
+      years: "26",
+      title: "Diz",
+      hook: "Atletizm düşünce her kapı daralır. Bu yıl sağlam kalmak asıl zar.",
+      choices: [
+        { id: "yuk", label: "Yükü azalt", detail: "Dakika pazarlığı.", effects: { atletizm: 8, isik: -5 }, flag: "saglam" },
+        { id: "oyna", label: "Ağrıyla oyna", detail: "Sezon kaybolmasın.", effects: { isik: 5, atletizm: -12 }, flag: "risk" },
+        { id: "ameliyat", label: "Ameliyat", detail: "Bir sezonu ver, dizini al.", effects: { atletizm: 4, isik: -8, disiplin: 4 } },
+      ],
+      check: {
+        id: "diz-tut",
+        title: "Dizin sezonu taşıması",
+        base: 0.55,
+        weights: { atletizm: 0.007, disiplin: 0.003 },
+        flagBias: { risk: -0.2, saglam: 0.1 },
+        hit: { prop: "medal", log: "{name} sezonu dizinin üstünde bitirdi." },
+        miss: {
+          prop: "crack",
+          effects: { atletizm: -22, sut: -6 },
+          log: "Bir iniş {name} için sezonu kapattı.",
+          epitaph: "Atletizm bitti. {name} potanın altında bu hayatı bıraktı.",
+        },
+      },
+    },
+    {
+      id: "yuzuk",
+      years: "31",
+      title: "Yüzük",
+      hook: "Son ciddi kadro. Yüzük, şut ve ışık birlikteyse yaklaşır.",
+      choices: [
+        { id: "rol", label: "Rolünü küçült", detail: "Altıncı adam ol, kazan.", effects: { disiplin: 8, isik: -3 } },
+        { id: "yildiz", label: "Topu iste", detail: "Son şans, son kullanım.", effects: { sut: 6, isik: 6, disiplin: -4 } },
+        { id: "genc", label: "Gence yer aç", detail: "Soyunma odasını devret.", effects: { disiplin: 6, isik: 2 } },
+      ],
+      check: {
+        id: "sampiyon",
+        title: "O sezonun sonunda yüzük",
+        base: 0.28,
+        weights: { sut: 0.004, disiplin: 0.004, isik: 0.003 },
+        lifestyleBias: { gard: 0.04 },
+        hit: {
+          prop: "trophy",
+          end: true,
+          log: "Sezon bitti, parmakta bir halka.",
+          epitaph: "{name} bu basketbol hayatını bir yüzükle kapattı. {origin} hâlâ o maçı anlatır.",
+        },
+        miss: {
+          prop: "lamp",
+          end: true,
+          log: "Sezon bitti, vitrin boş.",
+          epitaph: "{name} potayı bıraktı. Yüzük yoktu. {life} yılları vardı.",
+        },
+      },
+    },
+  ],
+};
+
+export default pack;
