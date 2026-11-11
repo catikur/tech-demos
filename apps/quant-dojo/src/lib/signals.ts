@@ -57,9 +57,23 @@ export function conditionHolds(map: SeriesMap, condition: Condition, index: numb
   }
 }
 
-export function signalAt(map: SeriesMap, conditions: Condition[], index: number): boolean {
+export function signalAt(
+  map: SeriesMap,
+  conditions: Condition[],
+  index: number,
+  combine: "all" | "any" = "all",
+): boolean {
   if (conditions.length === 0) return false;
-  return conditions.every((condition) => conditionHolds(map, condition, index));
+  switch (combine) {
+    case "all":
+      return conditions.every((condition) => conditionHolds(map, condition, index));
+    case "any":
+      return conditions.some((condition) => conditionHolds(map, condition, index));
+    default: {
+      const exhaustive: never = combine;
+      return exhaustive;
+    }
+  }
 }
 
 export function entrySignal(candles: Candle[], strategy: Strategy, index: number): boolean {

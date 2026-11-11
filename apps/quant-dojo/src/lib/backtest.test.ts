@@ -152,4 +152,80 @@ describe("backtest metrics", () => {
     expect(result.trades[0]?.entryPrice).toBe(8);
     expect(result.trades[0]?.entryIndex).toBe(0);
   });
+
+  test("any one exit rule arms the next open", () => {
+    const candles = [
+      candle(0, 10, 10, 9, 9),
+      candle(1, 9, 9, 9, 9),
+      candle(2, 9, 14, 9, 13),
+      candle(3, 20, 20, 20, 20),
+      candle(4, 5, 5, 5, 5),
+    ];
+    const result = backtest(
+      candles,
+      strategy({
+        exit: [
+          { left: { type: "price", field: "close" }, op: "gt", right: { type: "number", value: 100 } },
+          { left: { type: "price", field: "close" }, op: "gt", right: { type: "number", value: 12 } },
+        ],
+      }),
+      config,
+    );
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0]?.reason).toBe("signal");
+    expect(result.trades[0]?.exitPrice).toBe(20);
+  });
+
+  test("entry rules stay a conjunction", () => {
+    const candles = [
+      candle(0, 10, 10, 9, 9),
+      candle(1, 9, 9, 9, 9),
+      candle(2, 9, 9, 9, 9),
+    ];
+    const result = backtest(
+      candles,
+      strategy({
+        entry: [
+          { left: { type: "price", field: "close" }, op: "lt", right: { type: "number", value: 10 } },
+          { left: { type: "price", field: "close" }, op: "gt", right: { type: "number", value: 100 } },
+        ],
+        exit: [],
+      }),
+      config,
+    );
+    expect(result.trades).toHaveLength(0);
+  });
+
+  test("a window closes an open trade on its last bar and ignores the later crash", () => {
+    const candles = [
+      candle(0, 10, 10, 9, 9),
+      candle(1, 10, 10, 10, 10),
+      candle(2, 10, 12, 10, 12),
+      candle(3, 12, 12, 4, 4),
+      candle(4, 4, 4, 4, 4),
+    ];
+    const result = backtest(candles, strategy({ exit: [], stoploss: null, roi: [] }), config, { from: 0, to: 3 });
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0]?.exitIndex).toBe(2);
+    expect(result.trades[0]?.exitPrice).toBe(12);
+    expect(result.trades[0]?.reason).toBe("end");
+    expect(result.totalReturn).toBeCloseTo(0.02, 8);
+  });
+
+  test("a next-open signal on the last bar of a window does not fill in the later bars", () => {
+    const candles = [
+      candle(0, 12, 12, 12, 12),
+      candle(1, 12, 12, 12, 12),
+      candle(2, 12, 12, 9, 9),
+      candle(3, 50, 50, 50, 50),
+      candle(4, 50, 50, 50, 50),
+    ];
+    const ruled = strategy({ exit: [], stoploss: null, roi: [] });
+    const heldIn = backtest(candles, ruled, config, { from: 0, to: 3 });
+    const full = backtest(candles, ruled, config);
+    expect(heldIn.trades).toHaveLength(0);
+    expect(heldIn.totalReturn).toBe(0);
+    expect(full.trades).toHaveLength(1);
+    expect(full.trades[0]?.entryPrice).toBe(50);
+  });
 });

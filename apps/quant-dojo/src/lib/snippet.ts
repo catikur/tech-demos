@@ -68,12 +68,12 @@ function indicatorLine(strategy: Strategy): string[] {
   });
 }
 
-function ruleBlock(conditions: Condition[], column: string): string[] {
+function ruleBlock(conditions: Condition[], column: string, join: "&" | "|"): string[] {
   if (conditions.length === 0) {
     return [`        dataframe["${column}"] = 0`];
   }
   const lines = conditions.map((condition, index) => {
-    const prefix = index === 0 ? "            (" : "            & ";
+    const prefix = index === 0 ? "            " : `            ${join} `;
     return `${prefix}${pyCondition(condition)}`;
   });
   return [
@@ -126,11 +126,11 @@ export function renderSnippet(strategy: Strategy): string {
       : [...indicatorLine(strategy), "        return dataframe"]),
     "",
     "    def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:",
-    ...ruleBlock(strategy.entry, "enter_long"),
+    ...ruleBlock(strategy.entry, "enter_long", "&"),
     "        return dataframe",
     "",
     "    def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:",
-    ...ruleBlock(strategy.exit, "exit_long"),
+    ...ruleBlock(strategy.exit, "exit_long", "|"),
     "        return dataframe",
     "",
   ];

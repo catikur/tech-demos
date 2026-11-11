@@ -35,4 +35,4 @@ No API keys. No live model. No exchange, broker, or wallet. No runtime network c
 2. **Strategy** — edit the rule. Read the equivalent sketch.
 3. **Quick check** — the label lands before you look at a curve.
 4. **Backtest** — equity against buy-and-hold, drawdown, win rate, a per-bar Sharpe-like ratio (not annualized), and the trade list. Fills are next-open unless you deliberately pick the lookahead fill.
-5. **Sweep** — a small grid. The in-sample winner is compared with the untouched later window.
+5. **Sweep** — a small grid. Each window closes a trade still open on its last bar, then the in-sample winner is compared with the untouched later window.

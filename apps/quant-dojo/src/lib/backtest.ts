@@ -44,6 +44,9 @@ export function backtest(
 ): BacktestResult {
   const map = buildSeries(candles, strategy);
   const minutes = barMinutes(strategy.timeframe);
+  const entryFrom = window?.from ?? 0;
+  const entryTo = window?.to ?? candles.length;
+  const lastTradeBar = Math.min(candles.length, Math.max(entryTo, 0)) - 1;
   const book: { cash: number; position: Position | null } = {
     cash: config.initialEquity,
     position: null,
@@ -90,7 +93,7 @@ export function backtest(
   for (let j = 0; j < candles.length; j++) {
     const candle = candles[j];
     if (!candle) continue;
-    const isLast = j === candles.length - 1;
+    const isLast = j === lastTradeBar;
 
     const held = book.position;
     if (held && pending?.kind === "exit") {
@@ -121,13 +124,11 @@ export function backtest(
         closeTrade(j, roiPrice, "roi");
       } else if (isLast) {
         closeTrade(j, candle.close, "end");
-      } else if (signalAt(map, strategy.exit, j) && j !== live.entryIndex) {
+      } else if (signalAt(map, strategy.exit, j, "any") && j !== live.entryIndex) {
         pending = { kind: "exit" };
       }
     }
 
-    const entryFrom = window?.from ?? 0;
-    const entryTo = window?.to ?? candles.length;
     const inWindow = j >= entryFrom && j < entryTo;
     if (!book.position && !isLast && pending?.kind !== "exit" && inWindow && signalAt(map, strategy.entry, j)) {
       if (strategy.entryFill === "signal_close") openTrade(j, candle.close);

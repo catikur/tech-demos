@@ -14,7 +14,7 @@ export function SweepPanel({ strategy }: { strategy: Strategy }) {
       <h2>In-sample versus the later window</h2>
       <p className="quiet">
         {hasRsi
-          ? "RSI period and the RSI entry threshold are crossed. A cell may open trades only inside its window. Indicators still see earlier bars."
+          ? "RSI period and the RSI entry threshold are crossed. A cell may open trades only inside its window, and a trade still open is closed on that window's last bar. Indicators still see earlier bars."
           : "This card has no RSI threshold to sweep, so the grid is a single rerun of the current rule."}{" "}
         The winner is whoever did best in the first 70%. The later window does not vote.
       </p>
