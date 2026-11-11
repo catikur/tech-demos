@@ -1,4 +1,6 @@
-# PLAN — life-loom
+# PLAN — şu anki hali
+
+Tam menzil için [KAPSAM.md](KAPSAM.md). Bu dosya yalnızca bugün çalışan sınırı tutar.
 
 ## Goal
 A career-life engine. Each year the player chooses, the choice shifts stats, and one event resolves from a probability computed from those stats, the drawn origin, and the lifestyle. Hit or miss grows a low-poly 3D sculpture. When the life closes, a shareable infographic downloads as PNG. New simulations are new data files, not new engines.
@@ -17,7 +19,7 @@ The loop is read from the public play of 1in8b.life (stats change odds, odds res
 - Real-world statistics databases
 - Crime methods, weapons, or operational detail in the street pack
 - Accounts, multiplayer, a 90-minute realtime clock
-- Changes outside `apps/life-loom/`
+- Copying 1in8b data or prose into this repo
 
 ## Stack
 Bun.serve, React 19, Three.js, a pure sim module.
